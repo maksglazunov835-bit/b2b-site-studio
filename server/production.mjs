@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { access, stat } from 'node:fs/promises';
+import { access, readdir, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
@@ -27,11 +27,65 @@ const contentTypes = {
   '.woff2': 'font/woff2',
 };
 
+function isStaticAssetPath(pathname) {
+  return (
+    pathname.startsWith('/_next/static/') ||
+    pathname === '/favicon.ico' ||
+    pathname === '/favicon.svg' ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml'
+  );
+}
+
+function isCssAssetPath(pathname) {
+  return pathname.startsWith('/_next/static/css/') && pathname.endsWith('.css');
+}
+
 function assetPath(pathname) {
   const decoded = decodeURIComponent(pathname);
   const clean = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
   const target = resolve(join(clientDir, clean));
   return target === clientDir || target.startsWith(clientDir + sep) ? target : null;
+}
+
+async function fileResponse(target, pathname, cacheControl) {
+  await access(target);
+  const info = await stat(target);
+
+  if (!info.isFile()) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  const headers = new Headers({
+    'cache-control':
+      cacheControl ||
+      (pathname.startsWith('/_next/static/')
+        ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=300'),
+    'content-length': String(info.size),
+    'content-type': contentTypes[extname(target).toLowerCase()] || 'application/octet-stream',
+  });
+
+  return new Response(Readable.toWeb(createReadStream(target)), { headers });
+}
+
+async function latestCssResponse() {
+  const cssDir = resolve(clientDir, '_next/static/css');
+  const files = await readdir(cssDir, { withFileTypes: true });
+  const candidates = await Promise.all(
+    files
+      .filter((file) => file.isFile() && file.name.endsWith('.css'))
+      .map(async (file) => {
+        const target = resolve(cssDir, file.name);
+        const info = await stat(target);
+        return { info, target };
+      }),
+  );
+
+  const latest = candidates.sort((a, b) => b.info.mtimeMs - a.info.mtimeMs)[0];
+  return latest
+    ? fileResponse(latest.target, '/_next/static/css/latest.css', 'no-store')
+    : new Response('Not found', { status: 404 });
 }
 
 async function fetchAsset(request) {
@@ -43,23 +97,12 @@ async function fetchAsset(request) {
   }
 
   try {
-    await access(target);
-    const info = await stat(target);
-
-    if (!info.isFile()) {
-      return new Response('Not found', { status: 404 });
+    return await fileResponse(target, url.pathname);
+  } catch {
+    if (isCssAssetPath(url.pathname)) {
+      return latestCssResponse();
     }
 
-    const headers = new Headers({
-      'cache-control': url.pathname.startsWith('/_next/static/')
-        ? 'public, max-age=31536000, immutable'
-        : 'public, max-age=300',
-      'content-length': String(info.size),
-      'content-type': contentTypes[extname(target).toLowerCase()] || 'application/octet-stream',
-    });
-
-    return new Response(Readable.toWeb(createReadStream(target)), { headers });
-  } catch {
     return new Response('Not found', { status: 404 });
   }
 }
@@ -104,13 +147,33 @@ function writeResponse(res, response) {
   Readable.fromWeb(response.body).pipe(res);
 }
 
+function preventHtmlCache(response) {
+  const contentType = response.headers.get('content-type') || '';
+
+  if (!contentType.includes('text/html')) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set('cache-control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  headers.set('expires', '0');
+  headers.set('pragma', 'no-cache');
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
 const server = createServer(async (req, res) => {
   try {
+    const pathname = new URL(req.url, `http://localhost:${port}`).pathname;
     const assetResponse = await fetchAsset({
       url: `http://localhost${req.url}`,
     });
 
-    if (assetResponse.status !== 404) {
+    if (assetResponse.status !== 404 || isStaticAssetPath(pathname)) {
       writeResponse(res, assetResponse);
       return;
     }
@@ -121,7 +184,7 @@ const server = createServer(async (req, res) => {
       { ASSETS: { fetch: fetchAsset } },
       { waitUntil: () => undefined },
     );
-    writeResponse(res, response);
+    writeResponse(res, preventHtmlCache(response));
   } catch (error) {
     console.error(error);
     res.statusCode = 500;
