@@ -106,6 +106,15 @@ function writeResponse(res, response) {
 
 const server = createServer(async (req, res) => {
   try {
+    const assetResponse = await fetchAsset({
+      url: `http://localhost${req.url}`,
+    });
+
+    if (assetResponse.status !== 404) {
+      writeResponse(res, assetResponse);
+      return;
+    }
+
     const request = await toWebRequest(req);
     const response = await app.fetch(
       request,
