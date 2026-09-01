@@ -69,6 +69,7 @@ async function toWebRequest(req) {
   const hostHeader = req.headers.host || `localhost:${port}`;
   const url = `${protocol}://${hostHeader}${req.url}`;
   const headers = new Headers();
+  const method = req.method === 'HEAD' ? 'GET' : req.method;
 
   for (const [key, value] of Object.entries(req.headers)) {
     if (Array.isArray(value)) {
@@ -78,15 +79,15 @@ async function toWebRequest(req) {
     }
   }
 
-  if (req.method === 'GET' || req.method === 'HEAD') {
-    return new Request(url, { headers, method: req.method });
+  if (method === 'GET') {
+    return new Request(url, { headers, method });
   }
 
   return new Request(url, {
     body: Readable.toWeb(req),
     duplex: 'half',
     headers,
-    method: req.method,
+    method,
   });
 }
 
