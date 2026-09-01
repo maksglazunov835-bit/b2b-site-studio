@@ -33,6 +33,39 @@ wait_for_site() {
   return 1
 }
 
+cleanup_interrupted_containers() {
+  local ids
+
+  ids="$(
+    {
+      docker ps -aq \
+        --filter "label=com.docker.compose.service=b2b-site-studio" \
+        --filter "status=created"
+      docker ps -aq \
+        --filter "label=com.docker.compose.service=b2b-site-studio" \
+        --filter "status=exited"
+      docker ps -aq \
+        --filter "label=com.docker.compose.service=b2b-site-studio" \
+        --filter "status=dead"
+    } | sort -u
+  )"
+
+  if [ -n "$ids" ]; then
+    printf '%s\n' "$ids" | xargs -r docker rm -f
+  fi
+}
+
+compose_up() {
+  cleanup_interrupted_containers
+
+  if docker compose up --build -d --remove-orphans; then
+    return 0
+  fi
+
+  cleanup_interrupted_containers
+  docker compose up --build -d --remove-orphans
+}
+
 cd "$APP_DIR"
 git fetch origin "$BRANCH"
 LOCAL_SHA="$(git rev-parse HEAD)"
@@ -48,7 +81,7 @@ if [ "$DEPLOYED_SHA" = "$REMOTE_SHA" ]; then
   exit 0
 fi
 
-docker compose up --build -d
+compose_up
 
 if ! wait_for_site; then
   docker compose ps
