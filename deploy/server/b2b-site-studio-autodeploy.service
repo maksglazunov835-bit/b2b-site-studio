@@ -1,0 +1,9 @@
+[Unit]
+Description=B2B Site Studio autodeploy
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/b2b-site-studio
+ExecStart=/opt/b2b-site-studio/deploy/server/deploy.sh

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run B2B Site Studio autodeploy every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Unit=b2b-site-studio-autodeploy.service
+
+[Install]
+WantedBy=timers.target
