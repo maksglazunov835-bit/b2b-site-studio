@@ -7,10 +7,13 @@ export const JOB_SPEC_SEMANTIC_ERROR_CODES = [
   "INVALID_GIT_REF",
   "GIT_WORKFLOW_RETURNS_MISMATCH",
   "NETWORK_ALLOWLIST_MISMATCH",
+  "NETWORK_OPERATION_MISMATCH",
   "UNALLOWLISTED_NETWORK_DESTINATION",
   "REPOSITORY_BINDING_MISMATCH",
   "FORBIDDEN_ACTION_CONFLICT",
-  "VALIDATION_CHECK_INVALID"
+  "VALIDATION_CHECK_INVALID",
+  "OUTPUT_PATH_NOT_ALLOWED",
+  "VALIDATION_PATH_NOT_ALLOWED"
 ];
 
 const ACTION_CAPABILITIES = {
@@ -111,8 +114,14 @@ function checkNetworkDestinationShape(job, errors) {
     if (destination.protocol !== rule.protocol || destination.host !== rule.host || destination.port !== rule.port) {
       add(errors, "NETWORK_ALLOWLIST_MISMATCH", path, `Network destination shape does not match purpose ${destination.purpose}`);
     }
-    if (!(destination.allowedOperations ?? []).includes(rule.operation)) {
-      add(errors, "NETWORK_ALLOWLIST_MISMATCH", `${path}/allowedOperations`, `Network destination missing operation ${rule.operation}`);
+    const operations = destination.allowedOperations ?? [];
+    if (operations.length !== 1 || operations[0] !== rule.operation) {
+      add(
+        errors,
+        "NETWORK_OPERATION_MISMATCH",
+        `${path}/allowedOperations`,
+        `Network purpose ${destination.purpose} allows only operation ${rule.operation}`
+      );
     }
   }
 }
@@ -263,6 +272,10 @@ function checkGitWorkflowReturns(job, errors) {
   }
 }
 
+function containsAny(value, characters) {
+  return characters.some((character) => value.includes(character));
+}
+
 function isPosixSafePath(path) {
   return (
     typeof path === "string" &&
@@ -273,8 +286,83 @@ function isPosixSafePath(path) {
     !path.includes(":") &&
     !/(^|\/)\.\.?(\/|$)/.test(path) &&
     !path.includes("//") &&
+    !containsAny(path, ["*", "?", "[", "]", "{", "}", "!"]) &&
     !hasControlChars(path)
   );
+}
+
+function isPosixSafeGlob(glob) {
+  return (
+    typeof glob === "string" &&
+    glob.length > 0 &&
+    !/^[A-Za-z]:/.test(glob) &&
+    !glob.startsWith("/") &&
+    !glob.includes("\\") &&
+    !glob.includes(":") &&
+    !/(^|\/)\.\.?(\/|$)/.test(glob) &&
+    !glob.includes("//") &&
+    !containsAny(glob, ["?", "[", "]", "{", "}", "!"]) &&
+    !hasControlChars(glob)
+  );
+}
+
+function globToRegExp(glob) {
+  if (!isPosixSafeGlob(glob)) return null;
+  let source = "^";
+  for (let index = 0; index < glob.length; index += 1) {
+    const char = glob[index];
+    if (char === "*") {
+      if (glob[index + 1] === "*") {
+        if (glob[index + 2] === "/") {
+          source += "(?:[^/]+/)*";
+          index += 2;
+        } else {
+          source += ".*";
+          index += 1;
+        }
+      } else {
+        source += "[^/]*";
+      }
+      continue;
+    }
+    source += /[\\^$+.()|]/.test(char) ? `\\${char}` : char;
+  }
+  source += "$";
+  return new RegExp(source);
+}
+
+function isCoveredByAllowedPaths(path, allowedGlobs) {
+  if (!isPosixSafePath(path)) return false;
+  return allowedGlobs.some((glob) => globToRegExp(glob)?.test(path));
+}
+
+function checkAllowedPaths(job, errors) {
+  const allowedGlobs = (job.allowedPaths ?? []).filter(isPosixSafeGlob);
+  for (const [index, output] of (job.expectedOutputManifest ?? []).entries()) {
+    if (!isCoveredByAllowedPaths(output.path, allowedGlobs)) {
+      add(
+        errors,
+        "OUTPUT_PATH_NOT_ALLOWED",
+        `/expectedOutputManifest/${index}/path`,
+        `Expected output path is not a concrete path covered by allowedPaths: ${output.path}`
+      );
+    }
+  }
+
+  for (const [checkIndex, check] of (job.validationChecks ?? []).entries()) {
+    for (const key of ["path", "htmlPath", "cssPath"]) {
+      const path = check.parameters?.[key];
+      if (path === undefined) continue;
+      if (!isCoveredByAllowedPaths(path, allowedGlobs)) {
+        add(
+          errors,
+          "VALIDATION_PATH_NOT_ALLOWED",
+          `/validationChecks/${checkIndex}/parameters/${key}`,
+          `Validation path is not a concrete path covered by allowedPaths: ${path}`
+        );
+      }
+    }
+  }
 }
 
 function checkValidationRegistry(job, errors) {
@@ -314,6 +402,7 @@ export function validateJobSpecSemantics(job) {
   checkRepositoryBindings(job, errors);
   checkGitWorkflowReturns(job, errors);
   checkValidationRegistry(job, errors);
+  checkAllowedPaths(job, errors);
 
   return errors;
 }

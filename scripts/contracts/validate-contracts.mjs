@@ -97,12 +97,26 @@ function ajvErrorMatchesExpectation(error, expectation) {
 
 function validateSchemaFixtures(contract, schema, validate, failures, summary) {
   const examples = assertArrayFixture(schema, "examples", contract, failures);
+  const semanticPositiveExamples = schema["x-semanticPositiveExamples"] === undefined
+    ? []
+    : assertArrayFixture(schema, "x-semanticPositiveExamples", contract, failures);
   const negativeExamples = assertArrayFixture(schema, "x-negativeExamples", contract, failures);
 
-  for (const [index, example] of examples.entries()) {
-    const fixtureName = example.id ?? example.projectId ?? `${contract.id}-example-${index}`;
+  const positiveFixtures = [
+    ...examples.map((value, index) => ({
+      name: value.id ?? value.projectId ?? `${contract.id}-example-${index}`,
+      value
+    })),
+    ...semanticPositiveExamples.map((fixture, index) => ({
+      name: fixture.name ?? `${contract.id}-semantic-positive-${index}`,
+      value: fixture.value
+    }))
+  ];
+
+  for (const fixture of positiveFixtures) {
+    const fixtureName = fixture.name;
     summary.schemaPositive += 1;
-    if (!validate(example)) {
+    if (!validate(fixture.value)) {
       addFailure(
         failures,
         "schema-positive",
@@ -154,12 +168,26 @@ function validateSchemaFixtures(contract, schema, validate, failures, summary) {
 
 function validateSemanticFixtures(contract, schema, validate, failures, summary) {
   const examples = assertArrayFixture(schema, "examples", contract, failures);
+  const semanticPositiveExamples = schema["x-semanticPositiveExamples"] === undefined
+    ? []
+    : assertArrayFixture(schema, "x-semanticPositiveExamples", contract, failures);
   const negativeExamples = assertArrayFixture(schema, "x-semanticNegativeExamples", contract, failures);
 
-  for (const [index, example] of examples.entries()) {
-    const fixtureName = example.id ?? example.projectId ?? `${contract.id}-example-${index}`;
+  const positiveFixtures = [
+    ...examples.map((value, index) => ({
+      name: value.id ?? value.projectId ?? `${contract.id}-example-${index}`,
+      value
+    })),
+    ...semanticPositiveExamples.map((fixture, index) => ({
+      name: fixture.name ?? `${contract.id}-semantic-positive-${index}`,
+      value: fixture.value
+    }))
+  ];
+
+  for (const fixture of positiveFixtures) {
+    const fixtureName = fixture.name;
     summary.semanticPositive += 1;
-    if (!validate(example)) {
+    if (!validate(fixture.value)) {
       addFailure(
         failures,
         "semantic-positive-schema",
@@ -170,7 +198,7 @@ function validateSemanticFixtures(contract, schema, validate, failures, summary)
       );
       continue;
     }
-    const semanticErrors = contract.semanticValidator(example);
+    const semanticErrors = contract.semanticValidator(fixture.value);
     if (semanticErrors.length > 0) {
       addFailure(
         failures,

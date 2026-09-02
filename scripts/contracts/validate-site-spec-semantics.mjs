@@ -3,7 +3,11 @@ export const SITE_SPEC_SEMANTIC_ERROR_CODES = [
   "MISSING_CATEGORY_PARENT",
   "CATEGORY_PATH_MISMATCH",
   "CATEGORY_CYCLE",
+  "MISSING_REGION_REFERENCE",
+  "MISSING_CATEGORY_REFERENCE",
   "MISSING_PRODUCT_REFERENCE",
+  "MISSING_VARIANT_REFERENCE",
+  "VARIANT_PRODUCT_MISMATCH",
   "MISSING_ASSET_REFERENCE",
   "MISSING_DESIGN_VARIANT",
   "INVALID_DESIGN_SELECTION",
@@ -48,17 +52,72 @@ function buildAssetKeys(spec, errors) {
   return keys;
 }
 
-function checkUnique(items, idField, scope, path, errors) {
-  const ids = new Set();
+function buildUniqueIndex(items, idField, scope, path, errors) {
+  const byId = new Map();
   for (const [index, item] of (items ?? []).entries()) {
     const id = item?.[idField];
     if (!id) continue;
-    if (ids.has(id)) {
+    if (byId.has(id)) {
       add(errors, "DUPLICATE_ID", `${path}/${index}/${idField}`, `Duplicate ${scope} id: ${id}`);
+      continue;
     }
-    ids.add(id);
+    byId.set(id, { value: item, index });
   }
-  return ids;
+  return byId;
+}
+
+function buildStructuralIndexes(spec, errors) {
+  const sites = buildUniqueIndex(spec.network?.sites, "id", "site", "/network/sites", errors);
+  const regions = buildUniqueIndex(spec.regions, "id", "region", "/regions", errors);
+  const categories = buildUniqueIndex(spec.catalog?.categories, "id", "category", "/catalog/categories", errors);
+  const products = buildUniqueIndex(spec.catalog?.products, "id", "product", "/catalog/products", errors);
+  const leadForms = buildUniqueIndex(spec.leadForms, "id", "lead form", "/leadForms", errors);
+  const telegramDestinations = buildUniqueIndex(
+    spec.integrations?.telegram?.destinations,
+    "id",
+    "Telegram destination",
+    "/integrations/telegram/destinations",
+    errors
+  );
+  const designPrototypes = buildUniqueIndex(
+    spec.design?.prototypes,
+    "variantId",
+    "design variant",
+    "/design/prototypes",
+    errors
+  );
+  const variantsByProduct = new Map();
+  const variantOwners = new Map();
+
+  for (const [productIndex, product] of (spec.catalog?.products ?? []).entries()) {
+    const variants = buildUniqueIndex(
+      product.variants,
+      "id",
+      "variant",
+      `/catalog/products/${productIndex}/variants`,
+      errors
+    );
+    if (product.id && !variantsByProduct.has(product.id)) {
+      variantsByProduct.set(product.id, variants);
+    }
+    for (const variantId of variants.keys()) {
+      const owners = variantOwners.get(variantId) ?? new Set();
+      if (product.id) owners.add(product.id);
+      variantOwners.set(variantId, owners);
+    }
+  }
+
+  return {
+    sites,
+    regions,
+    categories,
+    products,
+    variantsByProduct,
+    variantOwners,
+    leadForms,
+    telegramDestinations,
+    designPrototypes
+  };
 }
 
 function checkAssetRef(id, path, keys, errors) {
@@ -115,19 +174,31 @@ function checkAllAssetReferences(value, path, keys, errors) {
   }
 }
 
-function checkCommercialValue(value, path, keys, errors) {
+function checkCommercialFact(value, path, keys, errors, kind) {
   if (!value || typeof value !== "object") return;
-  checkFactAssets(value.quantity, `${path}/quantity`, keys, errors);
-  checkAssetRef(value.provenance?.assetId, `${path}/provenance/assetId`, keys, errors);
+
+  if (kind === "minimum_order") {
+    checkFactAssets(value, path, keys, errors);
+  } else {
+    checkFactAssets(value.quantity, `${path}/quantity`, keys, errors);
+    checkAssetRef(value.provenance?.assetId, `${path}/provenance/assetId`, keys, errors);
+  }
 
   if (!value.publishAllowed) return;
 
   const sourceType = value.provenance?.sourceType;
-  if (!COMMERCIAL_TRUSTED_PROVENANCE.has(sourceType)) {
-    add(errors, "COMMERCIAL_PROVENANCE_INVALID", `${path}/provenance/sourceType`, `Commercial value cannot publish provenance: ${sourceType}`);
-  }
-  if (value.visibility === "unknown" || value.status === "unknown") {
-    add(errors, "COMMERCIAL_PROVENANCE_INVALID", path, "Commercial value cannot publish unknown visibility/status");
+  const minimumOrderInvalid =
+    kind === "minimum_order" &&
+    (value.value === null || value.status !== "verified" || !value.verification || !value.verifiedAt);
+  const priceOrStockInvalid = kind !== "minimum_order" && (value.visibility === "unknown" || value.status === "unknown");
+
+  if (!COMMERCIAL_TRUSTED_PROVENANCE.has(sourceType) || minimumOrderInvalid || priceOrStockInvalid) {
+    add(
+      errors,
+      "COMMERCIAL_PROVENANCE_INVALID",
+      path,
+      `Publishable ${kind} requires a trusted source and a non-unknown verified value`
+    );
   }
 }
 
@@ -143,7 +214,7 @@ function isPublishableFact(fact) {
 
 function checkPublishableCommercialOverride(value, path, keys, errors) {
   if (!value) return;
-  checkCommercialValue(value, path, keys, errors);
+  checkCommercialFact(value, path, keys, errors, "commercial_override");
   if (value.publishAllowed !== true) {
     add(errors, "VARIANT_COMMERCIAL_NOT_PUBLISHABLE", path, "Ready/published variant override is not publishable");
   }
@@ -152,7 +223,7 @@ function checkPublishableCommercialOverride(value, path, keys, errors) {
 function checkCategoryGraph(categories, productIds, keys, errors) {
   const byId = new Map();
   for (const [index, category] of categories.entries()) {
-    if (category?.id) byId.set(category.id, { category, index });
+    if (category?.id && !byId.has(category.id)) byId.set(category.id, { category, index });
   }
 
   for (const [index, category] of categories.entries()) {
@@ -196,15 +267,14 @@ function checkCategoryGraph(categories, productIds, keys, errors) {
   }
 }
 
-function checkCatalog(spec, keys, errors) {
+function checkCatalog(spec, indexes, keys, errors) {
   const catalog = spec.catalog;
   if (!catalog) return;
 
   const categories = catalog.categories ?? [];
   const products = catalog.products ?? [];
-  const productIds = checkUnique(products, "id", "product", "/catalog/products", errors);
-  checkUnique(categories, "id", "category", "/catalog/categories", errors);
-  checkCategoryGraph(categories, productIds, keys, errors);
+  checkCategoryGraph(categories, indexes.products, keys, errors);
+  checkCommercialFact(catalog.minOrderPolicy, "/catalog/minOrderPolicy", keys, errors, "minimum_order");
 
   for (const [index, assetId] of (catalog.importAssetIds ?? []).entries()) {
     checkAssetRef(assetId, `/catalog/importAssetIds/${index}`, keys, errors);
@@ -215,19 +285,18 @@ function checkCatalog(spec, keys, errors) {
     for (const [assetIndex, assetId] of (product.photoAssetIds ?? []).entries()) {
       checkAssetRef(assetId, `${path}/photoAssetIds/${assetIndex}`, keys, errors);
     }
-    checkCommercialValue(product.price, `${path}/price`, keys, errors);
-    checkCommercialValue(product.stock, `${path}/stock`, keys, errors);
-    checkFactAssets(product.minOrder, `${path}/minOrder`, keys, errors);
+    checkCommercialFact(product.price, `${path}/price`, keys, errors, "price");
+    checkCommercialFact(product.stock, `${path}/stock`, keys, errors, "stock");
+    checkCommercialFact(product.minOrder, `${path}/minOrder`, keys, errors, "minimum_order");
 
-    checkUnique(product.variants ?? [], "id", "variant", `${path}/variants`, errors);
     for (const [variantIndex, variant] of (product.variants ?? []).entries()) {
       const variantPath = `${path}/variants/${variantIndex}`;
       for (const [assetIndex, assetId] of (variant.photoAssetIds ?? []).entries()) {
         checkAssetRef(assetId, `${variantPath}/photoAssetIds/${assetIndex}`, keys, errors);
       }
-      checkCommercialValue(variant.priceOverride, `${variantPath}/priceOverride`, keys, errors);
-      checkCommercialValue(variant.stock, `${variantPath}/stock`, keys, errors);
-      checkFactAssets(variant.minOrder, `${variantPath}/minOrder`, keys, errors);
+      checkCommercialFact(variant.priceOverride, `${variantPath}/priceOverride`, keys, errors, "price");
+      checkCommercialFact(variant.stock, `${variantPath}/stock`, keys, errors, "stock");
+      checkCommercialFact(variant.minOrder, `${variantPath}/minOrder`, keys, errors, "minimum_order");
       checkFactAssets(variant.packaging, `${variantPath}/packaging`, keys, errors);
 
       if (["ready", "published"].includes(variant.publicationStatus)) {
@@ -253,70 +322,274 @@ function checkBrand(spec, keys, errors) {
   }
 }
 
-function checkDesign(spec, keys, errors) {
+function checkReferenceList(ids, index, path, code, label, errors) {
+  for (const [itemIndex, id] of (ids ?? []).entries()) {
+    if (!index.has(id)) {
+      add(errors, code, `${path}/${itemIndex}`, `Missing ${label} reference: ${id}`);
+    }
+  }
+}
+
+function checkProductVariantReference(entry, path, indexes, errors) {
+  const productId = entry?.productId;
+  if (!indexes.products.has(productId)) {
+    add(errors, "MISSING_PRODUCT_REFERENCE", `${path}/productId`, `Missing product reference: ${productId}`);
+    return;
+  }
+
+  const variantId = entry?.variantId;
+  if (!variantId) return;
+  if (indexes.variantsByProduct.get(productId)?.has(variantId)) return;
+
+  if (indexes.variantOwners.has(variantId)) {
+    add(
+      errors,
+      "VARIANT_PRODUCT_MISMATCH",
+      `${path}/variantId`,
+      `Variant ${variantId} does not belong to product ${productId}`
+    );
+    return;
+  }
+  add(errors, "MISSING_VARIANT_REFERENCE", `${path}/variantId`, `Missing variant reference: ${variantId}`);
+}
+
+function checkOverrideReferences(overrides, path, indexes, keys, errors) {
+  if (!overrides) return;
+  const scope = overrides.catalogScope;
+  if (scope) {
+    checkReferenceList(
+      scope.includeCategoryIds,
+      indexes.categories,
+      `${path}/catalogScope/includeCategoryIds`,
+      "MISSING_CATEGORY_REFERENCE",
+      "category",
+      errors
+    );
+    checkReferenceList(
+      scope.excludeCategoryIds,
+      indexes.categories,
+      `${path}/catalogScope/excludeCategoryIds`,
+      "MISSING_CATEGORY_REFERENCE",
+      "category",
+      errors
+    );
+    checkReferenceList(
+      scope.includeProductIds,
+      indexes.products,
+      `${path}/catalogScope/includeProductIds`,
+      "MISSING_PRODUCT_REFERENCE",
+      "product",
+      errors
+    );
+    checkReferenceList(
+      scope.excludeProductIds,
+      indexes.products,
+      `${path}/catalogScope/excludeProductIds`,
+      "MISSING_PRODUCT_REFERENCE",
+      "product",
+      errors
+    );
+  }
+
+  checkCommercialFact(overrides.minOrderPolicy?.value, `${path}/minOrderPolicy/value`, keys, errors, "minimum_order");
+
+  for (const [index, override] of (overrides.priceOverrides ?? []).entries()) {
+    const overridePath = `${path}/priceOverrides/${index}`;
+    checkProductVariantReference(override, overridePath, indexes, errors);
+    checkCommercialFact(override.price, `${overridePath}/price`, keys, errors, "price");
+  }
+  for (const [index, override] of (overrides.regionalStock ?? []).entries()) {
+    const overridePath = `${path}/regionalStock/${index}`;
+    checkProductVariantReference(override, overridePath, indexes, errors);
+    checkCommercialFact(override.stock, `${overridePath}/stock`, keys, errors, "stock");
+    checkFactAssets(override.quantity, `${overridePath}/quantity`, keys, errors);
+  }
+}
+
+function checkSiteRegionAndOverrideReferences(spec, indexes, keys, errors) {
+  for (const [siteIndex, site] of (spec.network?.sites ?? []).entries()) {
+    checkReferenceList(
+      site.regionIds,
+      indexes.regions,
+      `/network/sites/${siteIndex}/regionIds`,
+      "MISSING_REGION_REFERENCE",
+      "region",
+      errors
+    );
+    checkOverrideReferences(site.overrides, `/network/sites/${siteIndex}/overrides`, indexes, keys, errors);
+  }
+  for (const [regionIndex, region] of (spec.regions ?? []).entries()) {
+    checkOverrideReferences(region.overrides, `/regions/${regionIndex}/overrides`, indexes, keys, errors);
+  }
+}
+
+function checkDesign(spec, indexes, keys, errors) {
   const design = spec.design;
   if (!design) return;
   const prototypes = design.prototypes ?? [];
-  const byVariant = new Map();
   for (const [index, prototype] of prototypes.entries()) {
-    if (prototype.variantId) byVariant.set(prototype.variantId, { prototype, index });
     checkAssetRef(prototype.prototypeArtifactId, `/design/prototypes/${index}/prototypeArtifactId`, keys, errors);
     checkAssetRef(prototype.screenshotArtifactId, `/design/prototypes/${index}/screenshotArtifactId`, keys, errors);
   }
   if (!design.selectedVariantId) return;
-  const selected = byVariant.get(design.selectedVariantId);
+  const selected = indexes.designPrototypes.get(design.selectedVariantId);
   if (!selected) {
     add(errors, "MISSING_DESIGN_VARIANT", "/design/selectedVariantId", `Missing selected design variant: ${design.selectedVariantId}`);
     return;
   }
-  if (!["selected", "approved"].includes(selected.prototype.status)) {
+  if (!["selected", "approved"].includes(selected.value.status)) {
     add(errors, "INVALID_DESIGN_SELECTION", `/design/prototypes/${selected.index}/status`, "Selected design prototype must be selected or approved");
   }
 }
 
-function checkTelegram(spec, errors) {
-  const telegram = spec.integrations?.telegram;
-  if (!telegram) return;
-  const sites = checkUnique(spec.network?.sites ?? [], "id", "site", "/network/sites", errors);
-  const regions = checkUnique(spec.regions ?? [], "id", "region", "/regions", errors);
-  const destinations = new Map();
+function getLeadFormContexts(form, formIndex, indexes, errors) {
+  const scope = form.scope;
+  if (!scope) {
+    const siteContexts = [...indexes.sites.keys()].map((siteId) => ({ siteId, regionId: null }));
+    return siteContexts.length > 0 ? siteContexts : [{ siteId: null, regionId: null }];
+  }
 
-  for (const [index, destination] of (telegram.destinations ?? []).entries()) {
-    if (destination.id) destinations.set(destination.id, { destination, index });
+  const path = `/leadForms/${formIndex}/scope`;
+  if (scope.project) {
+    if ((scope.siteIds ?? []).length > 0 || (scope.regionIds ?? []).length > 0) {
+      add(errors, "TELEGRAM_ROUTE_INVALID", path, "Project-scoped lead form cannot also declare siteIds or regionIds");
+    }
+    return [{ siteId: null, regionId: null }];
+  }
+
+  if ((scope.siteIds ?? []).length === 0) {
+    add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/siteIds`, "Non-project lead form scope requires at least one siteId");
+    return [];
+  }
+
+  const contexts = [];
+  for (const [siteIndex, siteId] of (scope.siteIds ?? []).entries()) {
+    const siteEntry = indexes.sites.get(siteId);
+    if (!siteEntry) {
+      add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/siteIds/${siteIndex}`, `Lead form scope references missing site: ${siteId}`);
+      continue;
+    }
+    if ((scope.regionIds ?? []).length === 0) {
+      contexts.push({ siteId, regionId: null });
+      continue;
+    }
+    for (const [regionIndex, regionId] of scope.regionIds.entries()) {
+      if (!indexes.regions.has(regionId)) {
+        add(errors, "MISSING_REGION_REFERENCE", `${path}/regionIds/${regionIndex}`, `Lead form scope references missing region: ${regionId}`);
+        continue;
+      }
+      if (!(siteEntry.value.regionIds ?? []).includes(regionId)) {
+        add(
+          errors,
+          "TELEGRAM_ROUTE_INVALID",
+          `${path}/regionIds/${regionIndex}`,
+          `Lead form region ${regionId} is not assigned to site ${siteId}`
+        );
+        continue;
+      }
+      contexts.push({ siteId, regionId });
+    }
+  }
+  return contexts;
+}
+
+function routeFallbackRank(route, context) {
+  if (route.siteId === null && route.regionId === null) return 2;
+  if (context.siteId === null) return Number.POSITIVE_INFINITY;
+  if (route.siteId !== context.siteId) return Number.POSITIVE_INFINITY;
+  if (route.regionId === null) return 1;
+  if (context.regionId !== null && route.regionId === context.regionId) return 0;
+  return Number.POSITIVE_INFINITY;
+}
+
+function checkTelegram(spec, indexes, errors) {
+  const telegram = spec.integrations?.telegram;
+  const routes = telegram?.routing ?? [];
+  const validRoutes = [];
+
+  for (const [index, destination] of (telegram?.destinations ?? []).entries()) {
     if (destination.enabled && !destination.secretRef) {
       add(errors, "TELEGRAM_DESTINATION_INVALID", `/integrations/telegram/destinations/${index}/secretRef`, "Enabled Telegram destination requires secretRef");
     }
   }
 
-  for (const [index, route] of (telegram.routing ?? []).entries()) {
+  for (const [index, route] of routes.entries()) {
     const path = `/integrations/telegram/routing/${index}`;
+    let valid = true;
     if (route.projectId !== spec.projectId) {
       add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/projectId`, "Telegram route projectId must match SiteSpec projectId");
+      valid = false;
     }
-    if (!sites.has(route.siteId)) {
-      add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/siteId`, `Telegram route references missing site: ${route.siteId}`);
+
+    let siteEntry = null;
+    if (route.siteId === null) {
+      if (route.regionId !== null) {
+        add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/regionId`, "Telegram route cannot declare regionId without siteId");
+        valid = false;
+      }
+    } else {
+      siteEntry = indexes.sites.get(route.siteId);
+      if (!siteEntry) {
+        add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/siteId`, `Telegram route references missing site: ${route.siteId}`);
+        valid = false;
+      }
     }
-    if (route.regionId && !regions.has(route.regionId)) {
-      add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/regionId`, `Telegram route references missing region: ${route.regionId}`);
+
+    if (route.regionId !== null) {
+      if (!indexes.regions.has(route.regionId)) {
+        add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/regionId`, `Telegram route references missing region: ${route.regionId}`);
+        valid = false;
+      } else if (siteEntry && !(siteEntry.value.regionIds ?? []).includes(route.regionId)) {
+        add(
+          errors,
+          "TELEGRAM_ROUTE_INVALID",
+          `${path}/regionId`,
+          `Telegram route region ${route.regionId} is not assigned to site ${route.siteId}`
+        );
+        valid = false;
+      }
     }
-    if (!destinations.has(route.destinationId)) {
-      add(errors, "TELEGRAM_ROUTE_INVALID", `${path}/destinationId`, `Telegram route references missing destination: ${route.destinationId}`);
+
+    const destinationEntry = indexes.telegramDestinations.get(route.destinationId);
+    if (!destinationEntry?.value.enabled || !destinationEntry.value.secretRef) {
+      add(
+        errors,
+        "TELEGRAM_DESTINATION_INVALID",
+        `${path}/destinationId`,
+        `Telegram route destination is missing, disabled, or has no secretRef: ${route.destinationId}`
+      );
+      valid = false;
     }
+    if (valid) validRoutes.push(route);
   }
 
   for (const [formIndex, form] of (spec.leadForms ?? []).entries()) {
     if (form.publicationStatus !== "approved") continue;
+    const contexts = getLeadFormContexts(form, formIndex, indexes, errors);
+    if ((form.destinationIds ?? []).length === 0) {
+      add(errors, "MISSING_TELEGRAM_ROUTE", `/leadForms/${formIndex}/destinationIds`, "Approved lead form requires a destination and applicable Telegram route");
+      continue;
+    }
     for (const [destinationIndex, destinationId] of (form.destinationIds ?? []).entries()) {
-      const destinationEntry = destinations.get(destinationId);
-      if (!destinationEntry?.destination.enabled || !destinationEntry.destination.secretRef) {
+      const destinationEntry = indexes.telegramDestinations.get(destinationId);
+      if (!destinationEntry?.value.enabled || !destinationEntry.value.secretRef) {
         add(errors, "TELEGRAM_DESTINATION_INVALID", `/leadForms/${formIndex}/destinationIds/${destinationIndex}`, `Lead form destination is missing, disabled, or has no secretRef: ${destinationId}`);
         continue;
       }
-      const hasRoute = (telegram.routing ?? []).some(
-        (route) => route.projectId === spec.projectId && route.destinationId === destinationId && sites.has(route.siteId)
-      );
-      if (!hasRoute) {
-        add(errors, "MISSING_TELEGRAM_ROUTE", `/leadForms/${formIndex}/destinationIds/${destinationIndex}`, `Lead form destination has no route: ${destinationId}`);
+      for (const context of contexts) {
+        const bestRank = Math.min(
+          ...validRoutes
+            .filter((route) => route.destinationId === destinationId && route.projectId === spec.projectId)
+            .map((route) => routeFallbackRank(route, context))
+        );
+        if (!telegram?.enabled || !Number.isFinite(bestRank)) {
+          add(
+            errors,
+            "MISSING_TELEGRAM_ROUTE",
+            `/leadForms/${formIndex}/destinationIds/${destinationIndex}`,
+            `Lead form destination ${destinationId} has no route for site ${context.siteId ?? "project"} and region ${context.regionId ?? "all"}`
+          );
+        }
       }
     }
   }
@@ -387,12 +660,14 @@ function checkRegulatedProducts(spec, errors) {
 export function validateSiteSpecSemantics(spec) {
   const errors = [];
   const assetKeys = buildAssetKeys(spec, errors);
+  const indexes = buildStructuralIndexes(spec, errors);
 
   checkAllAssetReferences(spec, "", assetKeys, errors);
   checkBrand(spec, assetKeys, errors);
-  checkCatalog(spec, assetKeys, errors);
-  checkDesign(spec, assetKeys, errors);
-  checkTelegram(spec, errors);
+  checkCatalog(spec, indexes, assetKeys, errors);
+  checkSiteRegionAndOverrideReferences(spec, indexes, assetKeys, errors);
+  checkDesign(spec, indexes, assetKeys, errors);
+  checkTelegram(spec, indexes, errors);
   checkWordPress(spec, errors);
   checkReadiness(spec, errors);
   checkRegulatedProducts(spec, errors);

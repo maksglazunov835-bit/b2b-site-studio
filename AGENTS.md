@@ -24,7 +24,10 @@
 - Work through a separate feature branch for every non-trivial task. Do not commit directly to `main` unless the user explicitly requests it.
 - Before committing, check `git status`, review the changed files, run required validation for the touched area, and make sure unrelated user changes are not overwritten.
 - Contract changes must pass the committed validation gate: `npm ci`, `npm run contracts:validate`, `npm run test:contracts`, `npm run lint`, `npm run build`, and `npm run ci`.
-- Pull requests to `main` must pass GitHub Actions CI before acceptance or merge. CI must not deploy, publish, change DNS, change repository visibility, or require production secrets.
+- Every implementation pull request to `main` requires a successful GitHub Actions CI run for the current PR head SHA or the current GitHub-generated merge commit. A successful run from an older commit does not count, and every new commit requires a new CI run.
+- Missing CI and `cancelled`, `skipped`, `neutral`, or `failed` checks block `accepted` and merge. A local Codex report or local command output never replaces GitHub Actions evidence.
+- A documentation-only pull request may receive an explicit, recorded CI exception only from the independent reviewer. No implicit exception is allowed.
+- Merge is forbidden until current CI is green and the independent review result is `accepted`. CI must not deploy, publish, change DNS, change repository visibility, or require production secrets.
 - Include `git diff --stat` in the final report for implementation tasks.
 
 ## Deployment Rules
@@ -69,9 +72,9 @@
 
 - A Codex execution report and successful command output are not sufficient proof that a task is ready.
 - Execution result is limited to `succeeded`, `failed`, or `cancelled`; independent acceptance result is separate and must be `accepted`, `changes_required`, or `blocked`.
-- The executor must not accept its own work. Acceptance requires an independent reviewer, or a configured CI/review gate when available, that checks the factual diff, changed files, tests, architecture impact, migrations, configuration, security, and alignment with the source Issue or JobSpec.
+- The executor must not accept its own work. Acceptance requires an independent reviewer that checks the factual diff, changed files, tests, architecture impact, migrations, configuration, security, and alignment with the source Issue or JobSpec.
 - Review must independently confirm that forbidden or unrelated files were not changed, existing behavior was not lost, company facts were not invented, secrets were not exposed, and dangerous commands were not introduced.
-- Required checks must be rerun locally and may be verified through configured CI when available. UI work also needs key scenario checks, responsiveness, and console-error review; API/database work needs positive, negative, and boundary scenarios; deployment work needs staging, smoke tests, and rollback readiness.
+- Required checks must be rerun locally. For implementation pull requests, GitHub Actions must independently rerun the required gate on the current PR head SHA or current merge commit; stale, absent, cancelled, skipped, neutral, or failed checks are not acceptable. UI work also needs key scenario checks, responsiveness, and console-error review; API/database work needs positive, negative, and boundary scenarios; deployment work needs staging, smoke tests, and rollback readiness.
 - Merge to `main`, production deploy, WordPress publication, DNS changes, and other irreversible actions are forbidden until the review result is `accepted` and any required approval is recorded.
 - If review returns `changes_required`, fixes stay in the same feature branch/PR and a full verification pass runs again.
 - Final review output must include the acceptance result, what was checked, risks found, and confirmation of merge/deploy state.
