@@ -199,8 +199,8 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="grid min-w-0 flex-1 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-            <section className="min-w-0 rounded-lg border border-white/10 bg-[#0b1118]/90 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+          <div className="grid min-w-0 flex-1 gap-4 overflow-hidden p-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <section className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#0b1118]/90 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <Badge className="border-cyan-400/25 bg-cyan-400/10 text-cyan-200" variant="outline">
@@ -213,18 +213,18 @@ export default function Home() {
 
               <Tabs defaultValue="business">
                 <TabsList
-                  className="!h-auto grid w-full grid-cols-1 rounded-md border border-white/10 bg-black/25 p-1 sm:grid-cols-3"
+                  className="!grid !h-auto w-full grid-cols-1 overflow-hidden rounded-md border border-white/10 bg-black/25 p-1 sm:grid-cols-3"
                   variant="line"
                 >
-                  <TabsTrigger className="h-9 min-w-0 px-3 text-slate-400 data-active:text-orange-300" value="business">
+                  <TabsTrigger className="h-9 w-full min-w-0 whitespace-normal px-3 text-slate-400 data-active:text-orange-300" value="business">
                     <Building2 className="size-4" />
                     Кто клиент
                   </TabsTrigger>
-                  <TabsTrigger className="h-9 min-w-0 px-3 text-slate-400 data-active:text-orange-300" value="site">
+                  <TabsTrigger className="h-9 w-full min-w-0 whitespace-normal px-3 text-slate-400 data-active:text-orange-300" value="site">
                     <Store className="size-4" />
                     Тип сайта
                   </TabsTrigger>
-                  <TabsTrigger className="h-9 min-w-0 px-3 text-slate-400 data-active:text-orange-300" value="network">
+                  <TabsTrigger className="h-9 w-full min-w-0 whitespace-normal px-3 text-slate-400 data-active:text-orange-300" value="network">
                     <Network className="size-4" />
                     Сеть сайтов
                   </TabsTrigger>
@@ -369,7 +369,7 @@ function ChoiceGrid({
 
           return (
             <button
-              className={`min-h-[118px] min-w-0 rounded-md border p-4 text-left transition ${
+              className={`min-h-[118px] min-w-0 overflow-hidden rounded-md border p-4 text-left transition ${
                 active
                   ? 'border-orange-500/55 bg-orange-500/15 shadow-[0_0_0_1px_rgba(249,115,22,0.12)]'
                   : 'border-white/10 bg-white/[0.035] hover:border-cyan-400/35 hover:bg-cyan-400/10'
