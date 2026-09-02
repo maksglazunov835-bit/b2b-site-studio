@@ -1146,6 +1146,7 @@
     {
       "name": "generation_ready_catalog_without_products",
       "expectedReason": "catalog site model requires canonical categories with productIds and catalog.products with a generatable product",
+      "expectedError": { "keyword": "contains", "instancePath": "/catalog/categories" },
       "value": {
         "schemaVersion": "1.2.0",
         "revision": 1,
@@ -1174,6 +1175,7 @@
     {
       "name": "publish_ready_required_consent_without_publishable_text",
       "expectedReason": "required consent must include publishable verified consent text",
+      "expectedError": { "keyword": "type", "instancePath": "/leadForms/0/consent/textFact" },
       "value": {
         "schemaVersion": "1.2.0",
         "revision": 1,
@@ -1202,36 +1204,43 @@
     {
       "name": "subdomain_without_domain",
       "expectedReason": "subdomain is forbidden without base domain",
+      "expectedError": { "keyword": "type", "instancePath": "/network/sites/0/host/domain" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-subdomain", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Bad", "domainMode": "subdomain", "host": { "domain": null, "subdomain": "moscow", "path": "/" }, "regionIds": [], "niche": null, "status": "draft", "overrides": {} }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "invalid_wordpress_site_url",
       "expectedReason": "WordPress siteUrl must be an absolute URI",
+      "expectedError": { "keyword": "format", "instancePath": "/integrations/wordpress/target/siteUrl" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-wp-url", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://not a uri", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "non_https_publish_target",
       "expectedReason": "WordPress siteUrl must use https",
+      "expectedError": { "keyword": "pattern", "instancePath": "/integrations/wordpress/target/siteUrl" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-non-https", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "http://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "visible_price_without_value",
       "expectedReason": "visible price requires value and currency",
+      "expectedError": { "keyword": "type", "instancePath": "/catalog/products/0/price/value" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-visible-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": null, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": false }, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "publishable_price_from_system_inference",
       "expectedReason": "system inference cannot be a publishable price source",
+      "expectedError": { "keyword": "const", "instancePath": "/catalog/products/0/price/publishAllowed" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-ai-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": 100, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "system_inference", "sourceId": "ai", "assetId": null, "notes": null }, "publishAllowed": true }, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "published_stock_from_system_inference",
       "expectedReason": "system inference cannot publish factual stock",
+      "expectedError": { "keyword": "const", "instancePath": "/catalog/products/0/stock/publishAllowed" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-ai-stock", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": null, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "system_inference", "sourceId": "ai", "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "publishable_product_with_unknown_price_visibility",
       "expectedReason": "publishable product cannot use unknown price visibility",
+      "expectedError": { "keyword": "const", "instancePath": "/catalog/products/0/price/publishAllowed" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-unknown-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": null, "currency": null, "visibility": "unknown", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": true }, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "ready" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     }
   ],
@@ -1239,6 +1248,7 @@
     {
       "name": "missing_telegram_destination_or_route",
       "expectedReason": "lead form destination must resolve to enabled Telegram destination and matching route",
+      "expectedCode": "TELEGRAM_DESTINATION_INVALID",
       "value": {
         "schemaVersion": "1.2.0",
         "revision": 3,
@@ -1263,6 +1273,36 @@
         "compliance": { "personalDataPolicy": "Lead data is stored in protected backend storage.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": ["invented company facts"], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
         "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:10:00Z", "checks": [{ "id": "site_model_selected", "required": true, "status": "passed", "message": "Site model selected." }] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:15:00Z", "checks": [{ "id": "lead_form_approved", "required": true, "status": "passed", "message": "Bad fixture claims broken route is ready." }] } }
       }
+    },
+    {
+      "name": "category_cycle",
+      "expectedReason": "category parent chain must not contain cycles",
+      "expectedCode": "CATEGORY_CYCLE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-category-cycle", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Category Cycle", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [{ "id": "cat-a", "parentId": "cat-b", "path": ["cat-b", "cat-a"], "name": "Cat A", "slug": "cat-a", "description": null, "productIds": [], "assetIds": [], "publicationStatus": "draft" }, { "id": "cat-b", "parentId": "cat-a", "path": ["cat-a", "cat-b"], "name": "Cat B", "slug": "cat-b", "description": null, "productIds": [], "assetIds": [], "publicationStatus": "draft" }], "products": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_product_reference",
+      "expectedReason": "category productIds must resolve to catalog.products IDs",
+      "expectedCode": "MISSING_PRODUCT_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-missing-product", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Missing Product", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [{ "id": "cat-a", "parentId": null, "path": ["cat-a"], "name": "Cat A", "slug": "cat-a", "description": null, "productIds": ["prod-missing"], "assetIds": [], "publicationStatus": "draft" }], "products": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_asset_reference",
+      "expectedReason": "all asset/artifact references must resolve to assetRegistry",
+      "expectedCode": "MISSING_ASSET_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-missing-asset", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Semantic Missing Asset", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "assetRegistry": { "assets": [] }, "brand": { "displayName": "Semantic Missing Asset", "tone": [], "logoAssetId": "asset-missing-logo", "designReferenceAssetIds": [], "documentAssetIds": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "ready_variant_with_nonpublishable_commercial_override",
+      "expectedReason": "ready or published variants cannot carry nonpublishable price, stock, or minimum-order overrides",
+      "expectedCode": "VARIANT_COMMERCIAL_NOT_PUBLISHABLE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-ready-variant-commercial", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Variant Commercial", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": ["size"], "categories": [], "products": [{ "id": "prod-a", "name": "Product A", "sku": "SKU-A", "photoAssetIds": [], "price": null, "stock": null, "minOrder": null, "variants": [{ "id": "var-a", "sku": "SKU-A-1", "attributes": { "size": "1 kg" }, "priceOverride": { "value": 100, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": false }, "stock": null, "minOrder": null, "packaging": null, "photoAssetIds": [], "publicationStatus": "ready" }], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "publish_allowed_stock_with_unknown_provenance",
+      "expectedReason": "publishAllowed commercial data cannot use unknown provenance",
+      "expectedCode": "COMMERCIAL_PROVENANCE_INVALID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-stock-unknown-provenance", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Stock Provenance", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "prod-a", "name": "Product A", "sku": "SKU-A", "photoAssetIds": [], "price": null, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "unknown", "sourceId": null, "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     }
   ]
 }

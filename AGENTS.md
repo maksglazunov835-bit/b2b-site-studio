@@ -23,6 +23,8 @@
 - Use a private GitHub repository unless the user explicitly asks otherwise.
 - Work through a separate feature branch for every non-trivial task. Do not commit directly to `main` unless the user explicitly requests it.
 - Before committing, check `git status`, review the changed files, run required validation for the touched area, and make sure unrelated user changes are not overwritten.
+- Contract changes must pass the committed validation gate: `npm ci`, `npm run contracts:validate`, `npm run test:contracts`, `npm run lint`, `npm run build`, and `npm run ci`.
+- Pull requests to `main` must pass GitHub Actions CI before acceptance or merge. CI must not deploy, publish, change DNS, change repository visibility, or require production secrets.
 - Include `git diff --stat` in the final report for implementation tasks.
 
 ## Deployment Rules

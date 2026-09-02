@@ -22,6 +22,8 @@ Definition of done:
 - Execution result is separated from independent acceptance result.
 - Merge, production deploy, WordPress publication, DNS changes, and other irreversible actions are blocked until independent acceptance is `accepted` and required human approval is recorded.
 - JSON Schema, positive examples, and negative fixtures are locally validated.
+- Permanent schema and semantic validators are committed and wired into npm scripts.
+- GitHub Actions CI runs contract validation, lint, and build on pull requests and `main` pushes without deployment steps or production secrets.
 
 ## 2. PostgreSQL And Project/SiteSpec Persistence
 
