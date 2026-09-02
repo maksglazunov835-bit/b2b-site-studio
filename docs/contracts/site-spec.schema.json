@@ -1,0 +1,1268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-site-studio.local/contracts/site-spec.schema.json",
+  "title": "B2B Site Studio SiteSpec",
+  "description": "Draft-friendly structured source of truth for one WordPress site or a network of SEO sites.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "projectId", "documentStage", "siteModel", "language", "business", "readiness"],
+  "properties": {
+    "schemaVersion": { "type": "string", "pattern": "^1\\.2\\.0$" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "projectId": { "$ref": "#/$defs/id" },
+    "documentStage": { "type": "string", "enum": ["draft", "generation_ready", "publish_ready"] },
+    "siteModel": {
+      "type": ["string", "null"],
+      "description": "Canonical site type selected by the user; UI may label this as siteType.",
+      "enum": ["landing", "multipage", "catalog", "seo_network", "corporate", "hybrid", null]
+    },
+    "language": { "type": "string", "enum": ["ru-RU"] },
+    "business": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "audience", "geography", "facts", "missingFactKeys"],
+      "properties": {
+        "name": { "type": ["string", "null"], "minLength": 1 },
+        "type": { "type": ["string", "null"], "enum": ["wholesale", "manufacturer", "distributor", "b2b_services", null] },
+        "audience": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "geography": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "facts": { "type": "array", "items": { "$ref": "#/$defs/fact" } },
+        "missingFactKeys": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "siteStrategy", "inheritance", "sites"],
+      "properties": {
+        "mode": { "type": ["string", "null"], "enum": ["single", "regions", "niches", "separate_domains", null] },
+        "siteStrategy": {
+          "type": ["string", "null"],
+          "enum": ["single_wordpress_site", "one_wordpress_multiregion", "multiple_wordpress_sites", "hybrid", null]
+        },
+        "inheritance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shared", "overridable", "overrideSemantics"],
+          "properties": {
+            "shared": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "overridable": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "overrideSemantics": { "type": "string", "const": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }
+          }
+        },
+        "sites": { "type": "array", "items": { "$ref": "#/$defs/site" } }
+      }
+    },
+    "assetRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assets"],
+      "properties": {
+        "assets": { "type": "array", "items": { "$ref": "#/$defs/assetRecord" } }
+      }
+    },
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["displayName", "tone", "logoAssetId", "designReferenceAssetIds", "documentAssetIds"],
+      "properties": {
+        "displayName": { "type": ["string", "null"], "minLength": 1 },
+        "tone": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "logoAssetId": { "type": ["string", "null"], "minLength": 1 },
+        "designReferenceAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "documentAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "catalog": { "$ref": "#/$defs/catalog" },
+    "regions": { "type": "array", "items": { "$ref": "#/$defs/region" } },
+    "contacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "perRegionOverridesAllowed"],
+      "properties": {
+        "default": { "anyOf": [{ "$ref": "#/$defs/contactSet" }, { "type": "null" }] },
+        "perRegionOverridesAllowed": { "type": "boolean" }
+      }
+    },
+    "leadForms": { "type": "array", "items": { "$ref": "#/$defs/leadForm" } },
+    "pagePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredPages", "generatedPageTypes", "noindexRules"],
+      "properties": {
+        "requiredPages": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "generatedPageTypes": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["home", "landing", "catalog", "category", "subcategory", "product", "region", "delivery", "payment", "contacts", "faq", "legal"] }
+        },
+        "noindexRules": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "seo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primarySearchEngine", "secondarySearchEngines", "urlTemplates", "metadataRules", "technicalChecks"],
+      "properties": {
+        "primarySearchEngine": { "type": ["string", "null"], "enum": ["yandex", null] },
+        "secondarySearchEngines": { "type": "array", "items": { "type": "string", "enum": ["google"] } },
+        "urlTemplates": { "type": "array", "items": { "$ref": "#/$defs/urlTemplate" } },
+        "metadataRules": { "$ref": "#/$defs/seoMetadata" },
+        "technicalChecks": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "design": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variantCount", "prototypeFormat", "selectedVariantId", "tokens", "componentRules", "prototypes"],
+      "properties": {
+        "variantCount": { "type": "integer", "minimum": 3, "maximum": 5 },
+        "prototypeFormat": { "type": "string", "enum": ["html_css"] },
+        "selectedVariantId": { "type": ["string", "null"], "minLength": 1 },
+        "tokens": { "anyOf": [{ "$ref": "#/$defs/designTokens" }, { "type": "null" }] },
+        "componentRules": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "prototypes": { "type": "array", "items": { "$ref": "#/$defs/designPrototype" } }
+      }
+    },
+    "contentRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tone", "mustUseFactsOnly", "forbiddenClaims", "regionalUniquenessRules"],
+      "properties": {
+        "tone": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "mustUseFactsOnly": { "type": "boolean", "const": true },
+        "forbiddenClaims": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "regionalUniquenessRules": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["telegram", "wordpress", "analytics"],
+      "properties": {
+        "telegram": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "tokenStorage", "destinations", "routing"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "tokenStorage": { "type": "string", "enum": ["server_secret", "not_configured"] },
+            "destinations": { "type": "array", "items": { "$ref": "#/$defs/telegramDestination" } },
+            "routing": { "type": "array", "items": { "$ref": "#/$defs/telegramRoute" } }
+          }
+        },
+        "wordpress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targetType", "realWordPressRequired", "target"],
+          "properties": {
+            "targetType": { "type": "string", "enum": ["staging_first", "production_after_approval", "not_configured"] },
+            "realWordPressRequired": { "type": "boolean", "const": true },
+            "target": { "anyOf": [{ "$ref": "#/$defs/wordpressTarget" }, { "type": "null" }] }
+          }
+        },
+        "analytics": { "type": "array", "items": { "type": "string", "enum": ["yandex_metrica", "google_analytics", "none"] } }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "target", "requiresApproval", "rollbackPlan"],
+      "properties": {
+        "environment": { "type": "string", "enum": ["draft", "staging", "production"] },
+        "target": { "anyOf": [{ "$ref": "#/$defs/deploymentTarget" }, { "type": "null" }] },
+        "requiresApproval": { "type": "boolean", "const": true },
+        "rollbackPlan": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["personalDataPolicy", "approvalRequiredFor", "disallowedContent", "regulatedProducts"],
+      "properties": {
+        "personalDataPolicy": { "type": "string", "minLength": 1 },
+        "approvalRequiredFor": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"] }
+        },
+        "disallowedContent": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "regulatedProducts": { "$ref": "#/$defs/regulatedProductPolicy" }
+      }
+    },
+    "readiness": { "$ref": "#/$defs/readiness" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "documentStage": { "const": "generation_ready" } }, "required": ["documentStage"] },
+      "then": {
+        "required": ["network", "assetRegistry", "brand", "catalog", "contacts", "leadForms", "pagePlan", "seo", "design", "contentRules", "integrations", "deployment", "compliance"],
+        "properties": {
+          "siteModel": { "type": "string" },
+          "business": {
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "type": { "type": "string" },
+              "audience": { "minItems": 1 },
+              "geography": { "minItems": 1 }
+            }
+          },
+          "network": { "properties": { "mode": { "type": "string" }, "siteStrategy": { "type": "string" }, "sites": { "minItems": 1 } } },
+          "pagePlan": { "properties": { "requiredPages": { "minItems": 1 }, "generatedPageTypes": { "minItems": 1 } } },
+          "readiness": { "properties": { "generation": { "properties": { "status": { "const": "passed" }, "checks": { "minItems": 1 } } } } }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "siteModel": { "const": "catalog" } }, "required": ["siteModel"] },
+            "then": { "properties": { "catalog": { "$ref": "#/$defs/generationCatalog" } } }
+          },
+          {
+            "if": {
+              "properties": {
+                "siteModel": { "const": "seo_network" },
+                "pagePlan": { "properties": { "generatedPageTypes": { "contains": { "enum": ["catalog", "category", "subcategory", "product"] } } }, "required": ["generatedPageTypes"] }
+              },
+              "required": ["siteModel", "pagePlan"]
+            },
+            "then": { "properties": { "catalog": { "$ref": "#/$defs/generationCatalog" } } }
+          },
+          {
+            "if": {
+              "properties": {
+                "siteModel": { "const": "hybrid" },
+                "pagePlan": { "properties": { "generatedPageTypes": { "contains": { "enum": ["catalog", "category", "subcategory", "product"] } } }, "required": ["generatedPageTypes"] }
+              },
+              "required": ["siteModel", "pagePlan"]
+            },
+            "then": { "properties": { "catalog": { "$ref": "#/$defs/generationCatalog" } } }
+          }
+        ]
+      }
+    },
+    {
+      "if": { "properties": { "documentStage": { "const": "publish_ready" } }, "required": ["documentStage"] },
+      "then": {
+        "required": ["network", "assetRegistry", "brand", "catalog", "contacts", "leadForms", "pagePlan", "seo", "design", "contentRules", "integrations", "deployment", "compliance"],
+        "properties": {
+          "siteModel": { "type": "string" },
+          "business": {
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "type": { "type": "string" },
+              "audience": { "minItems": 1 },
+              "geography": { "minItems": 1 },
+              "facts": { "contains": { "$ref": "#/$defs/publishableFact" } }
+            }
+          },
+          "network": {
+            "properties": {
+              "mode": { "type": "string" },
+              "siteStrategy": { "type": "string" },
+              "sites": { "minItems": 1, "items": { "$ref": "#/$defs/publishableSite" } }
+            }
+          },
+          "design": { "properties": { "selectedVariantId": { "type": "string" }, "tokens": { "$ref": "#/$defs/designTokens" }, "prototypes": { "minItems": 1 } } },
+          "deployment": {
+            "properties": {
+              "environment": { "enum": ["staging", "production"] },
+              "target": { "$ref": "#/$defs/deploymentTarget" },
+              "rollbackPlan": { "type": "string", "minLength": 1 }
+            }
+          },
+          "integrations": { "properties": { "wordpress": { "properties": { "target": { "$ref": "#/$defs/wordpressTarget" } } } } },
+          "readiness": {
+            "properties": {
+              "generation": { "properties": { "status": { "const": "passed" } } },
+              "publish": { "properties": { "status": { "const": "passed" }, "checks": { "minItems": 1 } } }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "network": { "properties": { "mode": { "const": "single" } }, "required": ["mode"] } }, "required": ["network"] },
+            "then": { "properties": { "regions": { "maxItems": 0 } } },
+            "else": { "properties": { "regions": { "minItems": 1 } }, "required": ["regions"] }
+          },
+          {
+            "if": { "properties": { "siteModel": { "const": "catalog" } }, "required": ["siteModel"] },
+            "then": { "properties": { "catalog": { "$ref": "#/$defs/publishableCatalog" } } }
+          },
+          {
+            "if": {
+              "properties": {
+                "siteModel": { "enum": ["seo_network", "hybrid"] },
+                "pagePlan": { "properties": { "generatedPageTypes": { "contains": { "enum": ["catalog", "category", "subcategory", "product"] } } }, "required": ["generatedPageTypes"] }
+              },
+              "required": ["siteModel", "pagePlan"]
+            },
+            "then": { "properties": { "catalog": { "$ref": "#/$defs/publishableCatalog" } } }
+          }
+        ],
+        "anyOf": [
+          { "properties": { "contacts": { "properties": { "default": { "$ref": "#/$defs/publishableContactSet" } } } } },
+          { "properties": { "leadForms": { "contains": { "$ref": "#/$defs/publishableLeadForm" } } } }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 3, "maxLength": 120, "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" },
+    "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" },
+    "dnsHostname": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$"
+    },
+    "secretRef": { "type": "string", "pattern": "^secret\\.[A-Za-z0-9_.-]+$" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceType", "sourceId", "assetId", "notes"],
+      "properties": {
+        "sourceType": { "type": "string", "enum": ["unknown", "user_input", "csv_import", "xlsx_import", "operator_review", "system_inference", "external_document"] },
+        "sourceId": { "type": ["string", "null"], "minLength": 1 },
+        "assetId": { "type": ["string", "null"], "minLength": 1 },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorType", "actorId", "verifiedAt", "evidenceArtifactIds", "evidenceNote"],
+      "properties": {
+        "actorType": { "type": "string", "enum": ["operator", "trusted_import", "admin_review"] },
+        "actorId": { "type": "string", "minLength": 1 },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "evidenceArtifactIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "evidenceNote": { "type": "string", "minLength": 1 }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value", "status", "provenance", "verifiedAt", "verification", "publishAllowed"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9_.-]*$" },
+        "value": { "type": ["string", "number", "boolean", "object", "array", "null"] },
+        "status": { "type": "string", "enum": ["unknown", "supplied", "imported", "verified"] },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "verifiedAt": { "type": ["string", "null"], "format": "date-time" },
+        "verification": { "anyOf": [{ "$ref": "#/$defs/verification" }, { "type": "null" }] },
+        "publishAllowed": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "unknown" } }, "required": ["status"] },
+          "then": { "properties": { "value": { "type": "null" }, "verifiedAt": { "type": "null" }, "verification": { "type": "null" }, "publishAllowed": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "verified" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "verifiedAt": { "type": "string", "format": "date-time" },
+              "verification": { "$ref": "#/$defs/verification" },
+              "provenance": { "properties": { "sourceType": { "not": { "const": "system_inference" } } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "publishAllowed": { "const": true } }, "required": ["publishAllowed"] },
+          "then": { "properties": { "status": { "const": "verified" }, "value": { "not": { "type": "null" } } } }
+        },
+        {
+          "if": { "properties": { "provenance": { "properties": { "sourceType": { "const": "system_inference" } }, "required": ["sourceType"] } }, "required": ["provenance"] },
+          "then": { "properties": { "status": { "not": { "const": "verified" } }, "publishAllowed": { "const": false } } }
+        }
+      ]
+    },
+    "publishableFact": {
+      "allOf": [
+        { "$ref": "#/$defs/fact" },
+        { "properties": { "status": { "const": "verified" }, "publishAllowed": { "const": true }, "value": { "not": { "type": "null" } }, "verification": { "$ref": "#/$defs/verification" } } }
+      ]
+    },
+    "assetRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "role", "fileName", "contentType", "sha256", "sizeBytes"],
+      "oneOf": [
+        { "required": ["assetId"], "not": { "required": ["artifactId"] } },
+        { "required": ["artifactId"], "not": { "required": ["assetId"] } }
+      ],
+      "properties": {
+        "assetId": { "type": "string", "minLength": 1 },
+        "artifactId": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["logo", "design_reference", "product_photo", "variant_photo", "document", "import_file", "prototype", "screenshot"] },
+        "role": { "type": "string", "minLength": 1 },
+        "fileName": { "type": "string", "minLength": 1 },
+        "contentType": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "hostConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "subdomain", "path"],
+      "properties": {
+        "domain": { "anyOf": [{ "$ref": "#/$defs/dnsHostname" }, { "type": "null" }] },
+        "subdomain": { "type": ["string", "null"], "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$" },
+        "path": { "type": ["string", "null"], "pattern": "^/.*" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "subdomain": { "type": "string" } }, "required": ["subdomain"] },
+          "then": { "properties": { "domain": { "$ref": "#/$defs/dnsHostname" } } }
+        }
+      ]
+    },
+    "publishableHostConfig": {
+      "allOf": [
+        { "$ref": "#/$defs/hostConfig" },
+        { "properties": { "domain": { "$ref": "#/$defs/dnsHostname" }, "path": { "type": "string", "pattern": "^/.*" } }, "required": ["domain", "path"] }
+      ]
+    },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "domainMode", "host", "regionIds", "niche", "status", "overrides"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": ["string", "null"], "minLength": 1 },
+        "domainMode": { "type": ["string", "null"], "enum": ["single_domain", "subdomain", "subdirectory", "separate_domain", null] },
+        "host": { "$ref": "#/$defs/hostConfig" },
+        "regionIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "niche": { "type": ["string", "null"], "minLength": 1 },
+        "status": { "type": "string", "enum": ["draft", "staging", "published"] },
+        "overrides": { "$ref": "#/$defs/overrideSet" }
+      }
+    },
+    "publishableSite": {
+      "allOf": [
+        { "$ref": "#/$defs/site" },
+        { "properties": { "host": { "$ref": "#/$defs/publishableHostConfig" } } }
+      ]
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "slug", "facts", "overrides"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "slug": { "$ref": "#/$defs/slug" },
+        "facts": { "type": "array", "items": { "$ref": "#/$defs/fact" } },
+        "overrides": { "$ref": "#/$defs/overrideSet" }
+      }
+    },
+    "overrideSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contactOverrides": { "$ref": "#/$defs/contactOverrides" },
+        "address": { "$ref": "#/$defs/factOverride" },
+        "delivery": { "$ref": "#/$defs/deliveryOverride" },
+        "regionalOffer": { "$ref": "#/$defs/factOverride" },
+        "minOrderPolicy": { "$ref": "#/$defs/factOverride" },
+        "pricingPolicy": { "$ref": "#/$defs/pricingPolicy" },
+        "catalogScope": { "$ref": "#/$defs/catalogScope" },
+        "priceOverrides": { "type": "array", "items": { "$ref": "#/$defs/productPriceOverride" } },
+        "regionalStock": { "type": "array", "items": { "$ref": "#/$defs/regionalStock" } },
+        "seo": { "$ref": "#/$defs/seoOverride" },
+        "indexability": { "$ref": "#/$defs/indexability" },
+        "canonicalPolicy": { "$ref": "#/$defs/canonicalPolicy" },
+        "host": { "$ref": "#/$defs/hostConfig" }
+      }
+    },
+    "factOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "clearAllowed"],
+      "properties": {
+        "value": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "clearAllowed": { "type": "boolean" }
+      },
+      "if": { "properties": { "value": { "type": "null" } }, "required": ["value"] },
+      "then": { "properties": { "clearAllowed": { "const": true } } }
+    },
+    "contactSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phone", "email", "messengers", "address"],
+      "properties": {
+        "phone": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "email": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "messengers": { "type": "array", "items": { "$ref": "#/$defs/messengerContact" } },
+        "address": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] }
+      }
+    },
+    "publishableContactSet": {
+      "allOf": [
+        { "$ref": "#/$defs/contactSet" },
+        {
+          "anyOf": [
+            { "properties": { "phone": { "$ref": "#/$defs/publishableFact" } } },
+            { "properties": { "email": { "$ref": "#/$defs/publishableFact" } } },
+            { "properties": { "messengers": { "contains": { "properties": { "value": { "$ref": "#/$defs/publishableFact" } }, "required": ["value"] } } } }
+          ]
+        }
+      ]
+    },
+    "contactOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phone": { "$ref": "#/$defs/factOverride" },
+        "email": { "$ref": "#/$defs/factOverride" },
+        "address": { "$ref": "#/$defs/factOverride" },
+        "messengers": { "type": "array", "items": { "$ref": "#/$defs/messengerContact" } }
+      }
+    },
+    "messengerContact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["telegram", "whatsapp"] },
+        "value": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] }
+      }
+    },
+    "deliveryOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "facts"],
+      "properties": {
+        "summary": { "$ref": "#/$defs/factOverride" },
+        "facts": { "type": "array", "items": { "$ref": "#/$defs/fact" } }
+      }
+    },
+    "pricingPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "notes"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["inherit", "override", "hide", "on_request"] },
+        "notes": { "$ref": "#/$defs/factOverride" }
+      }
+    },
+    "catalogScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["includeCategoryIds", "excludeCategoryIds", "includeProductIds", "excludeProductIds"],
+      "properties": {
+        "includeCategoryIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "excludeCategoryIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "includeProductIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "excludeProductIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "productPriceOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productId", "variantId", "price", "clearAllowed"],
+      "properties": {
+        "productId": { "$ref": "#/$defs/id" },
+        "variantId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "price": { "anyOf": [{ "$ref": "#/$defs/price" }, { "type": "null" }] },
+        "clearAllowed": { "type": "boolean" }
+      },
+      "if": { "properties": { "price": { "type": "null" } }, "required": ["price"] },
+      "then": { "properties": { "clearAllowed": { "const": true } } }
+    },
+    "regionalStock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productId", "variantId", "stock", "quantity"],
+      "properties": {
+        "productId": { "$ref": "#/$defs/id" },
+        "variantId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "stock": { "$ref": "#/$defs/stock" },
+        "quantity": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] }
+      }
+    },
+    "seoOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "$ref": "#/$defs/factOverride" },
+        "description": { "$ref": "#/$defs/factOverride" },
+        "h1": { "$ref": "#/$defs/factOverride" },
+        "additionalBlocks": { "type": "array", "items": { "$ref": "#/$defs/contentBlock" } }
+      }
+    },
+    "contentBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "content"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "role": { "type": "string", "minLength": 1 },
+        "content": { "$ref": "#/$defs/fact" }
+      }
+    },
+    "indexability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["indexable", "reason", "noindexUntilFacts"],
+      "properties": {
+        "indexable": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 },
+        "noindexUntilFacts": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "canonicalPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "targetPath"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["self", "parent", "custom", "noindex"] },
+        "targetPath": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "currency", "minOrderPolicy", "importAssetIds", "variationAttributes", "categories", "products"],
+      "properties": {
+        "source": { "type": "string", "enum": ["manual", "csv", "xlsx", "api_future"] },
+        "currency": { "type": ["string", "null"], "enum": ["RUB", null] },
+        "minOrderPolicy": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "importAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "variationAttributes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "categories": { "type": "array", "items": { "$ref": "#/$defs/category" } },
+        "products": { "type": "array", "items": { "$ref": "#/$defs/product" } }
+      }
+    },
+    "generationCatalog": {
+      "allOf": [
+        { "$ref": "#/$defs/catalog" },
+        { "properties": { "categories": { "contains": { "$ref": "#/$defs/categoryWithProductIds" } }, "products": { "contains": { "$ref": "#/$defs/productForGeneration" } } } }
+      ]
+    },
+    "publishableCatalog": {
+      "allOf": [
+        { "$ref": "#/$defs/catalog" },
+        { "properties": { "categories": { "contains": { "$ref": "#/$defs/categoryWithProductIds" } }, "products": { "contains": { "$ref": "#/$defs/publishableProduct" } } } }
+      ]
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "parentId", "path", "name", "slug", "description", "productIds", "assetIds", "publicationStatus"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "parentId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "path": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1 },
+        "name": { "type": ["string", "null"], "minLength": 1 },
+        "slug": { "anyOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
+        "description": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "productIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "assetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "publicationStatus": { "type": "string", "enum": ["draft", "ready", "published", "noindex"] }
+      }
+    },
+    "categoryWithProductIds": {
+      "allOf": [
+        { "$ref": "#/$defs/category" },
+        { "properties": { "productIds": { "minItems": 1 } } }
+      ]
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "sku", "photoAssetIds", "price", "stock", "minOrder", "variants", "publicationStatus"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": ["string", "null"], "minLength": 1 },
+        "sku": { "type": ["string", "null"], "minLength": 1 },
+        "photoAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "price": { "anyOf": [{ "$ref": "#/$defs/price" }, { "type": "null" }] },
+        "stock": { "anyOf": [{ "$ref": "#/$defs/stock" }, { "type": "null" }] },
+        "minOrder": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "variants": { "type": "array", "items": { "$ref": "#/$defs/productVariant" } },
+        "publicationStatus": { "type": "string", "enum": ["draft", "ready", "published", "hidden"] }
+      }
+    },
+    "productForGeneration": {
+      "allOf": [
+        { "$ref": "#/$defs/product" },
+        { "properties": { "publicationStatus": { "enum": ["draft", "ready", "published"] }, "name": { "type": "string" } } }
+      ]
+    },
+    "publishableProduct": {
+      "allOf": [
+        { "$ref": "#/$defs/product" },
+        {
+          "properties": {
+            "publicationStatus": { "enum": ["ready", "published"] },
+            "name": { "type": "string" },
+            "sku": { "type": "string" },
+            "price": { "$ref": "#/$defs/publishablePrice" },
+            "stock": { "$ref": "#/$defs/publishableStock" },
+            "minOrder": { "anyOf": [{ "$ref": "#/$defs/publishableFact" }, { "type": "null" }] }
+          }
+        }
+      ]
+    },
+    "productVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sku", "attributes", "priceOverride", "stock", "minOrder", "packaging", "photoAssetIds", "publicationStatus"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "sku": { "type": ["string", "null"], "minLength": 1 },
+        "attributes": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "priceOverride": { "anyOf": [{ "$ref": "#/$defs/price" }, { "type": "null" }] },
+        "stock": { "anyOf": [{ "$ref": "#/$defs/stock" }, { "type": "null" }] },
+        "minOrder": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "packaging": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "photoAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "publicationStatus": { "type": "string", "enum": ["draft", "ready", "published", "hidden"] }
+      }
+    },
+    "price": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "currency", "visibility", "provenance", "publishAllowed"],
+      "properties": {
+        "value": { "type": ["number", "null"], "minimum": 0 },
+        "currency": { "type": ["string", "null"], "enum": ["RUB", null] },
+        "visibility": { "type": "string", "enum": ["visible", "on_request", "hidden", "unknown"] },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "publishAllowed": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "visibility": { "const": "visible" } }, "required": ["visibility"] },
+          "then": { "properties": { "value": { "type": "number" }, "currency": { "type": "string", "enum": ["RUB"] } } }
+        },
+        {
+          "if": { "properties": { "visibility": { "const": "unknown" } }, "required": ["visibility"] },
+          "then": { "properties": { "publishAllowed": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "provenance": { "properties": { "sourceType": { "const": "system_inference" } }, "required": ["sourceType"] } }, "required": ["provenance"] },
+          "then": { "properties": { "publishAllowed": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "publishAllowed": { "const": true } }, "required": ["publishAllowed"] },
+          "then": {
+            "properties": {
+              "visibility": { "enum": ["visible", "on_request", "hidden"] },
+              "provenance": { "properties": { "sourceType": { "enum": ["user_input", "csv_import", "xlsx_import", "operator_review", "external_document"] } } }
+            }
+          }
+        }
+      ]
+    },
+    "publishablePrice": {
+      "allOf": [
+        { "$ref": "#/$defs/price" },
+        { "properties": { "publishAllowed": { "const": true }, "visibility": { "enum": ["visible", "on_request", "hidden"] } } }
+      ]
+    },
+    "stock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "quantity", "provenance", "publishAllowed"],
+      "properties": {
+        "status": { "type": "string", "enum": ["in_stock", "limited", "on_request", "out_of_stock", "unknown"] },
+        "quantity": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "publishAllowed": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "unknown" } }, "required": ["status"] },
+          "then": { "properties": { "publishAllowed": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "provenance": { "properties": { "sourceType": { "const": "system_inference" } }, "required": ["sourceType"] } }, "required": ["provenance"] },
+          "then": { "properties": { "publishAllowed": { "const": false } } }
+        }
+      ]
+    },
+    "publishableStock": {
+      "allOf": [
+        { "$ref": "#/$defs/stock" },
+        { "properties": { "status": { "enum": ["in_stock", "limited", "on_request", "out_of_stock"] }, "publishAllowed": { "const": true } } }
+      ]
+    },
+    "leadForm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "cta", "fields", "consent", "antiSpam", "storage", "destinationIds", "publicationStatus"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": ["string", "null"], "minLength": 1 },
+        "cta": { "type": ["string", "null"], "minLength": 1 },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/leadFormField" } },
+        "consent": { "$ref": "#/$defs/leadFormConsent" },
+        "antiSpam": { "$ref": "#/$defs/antiSpam" },
+        "storage": { "$ref": "#/$defs/leadStorage" },
+        "destinationIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "publicationStatus": { "type": "string", "enum": ["draft", "approved", "disabled"] }
+      }
+    },
+    "publishableLeadForm": {
+      "allOf": [
+        { "$ref": "#/$defs/leadForm" },
+        {
+          "properties": {
+            "cta": { "type": "string", "minLength": 1 },
+            "fields": { "minItems": 1 },
+            "publicationStatus": { "const": "approved" },
+            "storage": { "properties": { "enabled": { "const": true } } },
+            "destinationIds": { "minItems": 1 }
+          }
+        }
+      ]
+    },
+    "leadFormField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "label", "type", "required"],
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "enum": ["text", "phone", "email", "textarea", "select", "checkbox"] },
+        "required": { "type": "boolean" }
+      }
+    },
+    "leadFormConsent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "textFact"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "textFact": { "anyOf": [{ "$ref": "#/$defs/publishableFact" }, { "type": "null" }] }
+      },
+      "if": { "properties": { "required": { "const": true } }, "required": ["required"] },
+      "then": { "properties": { "textFact": { "$ref": "#/$defs/publishableFact" } } }
+    },
+    "antiSpam": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "secretRef"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["honeypot", "turnstile", "captcha", "manual_review", "none"] },
+        "secretRef": { "anyOf": [{ "$ref": "#/$defs/secretRef" }, { "type": "null" }] }
+      }
+    },
+    "leadStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "destination"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "destination": { "type": ["string", "null"], "enum": ["platform_database", "disabled", null] }
+      }
+    },
+    "telegramDestination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "secretRef", "enabled"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1 },
+        "secretRef": { "$ref": "#/$defs/secretRef" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "telegramRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "siteId", "regionId", "destinationId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/id" },
+        "siteId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "regionId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "destinationId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "urlTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageType", "template"],
+      "properties": {
+        "pageType": { "type": "string", "minLength": 1 },
+        "template": { "type": "string", "minLength": 1 }
+      }
+    },
+    "seoMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "description", "h1", "canonical", "breadcrumbs", "schemaOrg"],
+      "properties": {
+        "title": { "type": ["string", "null"], "minLength": 1 },
+        "description": { "type": ["string", "null"], "minLength": 1 },
+        "h1": { "type": ["string", "null"], "minLength": 1 },
+        "canonical": { "type": ["string", "null"], "minLength": 1 },
+        "breadcrumbs": { "type": "boolean" },
+        "schemaOrg": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "designTokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["colors", "typography", "radius"],
+      "properties": {
+        "colors": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "typography": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "radius": { "type": "string", "minLength": 1 }
+      }
+    },
+    "designPrototype": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variantId", "prototypeArtifactId", "screenshotArtifactId", "status"],
+      "properties": {
+        "variantId": { "$ref": "#/$defs/id" },
+        "prototypeArtifactId": { "type": "string", "minLength": 1 },
+        "screenshotArtifactId": { "type": ["string", "null"], "minLength": 1 },
+        "status": { "type": "string", "enum": ["draft", "rendered", "selected", "rejected"] }
+      }
+    },
+    "wordpressTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["siteUrl", "authRef"],
+      "properties": {
+        "siteUrl": { "type": "string", "format": "uri", "pattern": "^https://[^\\s]+$" },
+        "authRef": { "$ref": "#/$defs/secretRef" }
+      }
+    },
+    "deploymentTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "host", "path"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["wordpress_staging", "wordpress_production"] },
+        "host": { "$ref": "#/$defs/publishableHostConfig" },
+        "path": { "type": "string", "pattern": "^/.*" }
+      }
+    },
+    "regulatedProductPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "categoryType", "jurisdictions", "ageGateRequired", "warningRequired", "legalReviewRequired", "publicationPolicy"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "categoryType": { "type": ["string", "null"], "minLength": 1 },
+        "jurisdictions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ageGateRequired": { "type": "boolean" },
+        "warningRequired": { "type": "boolean" },
+        "legalReviewRequired": { "type": "boolean" },
+        "publicationPolicy": { "type": "string", "enum": ["not_regulated", "block_until_reviewed", "allow_after_verified_review"] }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownedBy", "evaluatorVersion", "generation", "publish"],
+      "properties": {
+        "ownedBy": { "type": "string", "const": "server" },
+        "evaluatorVersion": { "type": "string", "minLength": 1 },
+        "generation": { "$ref": "#/$defs/readinessGate" },
+        "publish": { "$ref": "#/$defs/readinessGate" }
+      }
+    },
+    "readinessGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checkedAt", "checks"],
+      "properties": {
+        "status": { "type": "string", "enum": ["not_ready", "passed", "failed"] },
+        "checkedAt": { "type": ["string", "null"], "format": "date-time" },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/readinessCheck" } }
+      },
+      "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+      "then": {
+        "not": {
+          "properties": {
+            "checks": {
+              "contains": {
+                "properties": { "required": { "const": true }, "status": { "enum": ["missing", "failed"] } },
+                "required": ["required", "status"]
+              }
+            }
+          },
+          "required": ["checks"]
+        }
+      }
+    },
+    "readinessCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "required", "status", "message"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["missing", "passed", "failed", "not_applicable"] },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "x-semanticValidation": [
+    "Every catalog.category.productIds entry must resolve to catalog.products[].id.",
+    "Every catalog product, variant, category, site, region, lead form, Telegram destination, and asset/artifact identifier must be unique inside its scope.",
+    "Category path must match parentId and category graph must not contain cycles.",
+    "Every asset ID referenced by brand, catalog, products, variants, and design prototypes must exist in assetRegistry.",
+    "design.selectedVariantId must exist in design.prototypes for publish_ready documents.",
+    "Every leadForm.destinationIds entry must resolve to an enabled Telegram destination with secretRef.",
+    "Every enabled publishable lead form must have a Telegram route for the project/site/region context and the route destination must exist.",
+    "WordPress siteUrl host must match deployment target host and deployment host must match the publishable site host.",
+    "Staging deployment cannot use wordpress_production target and production deployment cannot use wordpress_staging target.",
+    "No arbitrary host from user text can become a Telegram, WordPress, artifact, or GitHub target without an explicit typed destination."
+  ],
+  "examples": [
+    {
+      "schemaVersion": "1.2.0",
+      "revision": 1,
+      "projectId": "draft-wholesale-project",
+      "documentStage": "draft",
+      "siteModel": null,
+      "language": "ru-RU",
+      "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": ["company_name", "phone", "email", "address", "regions", "catalog"] },
+      "readiness": {
+        "ownedBy": "server",
+        "evaluatorVersion": "site-readiness-1",
+        "generation": { "status": "not_ready", "checkedAt": null, "checks": [{ "id": "business_model_selected", "required": true, "status": "missing", "message": "Business type has not been selected yet." }] },
+        "publish": { "status": "not_ready", "checkedAt": null, "checks": [{ "id": "contacts_or_lead_form", "required": true, "status": "missing", "message": "Contacts or approved lead form are not ready." }] }
+      }
+    },
+    {
+      "schemaVersion": "1.2.0",
+      "revision": 2,
+      "projectId": "generation-ready-landing-no-catalog",
+      "documentStage": "generation_ready",
+      "siteModel": "landing",
+      "language": "ru-RU",
+      "business": { "name": "Demo Landing", "type": "b2b_services", "audience": ["B2B buyers"], "geography": ["Russia"], "facts": [], "missingFactKeys": ["phone", "email", "consent_text", "domain"] },
+      "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": ["brand", "landing_page"], "overridable": ["seo", "host"], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Demo Landing", "domainMode": "single_domain", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": [], "niche": "single landing", "status": "draft", "overrides": {} }] },
+      "assetRegistry": { "assets": [] },
+      "brand": { "displayName": "Demo Landing", "tone": ["business"], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": [] },
+      "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] },
+      "regions": [],
+      "contacts": { "default": null, "perRegionOverridesAllowed": false },
+      "leadForms": [{ "id": "lead-form-draft", "name": "Draft lead form", "cta": "Request", "fields": [{ "name": "phone", "label": "Phone", "type": "phone", "required": true }], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": [], "publicationStatus": "draft" }],
+      "pagePlan": { "requiredPages": ["Home"], "generatedPageTypes": ["home", "landing"], "noindexRules": [] },
+      "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "landing", "template": "/" }], "metadataRules": { "title": "Demo Landing", "description": "Draft landing description.", "h1": "Demo Landing", "canonical": "self", "breadcrumbs": false, "schemaOrg": ["Organization"] }, "technicalChecks": ["robots"] },
+      "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": null, "tokens": null, "componentRules": [], "prototypes": [] },
+      "contentRules": { "tone": ["business"], "mustUseFactsOnly": true, "forbiddenClaims": ["unverified guarantees"], "regionalUniquenessRules": [] },
+      "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["none"] },
+      "deployment": { "environment": "draft", "target": null, "requiresApproval": true, "rollbackPlan": null },
+      "compliance": { "personalDataPolicy": "Lead data is stored only after backend lead storage is configured.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": ["invented company facts"], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+      "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:20:00Z", "checks": [{ "id": "landing_model_selected", "required": true, "status": "passed", "message": "Landing generation does not require a catalog." }] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+    },
+    {
+      "schemaVersion": "1.2.0",
+      "revision": 8,
+      "projectId": "demo-regional-wholesale-network",
+      "documentStage": "generation_ready",
+      "siteModel": "seo_network",
+      "language": "ru-RU",
+      "business": {
+        "name": "Demo Opt Market",
+        "type": "wholesale",
+        "audience": ["retail stores", "regional dealers", "corporate buyers"],
+        "geography": ["Russia"],
+        "facts": [
+          { "key": "business.model", "value": "Wholesale sales to legal entities.", "status": "supplied", "provenance": { "sourceType": "user_input", "sourceId": "brief-field-business-model", "assetId": null, "notes": "Demo example data; not verified for publication." }, "verifiedAt": null, "verification": null, "publishAllowed": false },
+          { "key": "catalog.import_source", "value": "Catalog loaded from demo XLSX import.", "status": "imported", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": "Used for schema example validation." }, "verifiedAt": null, "verification": null, "publishAllowed": false }
+        ],
+        "missingFactKeys": ["legal_name", "real_phone", "real_email", "real_address", "certificates", "reviews"]
+      },
+      "network": { "mode": "regions", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": ["brand", "base_catalog", "design_tokens", "default_page_plan"], "overridable": ["contacts", "address", "delivery", "regional_offer", "min_order", "pricing", "catalog_scope", "stock", "seo", "indexability", "canonical", "host"], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-regional-site", "name": "Demo Opt Market Russia", "domainMode": "subdirectory", "host": { "domain": null, "subdomain": null, "path": "/regions/" }, "regionIds": ["moscow", "spb", "kazan"], "niche": "regional wholesale catalog", "status": "draft", "overrides": { "host": { "domain": null, "subdomain": null, "path": "/regions/" }, "canonicalPolicy": { "mode": "self", "targetPath": null } } }] },
+      "assetRegistry": { "assets": [
+        { "assetId": "asset_design_reference_001", "kind": "design_reference", "role": "uploaded_reference", "fileName": "b2b-dashboard-reference.png", "contentType": "image/png", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sizeBytes": 204800 },
+        { "assetId": "asset_product_photo_tea_001", "kind": "product_photo", "role": "catalog_photo", "fileName": "tea-classic.png", "contentType": "image/png", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sizeBytes": 153600 },
+        { "assetId": "asset_variant_photo_tea_100", "kind": "variant_photo", "role": "variant_packaging_photo", "fileName": "tea-classic-100g.png", "contentType": "image/png", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "sizeBytes": 102400 },
+        { "assetId": "asset_import_demo_xlsx", "kind": "import_file", "role": "catalog_import", "fileName": "demo-catalog.xlsx", "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "sizeBytes": 40960 },
+        { "artifactId": "artifact_prototype_001", "kind": "prototype", "role": "design_variant", "fileName": "reference-001.html", "contentType": "text/html", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "sizeBytes": 24576 }
+      ] },
+      "brand": { "displayName": "Demo Opt Market", "tone": ["business", "concise"], "logoAssetId": null, "designReferenceAssetIds": ["asset_design_reference_001"], "documentAssetIds": [] },
+      "catalog": {
+        "source": "xlsx",
+        "currency": "RUB",
+        "minOrderPolicy": { "key": "catalog.min_order_policy", "value": "Minimum order is set per product or variant.", "status": "imported", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": "Demo catalog import." }, "verifiedAt": null, "verification": null, "publishAllowed": false },
+        "importAssetIds": ["asset_import_demo_xlsx"],
+        "variationAttributes": ["taste", "packaging", "strength", "size", "color", "SKU"],
+        "categories": [
+          { "id": "tea", "parentId": null, "path": ["tea"], "name": "Tea wholesale", "slug": "tea-wholesale", "description": null, "productIds": ["black-tea-classic"], "assetIds": [], "publicationStatus": "draft" },
+          { "id": "green-tea", "parentId": "tea", "path": ["tea", "green-tea"], "name": "Green tea wholesale", "slug": "green-tea-wholesale", "description": null, "productIds": [], "assetIds": [], "publicationStatus": "draft" },
+          { "id": "coffee", "parentId": null, "path": ["coffee"], "name": "Coffee wholesale", "slug": "coffee-wholesale", "description": null, "productIds": ["coffee-arabica"], "assetIds": [], "publicationStatus": "draft" }
+        ],
+        "products": [
+          { "id": "black-tea-classic", "name": "Classic black tea", "sku": "TEA-BLK-001", "photoAssetIds": ["asset_product_photo_tea_001"], "price": { "value": 420, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null }, "publishAllowed": false }, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null }, "publishAllowed": false }, "minOrder": null, "variants": [{ "id": "black-tea-100", "sku": "TEA-BLK-001-100", "attributes": { "packaging": "100g", "taste": "classic" }, "priceOverride": { "value": 390, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null }, "publishAllowed": false }, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null }, "publishAllowed": false }, "minOrder": null, "packaging": null, "photoAssetIds": ["asset_variant_photo_tea_100"], "publicationStatus": "draft" }], "publicationStatus": "draft" },
+          { "id": "coffee-arabica", "name": "Arabica coffee", "sku": "COF-ARA-001", "photoAssetIds": [], "price": { "value": 890, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null }, "publishAllowed": false }, "stock": { "status": "limited", "quantity": null, "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null }, "publishAllowed": false }, "minOrder": null, "variants": [], "publicationStatus": "draft" }
+        ]
+      },
+      "regions": [
+        { "id": "moscow", "name": "Moscow", "slug": "moscow", "facts": [], "overrides": { "catalogScope": { "includeCategoryIds": ["tea", "coffee"], "excludeCategoryIds": [], "includeProductIds": [], "excludeProductIds": [] }, "priceOverrides": [{ "productId": "black-tea-classic", "variantId": "black-tea-100", "price": { "value": 405, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "regional-price-demo", "assetId": "asset_import_demo_xlsx", "notes": null }, "publishAllowed": false }, "clearAllowed": false }], "regionalStock": [{ "productId": "black-tea-classic", "variantId": "black-tea-100", "stock": { "status": "unknown", "quantity": null, "provenance": { "sourceType": "user_input", "sourceId": "brief-region-moscow", "assetId": null, "notes": null }, "publishAllowed": false }, "quantity": null }], "indexability": { "indexable": false, "reason": "Regional facts are incomplete.", "noindexUntilFacts": ["real_delivery_terms"] }, "canonicalPolicy": { "mode": "noindex", "targetPath": null }, "host": { "domain": null, "subdomain": null, "path": "/regions/moscow/" } } },
+        { "id": "spb", "name": "Saint Petersburg", "slug": "spb", "facts": [], "overrides": { "indexability": { "indexable": false, "reason": "Regional facts are incomplete.", "noindexUntilFacts": ["real_delivery_terms"] }, "canonicalPolicy": { "mode": "noindex", "targetPath": null }, "host": { "domain": null, "subdomain": null, "path": "/regions/spb/" } } },
+        { "id": "kazan", "name": "Kazan", "slug": "kazan", "facts": [], "overrides": { "indexability": { "indexable": false, "reason": "Regional facts are incomplete.", "noindexUntilFacts": ["real_delivery_terms"] }, "canonicalPolicy": { "mode": "noindex", "targetPath": null }, "host": { "domain": null, "subdomain": null, "path": "/regions/kazan/" } } }
+      ],
+      "contacts": { "default": null, "perRegionOverridesAllowed": true },
+      "leadForms": [{ "id": "lead-form-wholesale-request", "name": "Wholesale request", "cta": "Request wholesale price", "fields": [{ "name": "phone", "label": "Phone", "type": "phone", "required": true }], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-sales-demo"], "publicationStatus": "draft" }],
+      "pagePlan": { "requiredPages": ["Home", "Catalog", "Delivery", "Contacts"], "generatedPageTypes": ["home", "catalog", "category", "subcategory", "product", "region", "contacts"], "noindexRules": ["Do not index regional pages without verified regional facts."] },
+      "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "category", "template": "/catalog/{categorySlug}/" }, { "pageType": "product", "template": "/catalog/{categorySlug}/{productSlug}/" }, { "pageType": "region", "template": "/regions/{regionSlug}/{categorySlug}/" }], "metadataRules": { "title": "{categoryName} wholesale in {regionName}", "description": "Wholesale catalog with prices and request form.", "h1": "{categoryName} wholesale", "canonical": "Noindex or canonical when regional facts are missing.", "breadcrumbs": true, "schemaOrg": ["Organization", "Product", "BreadcrumbList"] }, "technicalChecks": ["robots", "sitemap", "canonical"] },
+      "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "variant-demo-001", "tokens": { "colors": { "primary": "#f97316" }, "typography": { "body": "system-ui" }, "radius": "8px" }, "componentRules": ["Dense catalog layout"], "prototypes": [{ "variantId": "variant-demo-001", "prototypeArtifactId": "artifact_prototype_001", "screenshotArtifactId": null, "status": "selected" }] },
+      "contentRules": { "tone": ["business"], "mustUseFactsOnly": true, "forbiddenClaims": ["unverified guarantees"], "regionalUniquenessRules": ["Use real regional facts, not paraphrases."] },
+      "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-sales-demo", "label": "Sales leads", "secretRef": "secret.telegram.sales", "enabled": true }], "routing": [{ "projectId": "demo-regional-wholesale-network", "siteId": "main-regional-site", "regionId": null, "destinationId": "tg-sales-demo" }] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["yandex_metrica"] },
+      "deployment": { "environment": "draft", "target": null, "requiresApproval": true, "rollbackPlan": null },
+      "compliance": { "personalDataPolicy": "Store real lead data only in protected backend storage.", "approvalRequiredFor": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"], "disallowedContent": ["invented company facts", "secret tokens in frontend", "thin indexed regional pages"], "regulatedProducts": { "enabled": true, "categoryType": "regulated_category_requires_review", "jurisdictions": ["RU"], "ageGateRequired": true, "warningRequired": true, "legalReviewRequired": true, "publicationPolicy": "block_until_reviewed" } },
+      "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:30:00Z", "checks": [{ "id": "business_model_selected", "required": true, "status": "passed", "message": "Business type, audience, and geography are present." }, { "id": "catalog_imported_or_entered", "required": true, "status": "passed", "message": "Canonical catalog has categories and products." }, { "id": "page_plan_created", "required": true, "status": "passed", "message": "Required pages and generated page types are defined." }] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [{ "id": "contacts_or_lead_form", "required": true, "status": "missing", "message": "Real contacts or approved lead form are not ready." }] } }
+    },
+    {
+      "schemaVersion": "1.2.0",
+      "revision": 3,
+      "projectId": "single-site-no-region",
+      "documentStage": "publish_ready",
+      "siteModel": "landing",
+      "language": "ru-RU",
+      "business": { "name": "Reviewed Demo Business", "type": "b2b_services", "audience": ["B2B buyers"], "geography": ["Russia"], "facts": [{ "key": "business.reviewed_offer", "value": "Offer text approved for demo publication.", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": "asset_review_doc_001", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["asset_review_doc_001"], "evidenceNote": "Demo review evidence." }, "publishAllowed": true }], "missingFactKeys": [] },
+      "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": ["brand", "landing_page", "lead_form"], "overridable": ["seo", "host"], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Reviewed Demo Business", "domainMode": "single_domain", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "regionIds": [], "niche": "single B2B landing", "status": "staging", "overrides": {} }] },
+      "assetRegistry": { "assets": [
+        { "assetId": "asset_review_doc_001", "kind": "document", "role": "operator_review_evidence", "fileName": "review-note.md", "contentType": "text/markdown", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "sizeBytes": 1024 },
+        { "artifactId": "artifact_landing_prototype", "kind": "prototype", "role": "selected_design_variant", "fileName": "landing.html", "contentType": "text/html", "sha256": "9999999999999999999999999999999999999999999999999999999999999999", "sizeBytes": 4096 },
+        { "artifactId": "artifact_landing_screenshot", "kind": "screenshot", "role": "selected_design_screenshot", "fileName": "landing.png", "contentType": "image/png", "sha256": "8888888888888888888888888888888888888888888888888888888888888888", "sizeBytes": 8192 }
+      ] },
+      "brand": { "displayName": "Reviewed Demo Business", "tone": ["business"], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": ["asset_review_doc_001"] },
+      "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] },
+      "regions": [],
+      "contacts": { "default": null, "perRegionOverridesAllowed": false },
+      "leadForms": [{ "id": "lead-form-main", "name": "Lead form", "cta": "Request callback", "fields": [{ "name": "phone", "label": "Phone", "type": "phone", "required": true }], "consent": { "required": true, "textFact": { "key": "consent.lead_form_main", "value": "I consent to processing of submitted lead data.", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": "asset_review_doc_001", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["asset_review_doc_001"], "evidenceNote": "Consent text approved for demo publication." }, "publishAllowed": true } }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-main"], "publicationStatus": "approved" }],
+      "pagePlan": { "requiredPages": ["Home", "Contacts"], "generatedPageTypes": ["home", "landing", "contacts"], "noindexRules": [] },
+      "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "landing", "template": "/" }], "metadataRules": { "title": "Reviewed Demo Business", "description": "Reviewed demo landing description.", "h1": "Reviewed Demo Business", "canonical": "self", "breadcrumbs": false, "schemaOrg": ["Organization"] }, "technicalChecks": ["robots", "sitemap", "canonical"] },
+      "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "landing-001", "tokens": { "colors": { "primary": "#f97316" }, "typography": { "body": "system-ui" }, "radius": "8px" }, "componentRules": ["Clear lead form"], "prototypes": [{ "variantId": "landing-001", "prototypeArtifactId": "artifact_landing_prototype", "screenshotArtifactId": "artifact_landing_screenshot", "status": "selected" }] },
+      "contentRules": { "tone": ["business"], "mustUseFactsOnly": true, "forbiddenClaims": ["unverified guarantees"], "regionalUniquenessRules": [] },
+      "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-main", "label": "Main leads", "secretRef": "secret.telegram.main", "enabled": true }], "routing": [{ "projectId": "single-site-no-region", "siteId": "main-site", "regionId": null, "destinationId": "tg-main" }] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] },
+      "deployment": { "environment": "staging", "target": { "kind": "wordpress_staging", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "path": "/" }, "requiresApproval": true, "rollbackPlan": "Restore previous WordPress revision." },
+      "compliance": { "personalDataPolicy": "Lead data is stored in protected backend storage.", "approvalRequiredFor": ["wordpress_publish", "dns_change", "production_deploy"], "disallowedContent": ["invented company facts"], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+      "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:10:00Z", "checks": [{ "id": "site_model_selected", "required": true, "status": "passed", "message": "Site model selected." }] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:15:00Z", "checks": [{ "id": "lead_form_approved", "required": true, "status": "passed", "message": "Approved lead form and Telegram route exist." }, { "id": "host_target_ready", "required": true, "status": "passed", "message": "Host and WordPress target exist." }] } }
+    }
+  ],
+  "x-negativeExamples": [
+    {
+      "name": "generation_ready_catalog_without_products",
+      "expectedReason": "catalog site model requires canonical categories with productIds and catalog.products with a generatable product",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-catalog-generation",
+        "documentStage": "generation_ready",
+        "siteModel": "catalog",
+        "language": "ru-RU",
+        "business": { "name": "Bad Catalog", "type": "wholesale", "audience": ["B2B"], "geography": ["Russia"], "facts": [], "missingFactKeys": [] },
+        "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Bad Catalog", "domainMode": "single_domain", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": [], "niche": "catalog", "status": "draft", "overrides": {} }] },
+        "assetRegistry": { "assets": [] },
+        "brand": { "displayName": "Bad Catalog", "tone": [], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": [] },
+        "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] },
+        "regions": [],
+        "contacts": { "default": null, "perRegionOverridesAllowed": false },
+        "leadForms": [],
+        "pagePlan": { "requiredPages": ["Home", "Catalog"], "generatedPageTypes": ["home", "catalog"], "noindexRules": [] },
+        "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [], "metadataRules": { "title": "Bad", "description": "Bad", "h1": "Bad", "canonical": "self", "breadcrumbs": false, "schemaOrg": [] }, "technicalChecks": ["robots"] },
+        "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": null, "tokens": null, "componentRules": [], "prototypes": [] },
+        "contentRules": { "tone": [], "mustUseFactsOnly": true, "forbiddenClaims": [], "regionalUniquenessRules": [] },
+        "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["none"] },
+        "deployment": { "environment": "draft", "target": null, "requiresApproval": true, "rollbackPlan": null },
+        "compliance": { "personalDataPolicy": "Protected.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": [], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [{ "id": "catalog_ready", "required": true, "status": "passed", "message": "Bad fixture claims catalog is ready." }] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+      }
+    },
+    {
+      "name": "publish_ready_required_consent_without_publishable_text",
+      "expectedReason": "required consent must include publishable verified consent text",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-consent-text",
+        "documentStage": "publish_ready",
+        "siteModel": "landing",
+        "language": "ru-RU",
+        "business": { "name": "Bad Consent", "type": "b2b_services", "audience": ["B2B"], "geography": ["Russia"], "facts": [{ "key": "business.offer", "value": "Offer.", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": "asset_review_doc_001", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["asset_review_doc_001"], "evidenceNote": "Evidence." }, "publishAllowed": true }], "missingFactKeys": [] },
+        "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Bad Consent", "domainMode": "single_domain", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "regionIds": [], "niche": "landing", "status": "staging", "overrides": {} }] },
+        "assetRegistry": { "assets": [{ "assetId": "asset_review_doc_001", "kind": "document", "role": "operator_review_evidence", "fileName": "review.md", "contentType": "text/markdown", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "sizeBytes": 1024 }] },
+        "brand": { "displayName": "Bad Consent", "tone": [], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": ["asset_review_doc_001"] },
+        "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] },
+        "regions": [],
+        "contacts": { "default": { "phone": { "key": "contacts.phone", "value": "+7 900 000-00-00", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": "asset_review_doc_001", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["asset_review_doc_001"], "evidenceNote": "Contact reviewed for consent fixture." }, "publishAllowed": true }, "email": null, "messengers": [], "address": null }, "perRegionOverridesAllowed": false },
+        "leadForms": [{ "id": "lead-form-main", "name": "Lead", "cta": "Send", "fields": [{ "name": "phone", "label": "Phone", "type": "phone", "required": true }], "consent": { "required": true, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-main"], "publicationStatus": "approved" }],
+        "pagePlan": { "requiredPages": ["Home"], "generatedPageTypes": ["home", "landing"], "noindexRules": [] },
+        "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [], "metadataRules": { "title": "Bad", "description": "Bad", "h1": "Bad", "canonical": "self", "breadcrumbs": false, "schemaOrg": [] }, "technicalChecks": ["robots"] },
+        "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "landing-001", "tokens": { "colors": { "primary": "#000" }, "typography": { "body": "system-ui" }, "radius": "8px" }, "componentRules": [], "prototypes": [{ "variantId": "landing-001", "prototypeArtifactId": "artifact_landing_prototype", "screenshotArtifactId": null, "status": "selected" }] },
+        "contentRules": { "tone": [], "mustUseFactsOnly": true, "forbiddenClaims": [], "regionalUniquenessRules": [] },
+        "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-main", "label": "Main", "secretRef": "secret.telegram.main", "enabled": true }], "routing": [{ "projectId": "bad-consent-text", "siteId": "main-site", "regionId": null, "destinationId": "tg-main" }] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] },
+        "deployment": { "environment": "staging", "target": { "kind": "wordpress_staging", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "path": "/" }, "requiresApproval": true, "rollbackPlan": "Rollback." },
+        "compliance": { "personalDataPolicy": "Protected.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": [], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [{ "id": "lead_form_approved", "required": true, "status": "passed", "message": "Bad fixture." }] } }
+      }
+    },
+    {
+      "name": "subdomain_without_domain",
+      "expectedReason": "subdomain is forbidden without base domain",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-subdomain", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Bad", "domainMode": "subdomain", "host": { "domain": null, "subdomain": "moscow", "path": "/" }, "regionIds": [], "niche": null, "status": "draft", "overrides": {} }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "invalid_wordpress_site_url",
+      "expectedReason": "WordPress siteUrl must be an absolute URI",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-wp-url", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://not a uri", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "non_https_publish_target",
+      "expectedReason": "WordPress siteUrl must use https",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-non-https", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "http://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "visible_price_without_value",
+      "expectedReason": "visible price requires value and currency",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-visible-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": null, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": false }, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "publishable_price_from_system_inference",
+      "expectedReason": "system inference cannot be a publishable price source",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-ai-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": 100, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "system_inference", "sourceId": "ai", "assetId": null, "notes": null }, "publishAllowed": true }, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "published_stock_from_system_inference",
+      "expectedReason": "system inference cannot publish factual stock",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-ai-stock", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": null, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "system_inference", "sourceId": "ai", "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "publishable_product_with_unknown_price_visibility",
+      "expectedReason": "publishable product cannot use unknown price visibility",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-unknown-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": null, "currency": null, "visibility": "unknown", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": true }, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "ready" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    }
+  ],
+  "x-semanticNegativeExamples": [
+    {
+      "name": "missing_telegram_destination_or_route",
+      "expectedReason": "lead form destination must resolve to enabled Telegram destination and matching route",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 3,
+        "projectId": "semantic-bad-telegram",
+        "documentStage": "publish_ready",
+        "siteModel": "landing",
+        "language": "ru-RU",
+        "business": { "name": "Semantic Bad", "type": "b2b_services", "audience": ["B2B buyers"], "geography": ["Russia"], "facts": [{ "key": "business.reviewed_offer", "value": "Offer text approved.", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": "asset_review_doc_001", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["asset_review_doc_001"], "evidenceNote": "Demo review evidence." }, "publishAllowed": true }], "missingFactKeys": [] },
+        "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": ["brand", "landing_page", "lead_form"], "overridable": ["seo", "host"], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Semantic Bad", "domainMode": "single_domain", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "regionIds": [], "niche": "single B2B landing", "status": "staging", "overrides": {} }] },
+        "assetRegistry": { "assets": [{ "assetId": "asset_review_doc_001", "kind": "document", "role": "operator_review_evidence", "fileName": "review-note.md", "contentType": "text/markdown", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "sizeBytes": 1024 }, { "artifactId": "artifact_landing_prototype", "kind": "prototype", "role": "selected_design_variant", "fileName": "landing.html", "contentType": "text/html", "sha256": "9999999999999999999999999999999999999999999999999999999999999999", "sizeBytes": 4096 }] },
+        "brand": { "displayName": "Semantic Bad", "tone": ["business"], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": ["asset_review_doc_001"] },
+        "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] },
+        "regions": [],
+        "contacts": { "default": null, "perRegionOverridesAllowed": false },
+        "leadForms": [{ "id": "lead-form-main", "name": "Lead form", "cta": "Request callback", "fields": [{ "name": "phone", "label": "Phone", "type": "phone", "required": true }], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-missing"], "publicationStatus": "approved" }],
+        "pagePlan": { "requiredPages": ["Home", "Contacts"], "generatedPageTypes": ["home", "landing", "contacts"], "noindexRules": [] },
+        "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "landing", "template": "/" }], "metadataRules": { "title": "Semantic Bad", "description": "Reviewed demo landing description.", "h1": "Semantic Bad", "canonical": "self", "breadcrumbs": false, "schemaOrg": ["Organization"] }, "technicalChecks": ["robots", "sitemap", "canonical"] },
+        "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "landing-001", "tokens": { "colors": { "primary": "#f97316" }, "typography": { "body": "system-ui" }, "radius": "8px" }, "componentRules": ["Clear lead form"], "prototypes": [{ "variantId": "landing-001", "prototypeArtifactId": "artifact_landing_prototype", "screenshotArtifactId": null, "status": "selected" }] },
+        "contentRules": { "tone": ["business"], "mustUseFactsOnly": true, "forbiddenClaims": ["unverified guarantees"], "regionalUniquenessRules": [] },
+        "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-main", "label": "Main leads", "secretRef": "secret.telegram.main", "enabled": true }], "routing": [{ "projectId": "semantic-bad-telegram", "siteId": "main-site", "regionId": null, "destinationId": "tg-main" }] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] },
+        "deployment": { "environment": "staging", "target": { "kind": "wordpress_staging", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "path": "/" }, "requiresApproval": true, "rollbackPlan": "Restore previous WordPress revision." },
+        "compliance": { "personalDataPolicy": "Lead data is stored in protected backend storage.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": ["invented company facts"], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:10:00Z", "checks": [{ "id": "site_model_selected", "required": true, "status": "passed", "message": "Site model selected." }] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:15:00Z", "checks": [{ "id": "lead_form_approved", "required": true, "status": "passed", "message": "Bad fixture claims broken route is ready." }] } }
+      }
+    }
+  ]
+}
