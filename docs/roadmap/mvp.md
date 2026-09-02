@@ -22,6 +22,10 @@ Definition of done:
 - Execution result is separated from independent acceptance result.
 - Merge, production deploy, WordPress publication, DNS changes, and other irreversible actions are blocked until independent acceptance is `accepted` and required human approval is recorded.
 - JSON Schema, positive examples, and negative fixtures are locally validated.
+- Permanent schema and semantic validators are committed and wired into npm scripts.
+- GitHub Actions CI runs contract validation, lint, and build on pull requests and `main` pushes without deployment steps or production secrets.
+- Every implementation PR to `main` requires green GitHub Actions CI for its current head SHA or current merge commit plus an independent review result of `accepted`; stale runs and missing, cancelled, skipped, neutral, or failed checks block acceptance and merge.
+- Every new PR commit requires a new CI run. Local Codex reports do not replace GitHub Actions; only an independent reviewer may record an explicit exception for a documentation-only PR.
 
 ## 2. PostgreSQL And Project/SiteSpec Persistence
 
@@ -46,7 +50,7 @@ Definition of done:
 - Queue states follow `draft -> queued -> claimed -> running -> awaiting_approval -> validating -> succeeded | failed | cancelled`.
 - `succeeded`, `failed`, and `cancelled` are execution results only.
 - Independent acceptance states are `accepted`, `changes_required`, and `blocked`.
-- `succeeded` jobs move to review pending until an independent reviewer, or configured CI when available, checks actual diff and validation evidence.
+- `succeeded` jobs move to review pending until an independent reviewer checks the actual diff and validation evidence; implementation PRs also require current successful GitHub Actions CI.
 - Running cancellation uses `cancel_requested` before terminal `cancelled`.
 - Events and logs are stored with job attempt IDs.
 - Claim returns a random lease token.

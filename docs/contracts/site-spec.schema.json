@@ -800,7 +800,19 @@
         "antiSpam": { "$ref": "#/$defs/antiSpam" },
         "storage": { "$ref": "#/$defs/leadStorage" },
         "destinationIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "scope": { "anyOf": [{ "$ref": "#/$defs/leadFormScope" }, { "type": "null" }] },
         "publicationStatus": { "type": "string", "enum": ["draft", "approved", "disabled"] }
+      }
+    },
+    "leadFormScope": {
+      "type": "object",
+      "description": "Explicit routing context. Omitted/null uses all declared sites at site scope; project=true uses only project-level fallback.",
+      "additionalProperties": false,
+      "required": ["project", "siteIds", "regionIds"],
+      "properties": {
+        "project": { "type": "boolean" },
+        "siteIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+        "regionIds": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
       }
     },
     "publishableLeadForm": {
@@ -1004,12 +1016,15 @@
   },
   "x-semanticValidation": [
     "Every catalog.category.productIds entry must resolve to catalog.products[].id.",
-    "Every catalog product, variant, category, site, region, lead form, Telegram destination, and asset/artifact identifier must be unique inside its scope.",
+    "Asset/artifact IDs share one unique registry scope; site, region, category, product, lead-form, Telegram-destination, and design-prototype variant IDs are unique in their collections; product variant IDs are unique within each product.",
     "Category path must match parentId and category graph must not contain cycles.",
+    "Every site regionIds value and every category, product, and variant ID used by site or region overrides must resolve; a variant must belong to the referenced product.",
     "Every asset ID referenced by brand, catalog, products, variants, and design prototypes must exist in assetRegistry.",
     "design.selectedVariantId must exist in design.prototypes for publish_ready documents.",
     "Every leadForm.destinationIds entry must resolve to an enabled Telegram destination with secretRef.",
-    "Every enabled publishable lead form must have a Telegram route for the project/site/region context and the route destination must exist.",
+    "Telegram routes use exact site+region, then site-level, then project-level fallback; region-only routes are invalid, route projectId must match, and route regions must belong to the route site.",
+    "Approved forms use their explicit scope, or all declared sites when scope is omitted, and require an applicable route for every scoped context and destination.",
+    "Publishable price, stock, and minimum-order facts require trusted provenance; minimum-order facts also require a non-null verified value and verification record.",
     "WordPress siteUrl host must match deployment target host and deployment host must match the publishable site host.",
     "Staging deployment cannot use wordpress_production target and production deployment cannot use wordpress_staging target.",
     "No arbitrary host from user text can become a Telegram, WordPress, artifact, or GitHub target without an explicit typed destination."
@@ -1142,10 +1157,31 @@
       "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:10:00Z", "checks": [{ "id": "site_model_selected", "required": true, "status": "passed", "message": "Site model selected." }] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:15:00Z", "checks": [{ "id": "lead_form_approved", "required": true, "status": "passed", "message": "Approved lead form and Telegram route exist." }, { "id": "host_target_ready", "required": true, "status": "passed", "message": "Host and WordPress target exist." }] } }
     }
   ],
+  "x-semanticPositiveExamples": [
+    {
+      "name": "project_level_fallback_valid",
+      "expectedReason": "an approved site-and-region scoped form may resolve through the project-level Telegram fallback",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "project-fallback-valid",
+        "documentStage": "draft",
+        "siteModel": "landing",
+        "language": "ru-RU",
+        "business": { "name": "Routing fixture", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] },
+        "network": { "mode": "regions", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "site-a", "name": "Site A", "domainMode": "subdirectory", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": ["region-a"], "niche": "routing", "status": "draft", "overrides": {} }] },
+        "regions": [{ "id": "region-a", "name": "Region A", "slug": "region-a", "facts": [], "overrides": {} }],
+        "leadForms": [{ "id": "lead-form-a", "name": "Lead form", "cta": "Send", "fields": [], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-a"], "scope": { "project": false, "siteIds": ["site-a"], "regionIds": ["region-a"] }, "publicationStatus": "approved" }],
+        "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-a", "label": "Telegram A", "secretRef": "secret.telegram.a", "enabled": true }], "routing": [{ "projectId": "project-fallback-valid", "siteId": null, "regionId": null, "destinationId": "tg-a" }] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["none"] },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+      }
+    }
+  ],
   "x-negativeExamples": [
     {
       "name": "generation_ready_catalog_without_products",
       "expectedReason": "catalog site model requires canonical categories with productIds and catalog.products with a generatable product",
+      "expectedError": { "keyword": "contains", "instancePath": "/catalog/categories" },
       "value": {
         "schemaVersion": "1.2.0",
         "revision": 1,
@@ -1174,6 +1210,7 @@
     {
       "name": "publish_ready_required_consent_without_publishable_text",
       "expectedReason": "required consent must include publishable verified consent text",
+      "expectedError": { "keyword": "type", "instancePath": "/leadForms/0/consent/textFact" },
       "value": {
         "schemaVersion": "1.2.0",
         "revision": 1,
@@ -1202,36 +1239,43 @@
     {
       "name": "subdomain_without_domain",
       "expectedReason": "subdomain is forbidden without base domain",
+      "expectedError": { "keyword": "type", "instancePath": "/network/sites/0/host/domain" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-subdomain", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Bad", "domainMode": "subdomain", "host": { "domain": null, "subdomain": "moscow", "path": "/" }, "regionIds": [], "niche": null, "status": "draft", "overrides": {} }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "invalid_wordpress_site_url",
       "expectedReason": "WordPress siteUrl must be an absolute URI",
+      "expectedError": { "keyword": "format", "instancePath": "/integrations/wordpress/target/siteUrl" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-wp-url", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://not a uri", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "non_https_publish_target",
       "expectedReason": "WordPress siteUrl must use https",
+      "expectedError": { "keyword": "pattern", "instancePath": "/integrations/wordpress/target/siteUrl" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-non-https", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "http://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "visible_price_without_value",
       "expectedReason": "visible price requires value and currency",
+      "expectedError": { "keyword": "type", "instancePath": "/catalog/products/0/price/value" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-visible-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": null, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": false }, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "publishable_price_from_system_inference",
       "expectedReason": "system inference cannot be a publishable price source",
+      "expectedError": { "keyword": "const", "instancePath": "/catalog/products/0/price/publishAllowed" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-ai-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": 100, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "system_inference", "sourceId": "ai", "assetId": null, "notes": null }, "publishAllowed": true }, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "published_stock_from_system_inference",
       "expectedReason": "system inference cannot publish factual stock",
+      "expectedError": { "keyword": "const", "instancePath": "/catalog/products/0/stock/publishAllowed" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-ai-stock", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": null, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "system_inference", "sourceId": "ai", "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
       "name": "publishable_product_with_unknown_price_visibility",
       "expectedReason": "publishable product cannot use unknown price visibility",
+      "expectedError": { "keyword": "const", "instancePath": "/catalog/products/0/price/publishAllowed" },
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "bad-unknown-price", "documentStage": "draft", "siteModel": null, "language": "ru-RU", "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "bad-product", "name": "Bad product", "sku": "BAD-1", "photoAssetIds": [], "price": { "value": null, "currency": null, "visibility": "unknown", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": true }, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "ready" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     }
   ],
@@ -1239,6 +1283,7 @@
     {
       "name": "missing_telegram_destination_or_route",
       "expectedReason": "lead form destination must resolve to enabled Telegram destination and matching route",
+      "expectedCode": "TELEGRAM_DESTINATION_INVALID",
       "value": {
         "schemaVersion": "1.2.0",
         "revision": 3,
@@ -1263,6 +1308,120 @@
         "compliance": { "personalDataPolicy": "Lead data is stored in protected backend storage.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": ["invented company facts"], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
         "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:10:00Z", "checks": [{ "id": "site_model_selected", "required": true, "status": "passed", "message": "Site model selected." }] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:15:00Z", "checks": [{ "id": "lead_form_approved", "required": true, "status": "passed", "message": "Bad fixture claims broken route is ready." }] } }
       }
+    },
+    {
+      "name": "category_cycle",
+      "expectedReason": "category parent chain must not contain cycles",
+      "expectedCode": "CATEGORY_CYCLE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-category-cycle", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Category Cycle", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [{ "id": "cat-a", "parentId": "cat-b", "path": ["cat-b", "cat-a"], "name": "Cat A", "slug": "cat-a", "description": null, "productIds": [], "assetIds": [], "publicationStatus": "draft" }, { "id": "cat-b", "parentId": "cat-a", "path": ["cat-a", "cat-b"], "name": "Cat B", "slug": "cat-b", "description": null, "productIds": [], "assetIds": [], "publicationStatus": "draft" }], "products": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_product_reference",
+      "expectedReason": "category productIds must resolve to catalog.products IDs",
+      "expectedCode": "MISSING_PRODUCT_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-missing-product", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Missing Product", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [{ "id": "cat-a", "parentId": null, "path": ["cat-a"], "name": "Cat A", "slug": "cat-a", "description": null, "productIds": ["prod-missing"], "assetIds": [], "publicationStatus": "draft" }], "products": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_asset_reference",
+      "expectedReason": "all asset/artifact references must resolve to assetRegistry",
+      "expectedCode": "MISSING_ASSET_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-missing-asset", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Semantic Missing Asset", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "assetRegistry": { "assets": [] }, "brand": { "displayName": "Semantic Missing Asset", "tone": [], "logoAssetId": "asset-missing-logo", "designReferenceAssetIds": [], "documentAssetIds": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_fact_asset_reference",
+      "expectedReason": "business fact provenance and verification evidence must resolve to assetRegistry",
+      "expectedCode": "MISSING_ASSET_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-missing-fact-asset", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Semantic Missing Fact Asset", "type": "b2b_services", "audience": [], "geography": [], "facts": [{ "key": "business.offer", "value": "Reviewed offer.", "status": "verified", "provenance": { "sourceType": "external_document", "sourceId": "brief-doc", "assetId": "asset-missing-fact-doc", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["artifact-missing-evidence"], "evidenceNote": "Missing evidence artifact." }, "publishAllowed": true }], "missingFactKeys": [] }, "assetRegistry": { "assets": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "ready_variant_with_nonpublishable_commercial_override",
+      "expectedReason": "ready or published variants cannot carry nonpublishable price, stock, or minimum-order overrides",
+      "expectedCode": "VARIANT_COMMERCIAL_NOT_PUBLISHABLE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-ready-variant-commercial", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Variant Commercial", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": ["size"], "categories": [], "products": [{ "id": "prod-a", "name": "Product A", "sku": "SKU-A", "photoAssetIds": [], "price": null, "stock": null, "minOrder": null, "variants": [{ "id": "var-a", "sku": "SKU-A-1", "attributes": { "size": "1 kg" }, "priceOverride": { "value": 100, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "user_input", "sourceId": "brief", "assetId": null, "notes": null }, "publishAllowed": false }, "stock": null, "minOrder": null, "packaging": null, "photoAssetIds": [], "publicationStatus": "ready" }], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "publish_allowed_stock_with_unknown_provenance",
+      "expectedReason": "publishAllowed commercial data cannot use unknown provenance",
+      "expectedCode": "COMMERCIAL_PROVENANCE_INVALID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-stock-unknown-provenance", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Semantic Stock Provenance", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "prod-a", "name": "Product A", "sku": "SKU-A", "photoAssetIds": [], "price": null, "stock": { "status": "in_stock", "quantity": null, "provenance": { "sourceType": "unknown", "sourceId": null, "assetId": null, "notes": null }, "publishAllowed": true }, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "duplicate_lead_form_id",
+      "expectedReason": "lead form IDs must be unique",
+      "expectedCode": "DUPLICATE_ID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "duplicate-lead-form", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Duplicate lead form", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "leadForms": [{ "id": "lead-form-a", "name": "Form A", "cta": "Send", "fields": [], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": [], "publicationStatus": "draft" }, { "id": "lead-form-a", "name": "Form B", "cta": "Send", "fields": [], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": [], "publicationStatus": "draft" }], "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "duplicate_telegram_destination_id",
+      "expectedReason": "Telegram destination IDs must be unique before routing maps are built",
+      "expectedCode": "DUPLICATE_ID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "duplicate-telegram-destination", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Duplicate Telegram", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-a", "label": "A", "secretRef": "secret.telegram.a", "enabled": true }, { "id": "tg-a", "label": "B", "secretRef": "secret.telegram.b", "enabled": true }], "routing": [] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "duplicate_design_variant_id",
+      "expectedReason": "design prototype variant IDs must be unique before selected-variant lookup",
+      "expectedCode": "DUPLICATE_ID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "duplicate-design-variant", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Duplicate design", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "assetRegistry": { "assets": [{ "artifactId": "artifact-prototype-a", "kind": "prototype", "role": "fixture", "fileName": "prototype.html", "contentType": "text/html", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sizeBytes": 100 }] }, "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": null, "tokens": null, "componentRules": [], "prototypes": [{ "variantId": "variant-a", "prototypeArtifactId": "artifact-prototype-a", "screenshotArtifactId": null, "status": "draft" }, { "variantId": "variant-a", "prototypeArtifactId": "artifact-prototype-a", "screenshotArtifactId": null, "status": "rendered" }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "duplicate_site_id_without_telegram",
+      "expectedReason": "site IDs must be unique even when Telegram integration is absent",
+      "expectedCode": "DUPLICATE_ID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "duplicate-site-without-telegram", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Duplicate site", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "single", "siteStrategy": "single_wordpress_site", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "site-a", "name": "A", "domainMode": "single_domain", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": [], "niche": "a", "status": "draft", "overrides": {} }, { "id": "site-a", "name": "B", "domainMode": "single_domain", "host": { "domain": null, "subdomain": null, "path": "/b/" }, "regionIds": [], "niche": "b", "status": "draft", "overrides": {} }] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_site_region_reference",
+      "expectedReason": "every site regionIds entry must resolve to regions",
+      "expectedCode": "MISSING_REGION_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "missing-site-region", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Missing region", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "regions", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "site-a", "name": "A", "domainMode": "subdirectory", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": ["region-missing"], "niche": "a", "status": "draft", "overrides": {} }] }, "regions": [], "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_override_category_reference",
+      "expectedReason": "catalogScope category IDs must resolve to catalog categories",
+      "expectedCode": "MISSING_CATEGORY_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "missing-override-category", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Missing category", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] }, "regions": [{ "id": "region-a", "name": "A", "slug": "region-a", "facts": [], "overrides": { "catalogScope": { "includeCategoryIds": ["category-missing"], "excludeCategoryIds": [], "includeProductIds": [], "excludeProductIds": [] } } }], "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_override_product_reference",
+      "expectedReason": "price override productId must resolve to catalog products",
+      "expectedCode": "MISSING_PRODUCT_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "missing-override-product", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Missing product", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] }, "regions": [{ "id": "region-a", "name": "A", "slug": "region-a", "facts": [], "overrides": { "priceOverrides": [{ "productId": "product-missing", "variantId": null, "price": null, "clearAllowed": true }] } }], "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "missing_override_variant_reference",
+      "expectedReason": "override variantId must resolve inside the referenced product",
+      "expectedCode": "MISSING_VARIANT_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "missing-override-variant", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Missing variant", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "product-a", "name": "A", "sku": "A", "photoAssetIds": [], "price": null, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "regions": [{ "id": "region-a", "name": "A", "slug": "region-a", "facts": [], "overrides": { "priceOverrides": [{ "productId": "product-a", "variantId": "variant-missing", "price": null, "clearAllowed": true }] } }], "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "variant_belongs_to_another_product",
+      "expectedReason": "an override cannot use a variant owned by another product",
+      "expectedCode": "VARIANT_PRODUCT_MISMATCH",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "variant-product-mismatch", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Variant mismatch", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [{ "id": "product-a", "name": "A", "sku": "A", "photoAssetIds": [], "price": null, "stock": null, "minOrder": null, "variants": [{ "id": "variant-a", "sku": "A-1", "attributes": {}, "priceOverride": null, "stock": null, "minOrder": null, "packaging": null, "photoAssetIds": [], "publicationStatus": "draft" }], "publicationStatus": "draft" }, { "id": "product-b", "name": "B", "sku": "B", "photoAssetIds": [], "price": null, "stock": null, "minOrder": null, "variants": [], "publicationStatus": "draft" }] }, "regions": [{ "id": "region-a", "name": "A", "slug": "region-a", "facts": [], "overrides": { "priceOverrides": [{ "productId": "product-b", "variantId": "variant-a", "price": null, "clearAllowed": true }] } }], "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "wrong_site_telegram_route",
+      "expectedReason": "an approved form scoped to site A cannot use a route scoped only to site B",
+      "expectedCode": "MISSING_TELEGRAM_ROUTE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "wrong-site-route", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Wrong site route", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "niches", "siteStrategy": "multiple_wordpress_sites", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "site-a", "name": "A", "domainMode": "separate_domain", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": [], "niche": "a", "status": "draft", "overrides": {} }, { "id": "site-b", "name": "B", "domainMode": "separate_domain", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": [], "niche": "b", "status": "draft", "overrides": {} }] }, "leadForms": [{ "id": "lead-form-a", "name": "A", "cta": "Send", "fields": [], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-a"], "scope": { "project": false, "siteIds": ["site-a"], "regionIds": [] }, "publicationStatus": "approved" }], "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-a", "label": "A", "secretRef": "secret.telegram.a", "enabled": true }], "routing": [{ "projectId": "wrong-site-route", "siteId": "site-b", "regionId": null, "destinationId": "tg-a" }] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "region_not_assigned_to_site",
+      "expectedReason": "a site-region Telegram route must use a region assigned to that site",
+      "expectedCode": "TELEGRAM_ROUTE_INVALID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "route-region-not-assigned", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Route region mismatch", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "regions", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "site-a", "name": "A", "domainMode": "subdirectory", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": [], "niche": "a", "status": "draft", "overrides": {} }] }, "regions": [{ "id": "region-a", "name": "A", "slug": "region-a", "facts": [], "overrides": {} }], "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-a", "label": "A", "secretRef": "secret.telegram.a", "enabled": true }], "routing": [{ "projectId": "route-region-not-assigned", "siteId": "site-a", "regionId": "region-a", "destinationId": "tg-a" }] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "approved_form_without_applicable_route",
+      "expectedReason": "an approved region-scoped form must have an exact, site-level, or project-level fallback route",
+      "expectedCode": "MISSING_TELEGRAM_ROUTE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "approved-form-no-route", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "No applicable route", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "network": { "mode": "regions", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "site-a", "name": "A", "domainMode": "subdirectory", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": ["region-a", "region-b"], "niche": "a", "status": "draft", "overrides": {} }] }, "regions": [{ "id": "region-a", "name": "A", "slug": "region-a", "facts": [], "overrides": {} }, { "id": "region-b", "name": "B", "slug": "region-b", "facts": [], "overrides": {} }], "leadForms": [{ "id": "lead-form-a", "name": "A", "cta": "Send", "fields": [], "consent": { "required": false, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-a"], "scope": { "project": false, "siteIds": ["site-a"], "regionIds": ["region-a"] }, "publicationStatus": "approved" }], "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-a", "label": "A", "secretRef": "secret.telegram.a", "enabled": true }], "routing": [{ "projectId": "approved-form-no-route", "siteId": "site-a", "regionId": "region-b", "destinationId": "tg-a" }] }, "wordpress": { "targetType": "not_configured", "realWordPressRequired": true, "target": null }, "analytics": ["none"] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
+      "name": "publishable_minimum_order_with_untrusted_provenance",
+      "expectedReason": "publishable minimum-order facts require trusted provenance and verification",
+      "expectedCode": "COMMERCIAL_PROVENANCE_INVALID",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "minimum-order-untrusted", "documentStage": "draft", "siteModel": "catalog", "language": "ru-RU", "business": { "name": "Minimum order provenance", "type": "wholesale", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "assetRegistry": { "assets": [{ "artifactId": "artifact-min-order-evidence", "kind": "document", "role": "minimum_order_evidence", "fileName": "minimum-order.txt", "contentType": "text/plain", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sizeBytes": 100 }] }, "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": { "key": "catalog.minimum_order", "value": "10 boxes", "status": "verified", "provenance": { "sourceType": "unknown", "sourceId": null, "assetId": null, "notes": null }, "verifiedAt": "2026-09-03T00:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-a", "verifiedAt": "2026-09-03T00:00:00Z", "evidenceArtifactIds": ["artifact-min-order-evidence"], "evidenceNote": "Fixture verification with untrusted provenance." }, "publishAllowed": true }, "importAssetIds": [], "variationAttributes": [], "categories": [], "products": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     }
   ]
 }

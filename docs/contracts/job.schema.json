@@ -492,7 +492,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 512,
-      "description": "Normalized POSIX-relative concrete path. Agent must resolve and realpath-check containment after symlink/junction/reparse resolution.",
+      "description": "POSIX-relative path candidate. Semantic validation requires concrete paths, allowedPaths coverage, and realpath containment after symlink/junction/reparse resolution.",
       "allOf": [
         { "not": { "pattern": "^[A-Za-z]:" } },
         { "not": { "pattern": "^/" } },
@@ -502,7 +502,7 @@
         { "not": { "pattern": "(^|/)\\.\\.(/|$)" } },
         { "not": { "pattern": "(^|/)\\.(/|$)" } },
         { "not": { "pattern": "//" } },
-        { "not": { "pattern": "[*?\\[\\]{}!]" } }
+        { "not": { "pattern": "[?\\[\\]{}!]" } }
       ]
     },
     "posixRelativeGlob": {
@@ -817,7 +817,10 @@
   "x-semanticValidation": [
     "GitHub network destinations used for git_push_feature_branch and create_or_update_pull_request must bind to repository.identifier, repository.providerRepositoryId, repository.originUrl, and gitWorkflow.targetBranch.",
     "GitHub writes must target codex/ branches only; main, master, force-push, and merge are never allowed by this job contract.",
+    "Every expected output and every registered validation path/htmlPath/cssPath must be a concrete normalized POSIX-relative path covered by at least one allowedPaths glob.",
+    "allowedPaths globs are matched internally without shell or operating-system glob expansion and cannot widen traversal, absolute, backslash, colon, control-byte, or symlink containment rules.",
     "Network destinations are selected from typed allowlist entries only. Arbitrary hostnames or URLs copied from user text are not valid execution targets.",
+    "Each typed network destination allows exactly the operation associated with its purpose: github_git/git_push, github_api/pr_create_update, artifact_upload/artifact_upload, wordpress_staging/wordpress_stage, or wordpress_production/wordpress_publish.",
     "Artifact upload is allowed only through an artifact_upload destination with a stable artifactTargetId.",
     "WordPress staging and production actions must use matching wordpress_staging or wordpress_production destinations and target IDs from protected server-side configuration."
   ],
@@ -1167,6 +1170,7 @@
     {
       "name": "windows_absolute_path_rejected",
       "expectedReason": "paths must be normalized POSIX-relative paths inside allowed project scopes",
+      "expectedError": { "keyword": "not", "instancePath": "/expectedOutputManifest/0/path" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1203,6 +1207,7 @@
     {
       "name": "unc_path_rejected",
       "expectedReason": "UNC paths are forbidden; only normalized POSIX-relative paths are allowed",
+      "expectedError": { "keyword": "not", "instancePath": "/allowedPaths/0" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1239,6 +1244,7 @@
     {
       "name": "traversal_path_rejected",
       "expectedReason": "path traversal outside the workspace is rejected before execution",
+      "expectedError": { "keyword": "not", "instancePath": "/expectedOutputManifest/0/path" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1275,6 +1281,7 @@
     {
       "name": "self_approved_irreversible_action_rejected",
       "expectedReason": "irreversible actions require human approval and cannot be self-approved by the executor",
+      "expectedError": { "keyword": "const", "instancePath": "/approvalPolicy/selfApprovalAllowed" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1312,6 +1319,7 @@
     {
       "name": "github_push_with_network_disabled",
       "expectedReason": "git push requires allowlisted network access and a github_git destination",
+      "expectedError": { "keyword": "required", "instancePath": "/sandbox" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1348,6 +1356,7 @@
     {
       "name": "github_push_without_allowlisted_destination",
       "expectedReason": "git push requires a github_git allowlist entry bound to the repository and target branch",
+      "expectedError": { "keyword": "contains", "instancePath": "/sandbox/networkAllowlist" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1384,6 +1393,7 @@
     {
       "name": "github_push_to_non_codex_branch",
       "expectedReason": "git push targetBranch must stay under the codex/ branch prefix",
+      "expectedError": { "keyword": "pattern", "instancePath": "/gitWorkflow/targetBranch" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1420,6 +1430,7 @@
     {
       "name": "pull_request_without_github_api_destination",
       "expectedReason": "pull request creation requires an allowlisted github_api destination",
+      "expectedError": { "keyword": "contains", "instancePath": "/sandbox/networkAllowlist" },
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1458,6 +1469,7 @@
     {
       "name": "mismatched_repository_origin",
       "expectedReason": "GitHub network allowlist binding must match repository originUrl and target branch",
+      "expectedCode": "GITHUB_PUSH_BINDING_MISMATCH",
       "value": {
         "jobSpecVersion": "1.2.0",
         "agentApiVersion": "v1",
@@ -1490,6 +1502,233 @@
         "dependsOn": [],
         "validationChecks": []
       }
-    }
+    },
+    {
+      "name": "action_without_capability",
+      "expectedReason": "each allowed action must have the corresponding capability",
+      "expectedCode": "ACTION_CAPABILITY_MISMATCH",
+      "value": {
+        "jobSpecVersion": "1.2.0",
+        "agentApiVersion": "v1",
+        "id": "job_semantic_action_no_capability",
+        "type": "git_commit",
+        "projectId": "demo-regional-wholesale-network",
+        "workspaceId": "local-demo-workspace",
+        "repository": { "provider": "github", "owner": "maksglazunov835-bit", "name": "b2b-site-studio", "identifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git" },
+        "baseRef": "main",
+        "baseCommitSha": "8888888888888888888888888888888888888888",
+        "siteSpec": { "schemaVersion": "1.2.0", "revision": 7, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stage": "draft" },
+        "inputArtifacts": [],
+        "instructions": { "displaySummary": "Semantic bad capability fixture.", "objective": "Must reject action without capability.", "steps": ["Validate capability mapping."], "acceptanceCriteria": ["Semantic validation rejects."] },
+        "constraints": { "denyByDefault": true, "noRawUserTextAsShell": true, "requiresBranchOrWorktree": true, "pathFormat": "normalized_posix_relative_only", "realpathContainment": "required_after_resolve", "symlinkEscapePolicy": "reject_symlink_junction_or_reparse_escape", "maxLogBytes": 65536, "maxArtifactBytes": 1048576 },
+        "sandbox": { "lowPrivilegeProcess": true, "networkAccess": "disabled_by_default", "allowlistedEnvironment": ["NODE_ENV", "PATH", "TEMP", "TMP"], "productionSecretsAvailable": false, "untrustedRepositoryCode": true, "resourceLimits": { "timeoutSeconds": 300, "cpuShares": 1, "memoryMb": 512, "maxFiles": 20, "maxFileBytes": 65536 } },
+        "inputs": { "source": "operator_request", "payload": { "summary": "Commit changes." } },
+        "expectedOutputManifest": [{ "path": "docs/contracts/agent-api.md", "kind": "file", "required": true, "contentType": "text/markdown", "maxSizeBytes": 65536, "sha256": null }],
+        "allowedPaths": ["docs/contracts/**"],
+        "allowedCapabilities": ["codex", "file_read", "file_write"],
+        "allowedActions": ["create_branch", "write_files", "run_registered_validation", "git_commit"],
+        "forbiddenActions": ["delete", "production_deploy", "dns_change", "repository_visibility", "credential_rotation", "package_install", "unallowlisted_external_network_write", "merge_to_main", "push_main", "force_push", "direct_shell_from_user_text", "arbitrary_shell"],
+        "gitWorkflow": { "verifyRepositoryIdentifier": true, "verifyRemoteOrigin": true, "targetBranch": "codex/job-semantic-action-no-capability", "branchPrefix": "codex/", "allowedPush": "none", "forcePushAllowed": false, "mainPushAllowed": false, "mergeAllowed": false, "returns": ["commit_sha", "branch_name"] },
+        "approvalPolicy": { "requiredForActions": [], "selfApprovalAllowed": false, "actorSource": "authenticated_human_principal", "bodyActorFieldsTrusted": false, "requiredBindingFields": ["jobId", "attempt", "exactAction", "exactTarget", "environment", "siteSpecSha256", "inputArtifactSha256", "previewArtifactIds", "expiresAt"], "bindingTemplate": null, "oneTimeDecision": true, "auditable": true, "leaseBehavior": "checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job" },
+        "resultPolicy": { "executionResultValues": ["succeeded", "failed", "cancelled"], "acceptanceResultValues": ["accepted", "changes_required", "blocked"], "codexReportIsProof": false, "executorMayAcceptOwnWork": false, "mergeDeployPublicationRequiresAcceptance": "accepted", "recheckAfterChangesRequired": true },
+        "modelProfile": "standard",
+        "reasoningEffort": "medium",
+        "requiresApproval": false,
+        "timeoutSeconds": 300,
+        "idempotencyKey": "semantic-action-without-capability",
+        "dependsOn": [],
+        "validationChecks": []
+      }
+    },
+    {
+      "name": "validation_action_without_capability",
+      "expectedReason": "run_registered_validation requires the base codex capability",
+      "expectedCode": "ACTION_CAPABILITY_MISMATCH",
+      "value": {
+        "jobSpecVersion": "1.2.0",
+        "agentApiVersion": "v1",
+        "id": "job_semantic_validation_no_capability",
+        "type": "site_spec_validation",
+        "projectId": "demo-regional-wholesale-network",
+        "workspaceId": "local-demo-workspace",
+        "repository": { "provider": "github", "owner": "maksglazunov835-bit", "name": "b2b-site-studio", "identifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git" },
+        "baseRef": "main",
+        "baseCommitSha": "8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a",
+        "siteSpec": { "schemaVersion": "1.2.0", "revision": 7, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stage": "draft" },
+        "inputArtifacts": [],
+        "instructions": { "displaySummary": "Semantic bad validation capability fixture.", "objective": "Must reject registered validation without codex capability.", "steps": ["Validate action capability mapping."], "acceptanceCriteria": ["Semantic validation rejects."] },
+        "constraints": { "denyByDefault": true, "noRawUserTextAsShell": true, "requiresBranchOrWorktree": true, "pathFormat": "normalized_posix_relative_only", "realpathContainment": "required_after_resolve", "symlinkEscapePolicy": "reject_symlink_junction_or_reparse_escape", "maxLogBytes": 65536, "maxArtifactBytes": 1048576 },
+        "sandbox": { "lowPrivilegeProcess": true, "networkAccess": "disabled_by_default", "allowlistedEnvironment": ["NODE_ENV", "PATH", "TEMP", "TMP"], "productionSecretsAvailable": false, "untrustedRepositoryCode": true, "resourceLimits": { "timeoutSeconds": 300, "cpuShares": 1, "memoryMb": 512, "maxFiles": 20, "maxFileBytes": 65536 } },
+        "inputs": { "source": "site_spec", "payload": { "validationTarget": "draft" } },
+        "expectedOutputManifest": [{ "path": "reports/site-spec-validation.json", "kind": "report", "required": true, "contentType": "application/json", "maxSizeBytes": 65536, "sha256": null }],
+        "allowedPaths": ["reports/**"],
+        "allowedCapabilities": [],
+        "allowedActions": ["run_registered_validation"],
+        "forbiddenActions": ["delete", "production_deploy", "dns_change", "repository_visibility", "credential_rotation", "package_install", "unallowlisted_external_network_write", "merge_to_main", "push_main", "force_push", "direct_shell_from_user_text", "arbitrary_shell"],
+        "gitWorkflow": { "verifyRepositoryIdentifier": true, "verifyRemoteOrigin": true, "targetBranch": "codex/job-semantic-validation-no-capability", "branchPrefix": "codex/", "allowedPush": "none", "forcePushAllowed": false, "mainPushAllowed": false, "mergeAllowed": false, "returns": ["commit_sha"] },
+        "approvalPolicy": { "requiredForActions": [], "selfApprovalAllowed": false, "actorSource": "authenticated_human_principal", "bodyActorFieldsTrusted": false, "requiredBindingFields": ["jobId", "attempt", "exactAction", "exactTarget", "environment", "siteSpecSha256", "inputArtifactSha256", "previewArtifactIds", "expiresAt"], "bindingTemplate": null, "oneTimeDecision": true, "auditable": true, "leaseBehavior": "checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job" },
+        "resultPolicy": { "executionResultValues": ["succeeded", "failed", "cancelled"], "acceptanceResultValues": ["accepted", "changes_required", "blocked"], "codexReportIsProof": false, "executorMayAcceptOwnWork": false, "mergeDeployPublicationRequiresAcceptance": "accepted", "recheckAfterChangesRequired": true },
+        "modelProfile": "fast",
+        "reasoningEffort": "low",
+        "requiresApproval": false,
+        "timeoutSeconds": 300,
+        "idempotencyKey": "semantic-validation-action-without-capability",
+        "dependsOn": [],
+        "validationChecks": []
+      }
+    },
+    {
+      "name": "invalid_git_ref_lock_suffix",
+      "expectedReason": "targetBranch must pass the safe git ref policy, including .lock segment rejection",
+      "expectedCode": "INVALID_GIT_REF",
+      "value": {
+        "jobSpecVersion": "1.2.0",
+        "agentApiVersion": "v1",
+        "id": "job_semantic_invalid_git_ref",
+        "type": "pull_request_update",
+        "projectId": "demo-regional-wholesale-network",
+        "workspaceId": "local-demo-workspace",
+        "repository": { "provider": "github", "owner": "maksglazunov835-bit", "name": "b2b-site-studio", "identifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git" },
+        "baseRef": "main",
+        "baseCommitSha": "9999999999999999999999999999999999999999",
+        "siteSpec": { "schemaVersion": "1.2.0", "revision": 7, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stage": "draft" },
+        "inputArtifacts": [],
+        "instructions": { "displaySummary": "Semantic bad git ref fixture.", "objective": "Must reject unsafe git branch.", "steps": ["Validate git ref."], "acceptanceCriteria": ["Semantic validation rejects."] },
+        "constraints": { "denyByDefault": true, "noRawUserTextAsShell": true, "requiresBranchOrWorktree": true, "pathFormat": "normalized_posix_relative_only", "realpathContainment": "required_after_resolve", "symlinkEscapePolicy": "reject_symlink_junction_or_reparse_escape", "maxLogBytes": 65536, "maxArtifactBytes": 1048576 },
+        "sandbox": { "lowPrivilegeProcess": true, "networkAccess": "allowlisted", "networkAllowlist": [{ "purpose": "github_git", "protocol": "ssh", "host": "github.com", "port": 22, "allowedOperations": ["git_push"], "binding": { "repositoryIdentifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git", "targetBranch": "codex/bad.lock", "wordpressTargetId": null, "artifactTargetId": null } }, { "purpose": "github_api", "protocol": "https", "host": "api.github.com", "port": 443, "allowedOperations": ["pr_create_update"], "binding": { "repositoryIdentifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git", "targetBranch": "codex/bad.lock", "wordpressTargetId": null, "artifactTargetId": null } }], "allowlistedEnvironment": ["NODE_ENV", "PATH", "TEMP", "TMP"], "productionSecretsAvailable": false, "untrustedRepositoryCode": true, "resourceLimits": { "timeoutSeconds": 900, "cpuShares": 1, "memoryMb": 512, "maxFiles": 20, "maxFileBytes": 65536 } },
+        "inputs": { "source": "operator_request", "payload": { "summary": "Update PR." } },
+        "expectedOutputManifest": [{ "path": "docs/contracts/agent-api.md", "kind": "file", "required": true, "contentType": "text/markdown", "maxSizeBytes": 65536, "sha256": null }],
+        "allowedPaths": ["docs/contracts/**"],
+        "allowedCapabilities": ["codex", "git", "github_pr", "file_read", "file_write"],
+        "allowedActions": ["create_branch", "write_files", "run_registered_validation", "git_commit", "git_push_feature_branch", "create_or_update_pull_request"],
+        "forbiddenActions": ["delete", "production_deploy", "dns_change", "repository_visibility", "credential_rotation", "package_install", "unallowlisted_external_network_write", "merge_to_main", "push_main", "force_push", "direct_shell_from_user_text", "arbitrary_shell"],
+        "gitWorkflow": { "verifyRepositoryIdentifier": true, "verifyRemoteOrigin": true, "targetBranch": "codex/bad.lock", "branchPrefix": "codex/", "allowedPush": "feature_branch_only", "forcePushAllowed": false, "mainPushAllowed": false, "mergeAllowed": false, "returns": ["commit_sha", "branch_name", "pull_request_url"] },
+        "approvalPolicy": { "requiredForActions": [], "selfApprovalAllowed": false, "actorSource": "authenticated_human_principal", "bodyActorFieldsTrusted": false, "requiredBindingFields": ["jobId", "attempt", "exactAction", "exactTarget", "environment", "siteSpecSha256", "inputArtifactSha256", "previewArtifactIds", "expiresAt"], "bindingTemplate": null, "oneTimeDecision": true, "auditable": true, "leaseBehavior": "checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job" },
+        "resultPolicy": { "executionResultValues": ["succeeded", "failed", "cancelled"], "acceptanceResultValues": ["accepted", "changes_required", "blocked"], "codexReportIsProof": false, "executorMayAcceptOwnWork": false, "mergeDeployPublicationRequiresAcceptance": "accepted", "recheckAfterChangesRequired": true },
+        "modelProfile": "standard",
+        "reasoningEffort": "medium",
+        "requiresApproval": false,
+        "timeoutSeconds": 900,
+        "idempotencyKey": "semantic-invalid-git-ref",
+        "dependsOn": [],
+        "validationChecks": []
+      }
+    },
+    {
+      "name": "invalid_git_ref_hidden_segment",
+      "expectedReason": "targetBranch must reject path segments that start with a dot",
+      "expectedCode": "INVALID_GIT_REF",
+      "value": {
+        "jobSpecVersion": "1.2.0",
+        "agentApiVersion": "v1",
+        "id": "job_semantic_hidden_git_ref",
+        "type": "pull_request_update",
+        "projectId": "demo-regional-wholesale-network",
+        "workspaceId": "local-demo-workspace",
+        "repository": { "provider": "github", "owner": "maksglazunov835-bit", "name": "b2b-site-studio", "identifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git" },
+        "baseRef": "main",
+        "baseCommitSha": "9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b9b",
+        "siteSpec": { "schemaVersion": "1.2.0", "revision": 7, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stage": "draft" },
+        "inputArtifacts": [],
+        "instructions": { "displaySummary": "Semantic hidden git ref fixture.", "objective": "Must reject git ref segment beginning with dot.", "steps": ["Validate git ref."], "acceptanceCriteria": ["Semantic validation rejects."] },
+        "constraints": { "denyByDefault": true, "noRawUserTextAsShell": true, "requiresBranchOrWorktree": true, "pathFormat": "normalized_posix_relative_only", "realpathContainment": "required_after_resolve", "symlinkEscapePolicy": "reject_symlink_junction_or_reparse_escape", "maxLogBytes": 65536, "maxArtifactBytes": 1048576 },
+        "sandbox": { "lowPrivilegeProcess": true, "networkAccess": "allowlisted", "networkAllowlist": [{ "purpose": "github_git", "protocol": "ssh", "host": "github.com", "port": 22, "allowedOperations": ["git_push"], "binding": { "repositoryIdentifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git", "targetBranch": "codex/.hidden", "wordpressTargetId": null, "artifactTargetId": null } }, { "purpose": "github_api", "protocol": "https", "host": "api.github.com", "port": 443, "allowedOperations": ["pr_create_update"], "binding": { "repositoryIdentifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git", "targetBranch": "codex/.hidden", "wordpressTargetId": null, "artifactTargetId": null } }], "allowlistedEnvironment": ["NODE_ENV", "PATH", "TEMP", "TMP"], "productionSecretsAvailable": false, "untrustedRepositoryCode": true, "resourceLimits": { "timeoutSeconds": 900, "cpuShares": 1, "memoryMb": 512, "maxFiles": 20, "maxFileBytes": 65536 } },
+        "inputs": { "source": "operator_request", "payload": { "summary": "Update PR." } },
+        "expectedOutputManifest": [{ "path": "docs/contracts/agent-api.md", "kind": "file", "required": true, "contentType": "text/markdown", "maxSizeBytes": 65536, "sha256": null }],
+        "allowedPaths": ["docs/contracts/**"],
+        "allowedCapabilities": ["codex", "git", "github_pr", "file_read", "file_write"],
+        "allowedActions": ["create_branch", "write_files", "run_registered_validation", "git_commit", "git_push_feature_branch", "create_or_update_pull_request"],
+        "forbiddenActions": ["delete", "production_deploy", "dns_change", "repository_visibility", "credential_rotation", "package_install", "unallowlisted_external_network_write", "merge_to_main", "push_main", "force_push", "direct_shell_from_user_text", "arbitrary_shell"],
+        "gitWorkflow": { "verifyRepositoryIdentifier": true, "verifyRemoteOrigin": true, "targetBranch": "codex/.hidden", "branchPrefix": "codex/", "allowedPush": "feature_branch_only", "forcePushAllowed": false, "mainPushAllowed": false, "mergeAllowed": false, "returns": ["commit_sha", "branch_name", "pull_request_url"] },
+        "approvalPolicy": { "requiredForActions": [], "selfApprovalAllowed": false, "actorSource": "authenticated_human_principal", "bodyActorFieldsTrusted": false, "requiredBindingFields": ["jobId", "attempt", "exactAction", "exactTarget", "environment", "siteSpecSha256", "inputArtifactSha256", "previewArtifactIds", "expiresAt"], "bindingTemplate": null, "oneTimeDecision": true, "auditable": true, "leaseBehavior": "checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job" },
+        "resultPolicy": { "executionResultValues": ["succeeded", "failed", "cancelled"], "acceptanceResultValues": ["accepted", "changes_required", "blocked"], "codexReportIsProof": false, "executorMayAcceptOwnWork": false, "mergeDeployPublicationRequiresAcceptance": "accepted", "recheckAfterChangesRequired": true },
+        "modelProfile": "standard",
+        "reasoningEffort": "medium",
+        "requiresApproval": false,
+        "timeoutSeconds": 900,
+        "idempotencyKey": "semantic-hidden-git-ref",
+        "dependsOn": [],
+        "validationChecks": []
+      }
+    },
+    {
+      "name": "staging_action_with_production_destination",
+      "expectedReason": "wordpress_stage cannot execute against the production destination selected by payload",
+      "expectedCode": "WORDPRESS_DESTINATION_MISMATCH",
+      "value": {
+        "jobSpecVersion": "1.2.0",
+        "agentApiVersion": "v1",
+        "id": "job_semantic_stage_prod_target",
+        "type": "wordpress_publish",
+        "projectId": "demo-regional-wholesale-network",
+        "workspaceId": "local-demo-workspace",
+        "repository": { "provider": "github", "owner": "maksglazunov835-bit", "name": "b2b-site-studio", "identifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git" },
+        "baseRef": "main",
+        "baseCommitSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "siteSpec": { "schemaVersion": "1.2.0", "revision": 7, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stage": "publish_ready" },
+        "inputArtifacts": [{ "artifactId": "artifact_preview_001", "kind": "staging_report", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sizeBytes": 2048 }],
+        "instructions": { "displaySummary": "Semantic bad staging target fixture.", "objective": "Must reject production target for staging action.", "steps": ["Validate WordPress destination."], "acceptanceCriteria": ["Semantic validation rejects."] },
+        "constraints": { "denyByDefault": true, "noRawUserTextAsShell": true, "requiresBranchOrWorktree": true, "pathFormat": "normalized_posix_relative_only", "realpathContainment": "required_after_resolve", "symlinkEscapePolicy": "reject_symlink_junction_or_reparse_escape", "maxLogBytes": 65536, "maxArtifactBytes": 1048576 },
+        "sandbox": { "lowPrivilegeProcess": true, "networkAccess": "allowlisted", "networkAllowlist": [{ "purpose": "wordpress_staging", "protocol": "https", "host": "wordpress-target.local", "port": 443, "allowedOperations": ["wordpress_stage"], "binding": { "repositoryIdentifier": null, "providerRepositoryId": null, "originUrl": null, "targetBranch": null, "wordpressTargetId": "wp-staging-target", "artifactTargetId": null } }, { "purpose": "wordpress_production", "protocol": "https", "host": "wordpress-target.local", "port": 443, "allowedOperations": ["wordpress_publish"], "binding": { "repositoryIdentifier": null, "providerRepositoryId": null, "originUrl": null, "targetBranch": null, "wordpressTargetId": "wp-production-target", "artifactTargetId": null } }], "allowlistedEnvironment": ["NODE_ENV", "PATH", "TEMP", "TMP"], "productionSecretsAvailable": false, "untrustedRepositoryCode": true, "resourceLimits": { "timeoutSeconds": 900, "cpuShares": 1, "memoryMb": 512, "maxFiles": 20, "maxFileBytes": 1048576 } },
+        "inputs": { "source": "site_spec", "payload": { "environment": "staging", "wordpressTargetId": "wp-production-target" } },
+        "expectedOutputManifest": [{ "path": "reports/wordpress-stage-result.json", "kind": "wordpress_result", "required": true, "contentType": "application/json", "maxSizeBytes": 65536, "sha256": null }],
+        "allowedPaths": ["reports/**"],
+        "allowedCapabilities": ["codex", "git", "wordpress_api"],
+        "allowedActions": ["request_approval", "wordpress_stage", "wordpress_publish", "run_registered_validation", "create_artifact"],
+        "forbiddenActions": ["delete", "production_deploy", "dns_change", "repository_visibility", "credential_rotation", "package_install", "unallowlisted_external_network_write", "merge_to_main", "push_main", "force_push", "direct_shell_from_user_text", "arbitrary_shell"],
+        "gitWorkflow": { "verifyRepositoryIdentifier": true, "verifyRemoteOrigin": true, "targetBranch": "codex/job-semantic-stage-prod-target", "branchPrefix": "codex/", "allowedPush": "none", "forcePushAllowed": false, "mainPushAllowed": false, "mergeAllowed": false, "returns": ["commit_sha", "branch_name"] },
+        "approvalPolicy": { "requiredForActions": ["wordpress_publish"], "selfApprovalAllowed": false, "actorSource": "authenticated_human_principal", "bodyActorFieldsTrusted": false, "requiredBindingFields": ["jobId", "attempt", "exactAction", "exactTarget", "environment", "siteSpecSha256", "inputArtifactSha256", "previewArtifactIds", "expiresAt"], "bindingTemplate": { "exactAction": "wordpress_publish", "exactTarget": "wp-production-target", "environment": "staging", "previewArtifactIds": ["artifact_preview_001"], "expiresAt": "2026-09-03T12:00:00Z" }, "oneTimeDecision": true, "auditable": true, "leaseBehavior": "checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job" },
+        "resultPolicy": { "executionResultValues": ["succeeded", "failed", "cancelled"], "acceptanceResultValues": ["accepted", "changes_required", "blocked"], "codexReportIsProof": false, "executorMayAcceptOwnWork": false, "mergeDeployPublicationRequiresAcceptance": "accepted", "recheckAfterChangesRequired": true },
+        "modelProfile": "standard",
+        "reasoningEffort": "medium",
+        "requiresApproval": true,
+        "timeoutSeconds": 900,
+        "idempotencyKey": "semantic-stage-prod-target",
+        "dependsOn": [],
+        "validationChecks": []
+      }
+    },
+    {
+      "name": "unexpected_network_host",
+      "expectedReason": "structured execution target host in payload must be represented by a typed allowlist destination",
+      "expectedCode": "UNALLOWLISTED_NETWORK_DESTINATION",
+      "value": {
+        "jobSpecVersion": "1.2.0",
+        "agentApiVersion": "v1",
+        "id": "job_semantic_unexpected_network_host",
+        "type": "sandbox_file_test",
+        "projectId": "demo-regional-wholesale-network",
+        "workspaceId": "local-demo-workspace",
+        "repository": { "provider": "github", "owner": "maksglazunov835-bit", "name": "b2b-site-studio", "identifier": "github:maksglazunov835-bit/b2b-site-studio", "providerRepositoryId": "repo_123456789", "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git" },
+        "baseRef": "main",
+        "baseCommitSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "siteSpec": { "schemaVersion": "1.2.0", "revision": 7, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stage": "draft" },
+        "inputArtifacts": [],
+        "instructions": { "displaySummary": "Semantic unexpected network host fixture.", "objective": "Must reject payload-selected network host outside allowlist.", "steps": ["Validate network destination."], "acceptanceCriteria": ["Semantic validation rejects."] },
+        "constraints": { "denyByDefault": true, "noRawUserTextAsShell": true, "requiresBranchOrWorktree": true, "pathFormat": "normalized_posix_relative_only", "realpathContainment": "required_after_resolve", "symlinkEscapePolicy": "reject_symlink_junction_or_reparse_escape", "maxLogBytes": 65536, "maxArtifactBytes": 1048576 },
+        "sandbox": { "lowPrivilegeProcess": true, "networkAccess": "allowlisted", "networkAllowlist": [{ "purpose": "artifact_upload", "protocol": "https", "host": "artifact-storage.local", "port": 443, "allowedOperations": ["artifact_upload"], "binding": { "repositoryIdentifier": null, "providerRepositoryId": null, "originUrl": null, "targetBranch": null, "wordpressTargetId": null, "artifactTargetId": "artifact-store-demo" } }], "allowlistedEnvironment": ["NODE_ENV", "PATH", "TEMP", "TMP"], "productionSecretsAvailable": false, "untrustedRepositoryCode": true, "resourceLimits": { "timeoutSeconds": 300, "cpuShares": 1, "memoryMb": 512, "maxFiles": 20, "maxFileBytes": 65536 } },
+        "inputs": { "source": "operator_request", "payload": { "executionTargetUrl": "https://unexpected.example/upload" } },
+        "expectedOutputManifest": [{ "path": "reports/network-result.json", "kind": "wordpress_result", "required": true, "contentType": "application/json", "maxSizeBytes": 65536, "sha256": null }],
+        "allowedPaths": ["reports/**"],
+        "allowedCapabilities": ["codex", "git", "file_read", "file_write", "artifact_upload"],
+        "allowedActions": ["create_branch", "write_files", "run_registered_validation", "create_artifact", "upload_artifact"],
+        "forbiddenActions": ["delete", "production_deploy", "dns_change", "repository_visibility", "credential_rotation", "package_install", "unallowlisted_external_network_write", "merge_to_main", "push_main", "force_push", "direct_shell_from_user_text", "arbitrary_shell"],
+        "gitWorkflow": { "verifyRepositoryIdentifier": true, "verifyRemoteOrigin": true, "targetBranch": "codex/job-semantic-unexpected-network-host", "branchPrefix": "codex/", "allowedPush": "none", "forcePushAllowed": false, "mainPushAllowed": false, "mergeAllowed": false, "returns": ["commit_sha", "branch_name"] },
+        "approvalPolicy": { "requiredForActions": [], "selfApprovalAllowed": false, "actorSource": "authenticated_human_principal", "bodyActorFieldsTrusted": false, "requiredBindingFields": ["jobId", "attempt", "exactAction", "exactTarget", "environment", "siteSpecSha256", "inputArtifactSha256", "previewArtifactIds", "expiresAt"], "bindingTemplate": null, "oneTimeDecision": true, "auditable": true, "leaseBehavior": "checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job" },
+        "resultPolicy": { "executionResultValues": ["succeeded", "failed", "cancelled"], "acceptanceResultValues": ["accepted", "changes_required", "blocked"], "codexReportIsProof": false, "executorMayAcceptOwnWork": false, "mergeDeployPublicationRequiresAcceptance": "accepted", "recheckAfterChangesRequired": true },
+        "modelProfile": "fast",
+        "reasoningEffort": "low",
+        "requiresApproval": false,
+        "timeoutSeconds": 300,
+        "idempotencyKey": "semantic-unexpected-network-host",
+        "dependsOn": [],
+        "validationChecks": []
+      }
+    },
+    {"name":"output_path_outside_allowed_paths","expectedReason":"expected output paths must be concrete and covered by allowedPaths","expectedCode":"OUTPUT_PATH_NOT_ALLOWED","value":{"jobSpecVersion":"1.2.0","agentApiVersion":"v1","id":"job_output_path_outside","type":"sandbox_file_test","projectId":"demo-regional-wholesale-network","workspaceId":"local-demo-workspace","repository":{"provider":"github","owner":"maksglazunov835-bit","name":"b2b-site-studio","identifier":"github:maksglazunov835-bit/b2b-site-studio","providerRepositoryId":"repo_123456789","originUrl":"git@github.com:maksglazunov835-bit/b2b-site-studio.git"},"baseRef":"main","baseCommitSha":"1111111111111111111111111111111111111111","siteSpec":{"schemaVersion":"1.2.0","revision":7,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","stage":"draft"},"inputArtifacts":[],"instructions":{"displaySummary":"Create one safe test file in the sandbox folder.","objective":"Verify that the local agent can write an allowed artifact without touching project or production files.","steps":["Create sandbox/agent-smoke-test.txt.","Write a short non-secret status line.","Do not modify files outside the sandbox folder."],"acceptanceCriteria":["The file exists inside the allowed sandbox path.","No forbidden paths are modified.","Registered validation checks pass."]},"constraints":{"denyByDefault":true,"noRawUserTextAsShell":true,"requiresBranchOrWorktree":true,"pathFormat":"normalized_posix_relative_only","realpathContainment":"required_after_resolve","symlinkEscapePolicy":"reject_symlink_junction_or_reparse_escape","maxLogBytes":65536,"maxArtifactBytes":1048576},"sandbox":{"lowPrivilegeProcess":true,"networkAccess":"disabled_by_default","allowlistedEnvironment":["NODE_ENV","PATH","TEMP","TMP"],"productionSecretsAvailable":false,"untrustedRepositoryCode":true,"resourceLimits":{"timeoutSeconds":300,"cpuShares":1,"memoryMb":512,"maxFiles":10,"maxFileBytes":4096}},"inputs":{"source":"system_test","payload":{"message":"Agent smoke test completed."}},"expectedOutputManifest":[{"path":"reports/out.txt","kind":"file","required":true,"contentType":"text/plain","maxSizeBytes":4096,"sha256":null}],"allowedPaths":["sandbox/**"],"allowedCapabilities":["codex","git","file_read","file_write"],"allowedActions":["create_branch","write_files","run_registered_validation","create_artifact"],"forbiddenActions":["delete","production_deploy","dns_change","repository_visibility","credential_rotation","package_install","unallowlisted_external_network_write","merge_to_main","push_main","force_push","direct_shell_from_user_text","arbitrary_shell"],"gitWorkflow":{"verifyRepositoryIdentifier":true,"verifyRemoteOrigin":true,"targetBranch":"codex/job-sandbox-file-test-001","branchPrefix":"codex/","allowedPush":"none","forcePushAllowed":false,"mainPushAllowed":false,"mergeAllowed":false,"returns":["commit_sha","branch_name"]},"approvalPolicy":{"requiredForActions":[],"selfApprovalAllowed":false,"actorSource":"authenticated_human_principal","bodyActorFieldsTrusted":false,"requiredBindingFields":["jobId","attempt","exactAction","exactTarget","environment","siteSpecSha256","inputArtifactSha256","previewArtifactIds","expiresAt"],"bindingTemplate":null,"oneTimeDecision":true,"auditable":true,"leaseBehavior":"checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job"},"resultPolicy":{"executionResultValues":["succeeded","failed","cancelled"],"acceptanceResultValues":["accepted","changes_required","blocked"],"codexReportIsProof":false,"executorMayAcceptOwnWork":false,"mergeDeployPublicationRequiresAcceptance":"accepted","recheckAfterChangesRequired":true},"modelProfile":"fast","reasoningEffort":"low","requiresApproval":false,"timeoutSeconds":300,"idempotencyKey":"output-path-outside","dependsOn":[],"validationChecks":[{"id":"file_exists","registryVersion":"2026-09-02","required":true,"shellMode":false,"parameters":{"path":"sandbox/agent-smoke-test.txt","mustExist":true},"timeoutSeconds":30}]}},
+    {"name":"validation_path_outside_allowed_paths","expectedReason":"registered validation path must be covered by allowedPaths","expectedCode":"VALIDATION_PATH_NOT_ALLOWED","value":{"jobSpecVersion":"1.2.0","agentApiVersion":"v1","id":"job_validation_path_outside","type":"sandbox_file_test","projectId":"demo-regional-wholesale-network","workspaceId":"local-demo-workspace","repository":{"provider":"github","owner":"maksglazunov835-bit","name":"b2b-site-studio","identifier":"github:maksglazunov835-bit/b2b-site-studio","providerRepositoryId":"repo_123456789","originUrl":"git@github.com:maksglazunov835-bit/b2b-site-studio.git"},"baseRef":"main","baseCommitSha":"1111111111111111111111111111111111111111","siteSpec":{"schemaVersion":"1.2.0","revision":7,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","stage":"draft"},"inputArtifacts":[],"instructions":{"displaySummary":"Create one safe test file in the sandbox folder.","objective":"Verify that the local agent can write an allowed artifact without touching project or production files.","steps":["Create sandbox/agent-smoke-test.txt.","Write a short non-secret status line.","Do not modify files outside the sandbox folder."],"acceptanceCriteria":["The file exists inside the allowed sandbox path.","No forbidden paths are modified.","Registered validation checks pass."]},"constraints":{"denyByDefault":true,"noRawUserTextAsShell":true,"requiresBranchOrWorktree":true,"pathFormat":"normalized_posix_relative_only","realpathContainment":"required_after_resolve","symlinkEscapePolicy":"reject_symlink_junction_or_reparse_escape","maxLogBytes":65536,"maxArtifactBytes":1048576},"sandbox":{"lowPrivilegeProcess":true,"networkAccess":"disabled_by_default","allowlistedEnvironment":["NODE_ENV","PATH","TEMP","TMP"],"productionSecretsAvailable":false,"untrustedRepositoryCode":true,"resourceLimits":{"timeoutSeconds":300,"cpuShares":1,"memoryMb":512,"maxFiles":10,"maxFileBytes":4096}},"inputs":{"source":"system_test","payload":{"message":"Agent smoke test completed."}},"expectedOutputManifest":[{"path":"sandbox/agent-smoke-test.txt","kind":"file","required":true,"contentType":"text/plain","maxSizeBytes":4096,"sha256":null}],"allowedPaths":["sandbox/**"],"allowedCapabilities":["codex","git","file_read","file_write"],"allowedActions":["create_branch","write_files","run_registered_validation","create_artifact"],"forbiddenActions":["delete","production_deploy","dns_change","repository_visibility","credential_rotation","package_install","unallowlisted_external_network_write","merge_to_main","push_main","force_push","direct_shell_from_user_text","arbitrary_shell"],"gitWorkflow":{"verifyRepositoryIdentifier":true,"verifyRemoteOrigin":true,"targetBranch":"codex/job-sandbox-file-test-001","branchPrefix":"codex/","allowedPush":"none","forcePushAllowed":false,"mainPushAllowed":false,"mergeAllowed":false,"returns":["commit_sha","branch_name"]},"approvalPolicy":{"requiredForActions":[],"selfApprovalAllowed":false,"actorSource":"authenticated_human_principal","bodyActorFieldsTrusted":false,"requiredBindingFields":["jobId","attempt","exactAction","exactTarget","environment","siteSpecSha256","inputArtifactSha256","previewArtifactIds","expiresAt"],"bindingTemplate":null,"oneTimeDecision":true,"auditable":true,"leaseBehavior":"checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job"},"resultPolicy":{"executionResultValues":["succeeded","failed","cancelled"],"acceptanceResultValues":["accepted","changes_required","blocked"],"codexReportIsProof":false,"executorMayAcceptOwnWork":false,"mergeDeployPublicationRequiresAcceptance":"accepted","recheckAfterChangesRequired":true},"modelProfile":"fast","reasoningEffort":"low","requiresApproval":false,"timeoutSeconds":300,"idempotencyKey":"validation-path-outside","dependsOn":[],"validationChecks":[{"id":"file_exists","registryVersion":"2026-09-02","required":true,"shellMode":false,"parameters":{"path":"reports/out.txt","mustExist":true},"timeoutSeconds":30}]}},
+    {"name":"html_path_outside_allowed_paths","expectedReason":"static HTML validation paths must be covered by allowedPaths","expectedCode":"VALIDATION_PATH_NOT_ALLOWED","value":{"jobSpecVersion":"1.2.0","agentApiVersion":"v1","id":"job_html_path_outside","type":"sandbox_file_test","projectId":"demo-regional-wholesale-network","workspaceId":"local-demo-workspace","repository":{"provider":"github","owner":"maksglazunov835-bit","name":"b2b-site-studio","identifier":"github:maksglazunov835-bit/b2b-site-studio","providerRepositoryId":"repo_123456789","originUrl":"git@github.com:maksglazunov835-bit/b2b-site-studio.git"},"baseRef":"main","baseCommitSha":"1111111111111111111111111111111111111111","siteSpec":{"schemaVersion":"1.2.0","revision":7,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","stage":"draft"},"inputArtifacts":[],"instructions":{"displaySummary":"Create one safe test file in the sandbox folder.","objective":"Verify that the local agent can write an allowed artifact without touching project or production files.","steps":["Create sandbox/agent-smoke-test.txt.","Write a short non-secret status line.","Do not modify files outside the sandbox folder."],"acceptanceCriteria":["The file exists inside the allowed sandbox path.","No forbidden paths are modified.","Registered validation checks pass."]},"constraints":{"denyByDefault":true,"noRawUserTextAsShell":true,"requiresBranchOrWorktree":true,"pathFormat":"normalized_posix_relative_only","realpathContainment":"required_after_resolve","symlinkEscapePolicy":"reject_symlink_junction_or_reparse_escape","maxLogBytes":65536,"maxArtifactBytes":1048576},"sandbox":{"lowPrivilegeProcess":true,"networkAccess":"disabled_by_default","allowlistedEnvironment":["NODE_ENV","PATH","TEMP","TMP"],"productionSecretsAvailable":false,"untrustedRepositoryCode":true,"resourceLimits":{"timeoutSeconds":300,"cpuShares":1,"memoryMb":512,"maxFiles":10,"maxFileBytes":4096}},"inputs":{"source":"system_test","payload":{"message":"Agent smoke test completed."}},"expectedOutputManifest":[{"path":"sandbox/agent-smoke-test.txt","kind":"file","required":true,"contentType":"text/plain","maxSizeBytes":4096,"sha256":null}],"allowedPaths":["sandbox/**"],"allowedCapabilities":["codex","git","file_read","file_write"],"allowedActions":["create_branch","write_files","run_registered_validation","create_artifact"],"forbiddenActions":["delete","production_deploy","dns_change","repository_visibility","credential_rotation","package_install","unallowlisted_external_network_write","merge_to_main","push_main","force_push","direct_shell_from_user_text","arbitrary_shell"],"gitWorkflow":{"verifyRepositoryIdentifier":true,"verifyRemoteOrigin":true,"targetBranch":"codex/job-sandbox-file-test-001","branchPrefix":"codex/","allowedPush":"none","forcePushAllowed":false,"mainPushAllowed":false,"mergeAllowed":false,"returns":["commit_sha","branch_name"]},"approvalPolicy":{"requiredForActions":[],"selfApprovalAllowed":false,"actorSource":"authenticated_human_principal","bodyActorFieldsTrusted":false,"requiredBindingFields":["jobId","attempt","exactAction","exactTarget","environment","siteSpecSha256","inputArtifactSha256","previewArtifactIds","expiresAt"],"bindingTemplate":null,"oneTimeDecision":true,"auditable":true,"leaseBehavior":"checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job"},"resultPolicy":{"executionResultValues":["succeeded","failed","cancelled"],"acceptanceResultValues":["accepted","changes_required","blocked"],"codexReportIsProof":false,"executorMayAcceptOwnWork":false,"mergeDeployPublicationRequiresAcceptance":"accepted","recheckAfterChangesRequired":true},"modelProfile":"fast","reasoningEffort":"low","requiresApproval":false,"timeoutSeconds":300,"idempotencyKey":"html-path-outside","dependsOn":[],"validationChecks":[{"id":"static_html_exists","registryVersion":"2026-09-02","required":true,"shellMode":false,"parameters":{"htmlPath":"reports/index.html","cssPath":"sandbox/styles.css"},"timeoutSeconds":30}]}},
+    {"name":"concrete_output_contains_glob","expectedReason":"expected output manifest paths are concrete and cannot contain glob syntax","expectedCode":"OUTPUT_PATH_NOT_ALLOWED","value":{"jobSpecVersion":"1.2.0","agentApiVersion":"v1","id":"job_concrete_output_glob","type":"sandbox_file_test","projectId":"demo-regional-wholesale-network","workspaceId":"local-demo-workspace","repository":{"provider":"github","owner":"maksglazunov835-bit","name":"b2b-site-studio","identifier":"github:maksglazunov835-bit/b2b-site-studio","providerRepositoryId":"repo_123456789","originUrl":"git@github.com:maksglazunov835-bit/b2b-site-studio.git"},"baseRef":"main","baseCommitSha":"1111111111111111111111111111111111111111","siteSpec":{"schemaVersion":"1.2.0","revision":7,"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","stage":"draft"},"inputArtifacts":[],"instructions":{"displaySummary":"Create one safe test file in the sandbox folder.","objective":"Verify that the local agent can write an allowed artifact without touching project or production files.","steps":["Create sandbox/agent-smoke-test.txt.","Write a short non-secret status line.","Do not modify files outside the sandbox folder."],"acceptanceCriteria":["The file exists inside the allowed sandbox path.","No forbidden paths are modified.","Registered validation checks pass."]},"constraints":{"denyByDefault":true,"noRawUserTextAsShell":true,"requiresBranchOrWorktree":true,"pathFormat":"normalized_posix_relative_only","realpathContainment":"required_after_resolve","symlinkEscapePolicy":"reject_symlink_junction_or_reparse_escape","maxLogBytes":65536,"maxArtifactBytes":1048576},"sandbox":{"lowPrivilegeProcess":true,"networkAccess":"disabled_by_default","allowlistedEnvironment":["NODE_ENV","PATH","TEMP","TMP"],"productionSecretsAvailable":false,"untrustedRepositoryCode":true,"resourceLimits":{"timeoutSeconds":300,"cpuShares":1,"memoryMb":512,"maxFiles":10,"maxFileBytes":4096}},"inputs":{"source":"system_test","payload":{"message":"Agent smoke test completed."}},"expectedOutputManifest":[{"path":"sandbox/*.txt","kind":"file","required":true,"contentType":"text/plain","maxSizeBytes":4096,"sha256":null}],"allowedPaths":["sandbox/**"],"allowedCapabilities":["codex","git","file_read","file_write"],"allowedActions":["create_branch","write_files","run_registered_validation","create_artifact"],"forbiddenActions":["delete","production_deploy","dns_change","repository_visibility","credential_rotation","package_install","unallowlisted_external_network_write","merge_to_main","push_main","force_push","direct_shell_from_user_text","arbitrary_shell"],"gitWorkflow":{"verifyRepositoryIdentifier":true,"verifyRemoteOrigin":true,"targetBranch":"codex/job-sandbox-file-test-001","branchPrefix":"codex/","allowedPush":"none","forcePushAllowed":false,"mainPushAllowed":false,"mergeAllowed":false,"returns":["commit_sha","branch_name"]},"approvalPolicy":{"requiredForActions":[],"selfApprovalAllowed":false,"actorSource":"authenticated_human_principal","bodyActorFieldsTrusted":false,"requiredBindingFields":["jobId","attempt","exactAction","exactTarget","environment","siteSpecSha256","inputArtifactSha256","previewArtifactIds","expiresAt"],"bindingTemplate":null,"oneTimeDecision":true,"auditable":true,"leaseBehavior":"checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job"},"resultPolicy":{"executionResultValues":["succeeded","failed","cancelled"],"acceptanceResultValues":["accepted","changes_required","blocked"],"codexReportIsProof":false,"executorMayAcceptOwnWork":false,"mergeDeployPublicationRequiresAcceptance":"accepted","recheckAfterChangesRequired":true},"modelProfile":"fast","reasoningEffort":"low","requiresApproval":false,"timeoutSeconds":300,"idempotencyKey":"concrete-output-glob","dependsOn":[],"validationChecks":[{"id":"file_exists","registryVersion":"2026-09-02","required":true,"shellMode":false,"parameters":{"path":"sandbox/agent-smoke-test.txt","mustExist":true},"timeoutSeconds":30}]}},
+    {"name":"github_git_destination_with_wordpress_operation","expectedReason":"github_git network destinations may allow only git_push","expectedCode":"NETWORK_OPERATION_MISMATCH","value":{"jobSpecVersion":"1.2.0","agentApiVersion":"v1","id":"job_network_operation_mismatch","type":"design_reference_prototype","projectId":"demo-regional-wholesale-network","siteId":"main-regional-site","workspaceId":"local-demo-workspace","repository":{"provider":"github","owner":"maksglazunov835-bit","name":"b2b-site-studio","identifier":"github:maksglazunov835-bit/b2b-site-studio","providerRepositoryId":"repo_123456789","originUrl":"git@github.com:maksglazunov835-bit/b2b-site-studio.git"},"baseRef":"main","baseCommitSha":"2222222222222222222222222222222222222222","siteSpec":{"schemaVersion":"1.2.0","revision":7,"sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","stage":"generation_ready"},"inputArtifacts":[{"artifactId":"asset_design_reference_001","kind":"design_reference","sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","sizeBytes":204800}],"instructions":{"displaySummary":"Create an executable HTML/CSS design-reference prototype without publishing.","objective":"Generate one prototype variant for a B2B wholesale catalog so the user can compare visual directions before WordPress implementation.","steps":["Create design-prototypes/reference-001/index.html.","Create design-prototypes/reference-001/styles.css.","Capture a screenshot artifact if the local browser_screenshot capability is available.","Do not publish, deploy, install packages, or change production configuration."],"acceptanceCriteria":["Prototype opens as static HTML/CSS.","No external secrets or real personal data are embedded.","All files stay inside design-prototypes/reference-001."]},"constraints":{"denyByDefault":true,"noRawUserTextAsShell":true,"requiresBranchOrWorktree":true,"pathFormat":"normalized_posix_relative_only","realpathContainment":"required_after_resolve","symlinkEscapePolicy":"reject_symlink_junction_or_reparse_escape","maxLogBytes":131072,"maxArtifactBytes":5242880},"sandbox":{"lowPrivilegeProcess":true,"networkAccess":"allowlisted","networkAllowlist":[{"purpose":"github_git","protocol":"ssh","host":"github.com","port":22,"allowedOperations":["git_push","wordpress_publish"],"binding":{"repositoryIdentifier":"github:maksglazunov835-bit/b2b-site-studio","providerRepositoryId":"repo_123456789","originUrl":"git@github.com:maksglazunov835-bit/b2b-site-studio.git","targetBranch":"codex/job-design-reference-001","wordpressTargetId":null,"artifactTargetId":null}},{"purpose":"github_api","protocol":"https","host":"api.github.com","port":443,"allowedOperations":["pr_create_update"],"binding":{"repositoryIdentifier":"github:maksglazunov835-bit/b2b-site-studio","providerRepositoryId":"repo_123456789","originUrl":"git@github.com:maksglazunov835-bit/b2b-site-studio.git","targetBranch":"codex/job-design-reference-001","wordpressTargetId":null,"artifactTargetId":null}},{"purpose":"artifact_upload","protocol":"https","host":"artifact-storage.local","port":443,"allowedOperations":["artifact_upload"],"binding":{"repositoryIdentifier":null,"providerRepositoryId":null,"originUrl":null,"targetBranch":null,"wordpressTargetId":null,"artifactTargetId":"artifact-store-demo"}}],"allowlistedEnvironment":["NODE_ENV","PATH","TEMP","TMP"],"productionSecretsAvailable":false,"untrustedRepositoryCode":true,"resourceLimits":{"timeoutSeconds":1800,"cpuShares":2,"memoryMb":1024,"maxFiles":50,"maxFileBytes":524288}},"inputs":{"source":"site_spec","payload":{"designTone":["business","catalog","seo-ready"],"requiredBlocks":["hero","category grid","product cards","lead form","regional trust block"]}},"expectedOutputManifest":[{"path":"design-prototypes/reference-001/index.html","kind":"file","required":true,"contentType":"text/html","maxSizeBytes":524288,"sha256":null},{"path":"design-prototypes/reference-001/styles.css","kind":"file","required":true,"contentType":"text/css","maxSizeBytes":524288,"sha256":null},{"path":"design-prototypes/reference-001/screenshot.png","kind":"screenshot","required":false,"contentType":"image/png","maxSizeBytes":4194304,"sha256":null}],"allowedPaths":["design-prototypes/reference-001/**"],"allowedCapabilities":["codex","git","github_pr","node","file_read","file_write","browser_screenshot","artifact_upload"],"allowedActions":["create_branch","write_files","run_registered_validation","create_artifact","upload_artifact","git_commit","git_push_feature_branch","create_or_update_pull_request"],"forbiddenActions":["delete","production_deploy","dns_change","repository_visibility","credential_rotation","package_install","unallowlisted_external_network_write","merge_to_main","push_main","force_push","direct_shell_from_user_text","arbitrary_shell"],"gitWorkflow":{"verifyRepositoryIdentifier":true,"verifyRemoteOrigin":true,"targetBranch":"codex/job-design-reference-001","branchPrefix":"codex/","allowedPush":"feature_branch_only","forcePushAllowed":false,"mainPushAllowed":false,"mergeAllowed":false,"returns":["commit_sha","branch_name","pull_request_url"]},"approvalPolicy":{"requiredForActions":[],"selfApprovalAllowed":false,"actorSource":"authenticated_human_principal","bodyActorFieldsTrusted":false,"requiredBindingFields":["jobId","attempt","exactAction","exactTarget","environment","siteSpecSha256","inputArtifactSha256","previewArtifactIds","expiresAt"],"bindingTemplate":null,"oneTimeDecision":true,"auditable":true,"leaseBehavior":"checkpoint_release_lease_requeue_continuation_with_new_lease_or_new_irreversible_job"},"resultPolicy":{"executionResultValues":["succeeded","failed","cancelled"],"acceptanceResultValues":["accepted","changes_required","blocked"],"codexReportIsProof":false,"executorMayAcceptOwnWork":false,"mergeDeployPublicationRequiresAcceptance":"accepted","recheckAfterChangesRequired":true},"modelProfile":"standard","reasoningEffort":"medium","requiresApproval":false,"timeoutSeconds":1800,"idempotencyKey":"network-operation-mismatch","dependsOn":[],"validationChecks":[{"id":"static_html_exists","registryVersion":"2026-09-02","required":true,"shellMode":false,"parameters":{"htmlPath":"design-prototypes/reference-001/index.html","cssPath":"design-prototypes/reference-001/styles.css"},"timeoutSeconds":30},{"id":"npm_build","registryVersion":"2026-09-02","required":true,"shellMode":false,"parameters":{"scope":"workspace"},"timeoutSeconds":600}]}}
   ]
 }
