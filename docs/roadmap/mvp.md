@@ -7,22 +7,29 @@ Definition of done:
 - Product requirements are documented.
 - Control-plane architecture is documented.
 - SiteSpec schema supports incomplete drafts plus `generation_ready` and `publish_ready` stages.
-- SiteSpec schema includes valid draft and generation-ready regional wholesale examples without placeholder contacts.
-- Local agent job schema uses `workspaceId`, pinned input versions, output manifests, allowed capabilities/actions, and safe examples.
-- Agent API contract documents lifecycle, lease token, heartbeat, logs, two-phase artifacts, validation, approvals, retry, cancel request, and cancel acknowledgement.
-- JSON Schema and examples are locally validated.
+- SiteSpec schema includes valid draft, generation-ready, and publish-ready examples without placeholder contacts.
+- SiteSpec schema includes negative fixtures for invalid readiness, missing publish targets, empty contacts, and nonpublishable facts.
+- Local agent job schema uses `jobSpecVersion`, `workspaceId`, pinned input versions, output manifests, safe POSIX-relative paths, sandbox policy, allowed capabilities/actions, approval policy, GitHub workflow, and safe examples.
+- Job schema includes negative fixtures for Windows absolute paths, UNC paths, traversal paths, and self-approved irreversible actions.
+- Agent API contract is versioned under `/api/v1` and documents registration/claim version negotiation, lifecycle, lease token, heartbeat, logs, two-phase artifacts, validation, approvals, retry, cancel request, and cancel acknowledgement.
+- Independent Review And Verification is documented in `AGENTS.md`, product requirements, architecture, and this roadmap.
+- Execution result is separated from independent acceptance result.
+- Merge, production deploy, WordPress publication, DNS changes, and other irreversible actions are blocked until independent acceptance is `accepted` and required human approval is recorded.
+- JSON Schema, positive examples, and negative fixtures are locally validated.
 
 ## 2. PostgreSQL And Project/SiteSpec Persistence
 
 Definition of done:
 
 - PostgreSQL schema stores workspaces, projects, SiteSpec versions, sites, regions, and audit timestamps.
+- PostgreSQL schema stores server-owned readiness check results and independent job/task review decisions.
 - SiteSpec revisions are immutable once a job references them.
 - Draft SiteSpec can be saved and resumed without contacts, domains, regions, sites, catalog, products, variants, or verified facts.
 - Facts are stored as structured records with provenance, verification status, verification date, and publication permission.
 - Assets store metadata and checksums outside SiteSpec; SiteSpec stores asset/artifact references only.
 - API can create, update, fetch, and version SiteSpec.
 - Invalid SiteSpec writes are rejected.
+- Client-submitted readiness `passed` values are not trusted; readiness is derived by the server evaluator.
 - Tests cover valid and invalid SiteSpec payloads.
 
 ## 3. Server Queue And Event Journal
@@ -31,11 +38,15 @@ Definition of done:
 
 - Jobs can be created from server-side orchestration code.
 - Queue states follow `draft -> queued -> claimed -> running -> awaiting_approval -> validating -> succeeded | failed | cancelled`.
+- `succeeded`, `failed`, and `cancelled` are execution results only.
+- Independent acceptance states are `accepted`, `changes_required`, and `blocked`.
+- `succeeded` jobs move to review pending until an independent reviewer or CI gate checks actual diff and validation evidence.
 - Running cancellation uses `cancel_requested` before terminal `cancelled`.
 - Events and logs are stored with job attempt IDs.
 - Claim returns a random lease token.
 - Start, heartbeat, events, logs, artifacts, validation, complete, fail, and cancel acknowledgement require the active lease token.
 - Lease expiration fences off stale local processes and returns jobs to a safe retry path.
+- Jobs in `awaiting_approval` checkpoint, release the lease, and continue later with a new lease token or separate irreversible-action job.
 
 ## 4. Server To Local Agent Test Loop
 
@@ -43,6 +54,8 @@ Definition of done:
 
 - Local Windows agent registers and passes health check.
 - Agent resolves `workspaceId` from protected local configuration and rejects unknown workspaces.
+- Agent accepts only normalized POSIX-relative paths and rejects Windows absolute, UNC, device, control/NUL, backslash, colon, and traversal paths.
+- Agent verifies realpath containment after symlink, junction, and reparse-point resolution.
 - Agent claims a safe sandbox job and receives a lease token.
 - Agent heartbeats while running.
 - Agent uploads a small artifact through create/complete upload with size and sha256 verification.
@@ -55,11 +68,14 @@ Definition of done:
 
 - Agent runs Codex only inside allowlisted workspaces.
 - Every job uses a branch or worktree.
+- Codex, Node, npm scripts, and repository code run in a sandboxed low-privilege process.
+- Sandbox uses allowlisted environment variables, no production secrets, network disabled by default, and CPU/memory/time/filesystem limits.
 - Execution profiles `fast`, `standard`, `deep`, and `review` map through configuration.
 - No business logic stores one hard-coded model name.
 - User text cannot become a shell command.
 - Validation uses local registered check IDs such as `file_exists`, `npm_lint`, `npm_build`, `git_diff_check`, and `static_html_exists`; server-supplied shell is rejected.
 - Security is deny-by-default through allowed capabilities and actions.
+- Safe GitHub actions support `git_commit`, feature-branch push only, and create/update PR, with repository ID/origin verification, no force-push, and no push to `main`.
 
 ## 6. Catalog Wizard And CSV/XLSX Import
 
@@ -133,6 +149,7 @@ Definition of done:
 Definition of done:
 
 - Publication requires approval.
+- Publication requires independent acceptance result `accepted`.
 - Staging publish runs before production.
 - Smoke tests verify key pages, forms, robots, sitemap, canonical, and availability.
 - Rollback package or previous revision is retained.

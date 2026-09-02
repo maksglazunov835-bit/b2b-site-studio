@@ -21,10 +21,11 @@ The first MVP scenario is a regional wholesale catalog for Russia: several categ
    - Draft SiteSpec validation is intentionally permissive; readiness gates decide when the same SiteSpec can move to `generation_ready` or `publish_ready`.
 
 2. Choose site model.
-   - Single site.
-   - Network by regions.
-   - Network by niches.
-   - Separate domains or subdomains.
+   - User chooses `siteModel`/`siteType`: landing, multipage, catalog, SEO network, corporate site, or hybrid.
+   - User chooses whether this is one site or a network of sites.
+   - Network mode can be single site, regions, niches, separate domains, or a hybrid structure.
+   - Single-site projects must not require a fake region just to pass validation.
+   - SEO-network projects must collect what is shared across all sites and what is different per site or region.
 
 3. Define information inheritance.
    - User chooses what is shared across the network and what can be overridden per site or region.
@@ -38,6 +39,8 @@ The first MVP scenario is a regional wholesale catalog for Russia: several categ
    - App shows a preview and an error report before saving.
    - Invalid rows remain visible and must not silently disappear.
    - Imported files, product photos, variant photos, documents, logos, and design references are stored as assets/artifacts and referenced by IDs, checksums, content type, filename, and size. Binary data is not stored inside SiteSpec.
+   - Asset source of truth is one top-level asset registry. Brand, catalog, and design sections store only asset/artifact IDs and roles.
+   - Each asset registry record has exactly one identifier: either `assetId` or `artifactId`.
 
 5. Build the page plan.
    - User chooses required pages.
@@ -104,6 +107,13 @@ Regional or site-level overrides:
 
 If a regional page has no real regional value, it should be generated as draft or noindex, not published as an indexed thin page.
 
+Override semantics:
+
+- missing field means inherit shared value;
+- explicit non-null value means override;
+- `null` means clear only for fields marked `clearAllowed: true`;
+- product and variant price overrides are separate from text notes and must reference concrete product/variant IDs.
+
 ## SiteSpec Stages
 
 The product uses one draft-friendly SiteSpec schema with explicit document stages:
@@ -113,6 +123,24 @@ The product uses one draft-friendly SiteSpec schema with explicit document stage
 - `publish_ready`: all publish-critical facts, contacts, domains, WordPress target, approval requirements, selected design, rollback plan, and indexability decisions must pass publish readiness checks.
 
 Generation readiness is not allowed to fabricate missing data. Publish readiness is stricter and blocks publication when contact, legal, domain, regional, SEO, or rollback facts are missing.
+
+## Server-Owned Readiness
+
+Readiness is a server-owned derived result, not a user-editable flag. The browser can submit facts, files, choices, and approvals, but it cannot set `readiness.generation.status` or `readiness.publish.status` to `passed`.
+
+Readiness evaluator rules:
+
+- a gate cannot be `passed` while any required check is `missing` or `failed`;
+- `checkedAt` and verification timestamps use date-time values;
+- `generation_ready` depends on enough brief, catalog, page-plan, and design information for generation, but can still keep contacts, domains, and publication facts missing;
+- `publish_ready` depends on the chosen `siteModel` and network mode;
+- single-site publish readiness does not require a fake region;
+- catalog, SEO-network, and hybrid models require publishable category/product data when those pages are part of the target;
+- network publication requires real region/site facts for pages that will be indexed;
+- publication requires real usable contacts or an approved lead intake path;
+- publication requires actual host/target, selected design, rollback plan, publishable facts, WordPress target, and approval requirements.
+
+The evaluator must reject placeholder contacts, placeholder domains, unverifiable claims, invented regional uniqueness, and user-supplied `passed` flags that are not backed by required checks.
 
 ## Structured Facts And Provenance
 
@@ -194,6 +222,29 @@ Forms must:
 - preserve enough metadata to identify site, page, region, product, and source;
 - avoid exposing Telegram tokens to generated frontend code.
 
+Lead forms must be structured in SiteSpec before generation:
+
+- form ID, name, CTA, and publication status;
+- field list with name, label, type, and required flag;
+- consent text/fact reference and whether consent is mandatory;
+- anti-spam mode and optional server-side secret reference;
+- lead storage destination;
+- Telegram destination IDs;
+- routing by project, site, and region.
+
+Telegram tokens are represented only by secret references. Generated frontend code must never receive Telegram bot tokens or chat secrets.
+
+## Regulated Product Compliance
+
+The product must support regulated-product policy without inventing legal requirements. SiteSpec stores the regulated category type, jurisdiction list, age-gate requirement, warning requirement, legal-review requirement, and publication policy.
+
+Rules:
+
+- the platform may mark a product/category as requiring review;
+- the system must not hard-code legal claims unless they are verified by a trusted legal source or operator review;
+- publication is blocked when required compliance gates are missing;
+- regulated-product checks are facts and readiness gates, not marketing copy.
+
 ## WordPress Requirements
 
 WordPress publication must eventually include:
@@ -240,6 +291,8 @@ Excluded from first MVP:
 - A user can create a project and store a valid SiteSpec.
 - A user can save and resume an incomplete draft SiteSpec without fake required data.
 - `generation_ready` and `publish_ready` are reached only through explicit readiness checks.
+- Readiness is derived by the server and cannot be self-assigned by the client.
+- Publish readiness follows the selected site model and network mode.
 - Facts keep status, provenance, verification metadata, and publication permission.
 - Uploaded files are represented by asset/artifact references with checksums and sizes, not embedded binary data.
 - A catalog import can be previewed, mapped, validated, and saved.
@@ -248,3 +301,18 @@ Excluded from first MVP:
 - The product can generate and compare design-reference prototypes.
 - The publication path produces a real WordPress site on staging before production.
 - The system prevents unapproved irreversible actions and avoids invented company facts.
+
+## Independent Review And Verification
+
+Codex execution output is not enough to accept work. A job can finish with execution result `succeeded`, `failed`, or `cancelled`; product acceptance is a separate independent result: `accepted`, `changes_required`, or `blocked`.
+
+The product must support an independent review gate before merge, production deploy, WordPress publication, DNS changes, repository visibility changes, or other irreversible actions.
+
+Review requirements:
+
+- reviewer or CI checks the actual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment;
+- executor cannot accept its own work;
+- successful command output and a Codex final report are supporting evidence, not proof of readiness;
+- forbidden files, unrelated changes, secrets, dangerous commands, and invented facts must be checked independently;
+- after `changes_required`, fixes stay in the same feature branch or PR and the full verification pass runs again;
+- merge/deploy/publication remains blocked until independent acceptance is `accepted` and required human approval is recorded.

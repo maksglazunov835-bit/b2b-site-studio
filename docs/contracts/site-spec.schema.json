@@ -2,20 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://b2b-site-studio.local/contracts/site-spec.schema.json",
   "title": "B2B Site Studio SiteSpec",
-  "description": "Draft-friendly structured source of truth for generating one WordPress site or a network of SEO sites.",
+  "description": "Draft-friendly structured source of truth for one WordPress site or a network of SEO sites.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "schemaRevision", "projectId", "documentStage", "language", "business", "readiness"],
+  "required": ["schemaVersion", "revision", "projectId", "documentStage", "siteModel", "language", "business", "readiness"],
   "properties": {
-    "version": { "type": "string", "pattern": "^1\\.1\\.0$" },
-    "schemaRevision": { "type": "integer", "minimum": 1 },
-    "projectId": {
-      "type": "string",
-      "minLength": 3,
-      "maxLength": 80,
-      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
-    },
+    "schemaVersion": { "type": "string", "pattern": "^1\\.2\\.0$" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "projectId": { "$ref": "#/$defs/id" },
     "documentStage": { "type": "string", "enum": ["draft", "generation_ready", "publish_ready"] },
+    "siteModel": {
+      "type": ["string", "null"],
+      "description": "Canonical site type selected by the user; UI may label this as siteType.",
+      "enum": ["landing", "multipage", "catalog", "seo_network", "corporate", "hybrid", null]
+    },
     "language": { "type": "string", "enum": ["ru-RU"] },
     "business": {
       "type": "object",
@@ -23,22 +23,11 @@
       "required": ["name", "type", "audience", "geography", "facts", "missingFactKeys"],
       "properties": {
         "name": { "type": ["string", "null"], "minLength": 1 },
-        "type": {
-          "type": ["string", "null"],
-          "enum": ["wholesale", "manufacturer", "distributor", "b2b_services", null]
-        },
+        "type": { "type": ["string", "null"], "enum": ["wholesale", "manufacturer", "distributor", "b2b_services", null] },
         "audience": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "geography": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "facts": {
-          "type": "array",
-          "description": "Structured company facts. Unknown facts stay unknown until supplied, imported, or verified by an explicit process.",
-          "items": { "$ref": "#/$defs/fact" }
-        },
-        "missingFactKeys": {
-          "type": "array",
-          "description": "Known gaps that must not be invented by AI.",
-          "items": { "type": "string", "minLength": 1 }
-        }
+        "facts": { "type": "array", "items": { "$ref": "#/$defs/fact" } },
+        "missingFactKeys": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     },
     "network": {
@@ -46,80 +35,50 @@
       "additionalProperties": false,
       "required": ["mode", "siteStrategy", "inheritance", "sites"],
       "properties": {
-        "mode": {
-          "type": ["string", "null"],
-          "enum": ["single", "regions", "niches", "separate_domains", null]
-        },
-        "siteStrategy": {
-          "type": ["string", "null"],
-          "enum": ["one_wordpress_multiregion", "multiple_wordpress_sites", "hybrid", null]
-        },
+        "mode": { "type": ["string", "null"], "enum": ["single", "regions", "niches", "separate_domains", null] },
+        "siteStrategy": { "type": ["string", "null"], "enum": ["one_wordpress_multiregion", "multiple_wordpress_sites", "hybrid", null] },
         "inheritance": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["shared", "overridable"],
+          "required": ["shared", "overridable", "overrideSemantics"],
           "properties": {
             "shared": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-            "overridable": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+            "overridable": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "overrideSemantics": { "type": "string", "const": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }
           }
         },
         "sites": { "type": "array", "items": { "$ref": "#/$defs/site" } }
       }
     },
+    "assetRegistry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assets"],
+      "properties": {
+        "assets": { "type": "array", "items": { "$ref": "#/$defs/assetRecord" } }
+      }
+    },
     "brand": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["displayName", "tone", "assets", "designReference"],
+      "required": ["displayName", "tone", "logoAssetId", "designReferenceAssetIds", "documentAssetIds"],
       "properties": {
         "displayName": { "type": ["string", "null"], "minLength": 1 },
         "tone": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "assets": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["logo", "designReferences", "documents"],
-          "properties": {
-            "logo": { "anyOf": [{ "$ref": "#/$defs/assetRef" }, { "type": "null" }] },
-            "designReferences": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
-            "documents": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } }
-          }
-        },
-        "designReference": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["source", "selectedAssetId", "notes"],
-          "properties": {
-            "source": {
-              "type": ["string", "null"],
-              "enum": ["uploaded", "html_css_prototype", "text_brief", "none", null]
-            },
-            "selectedAssetId": { "type": ["string", "null"], "minLength": 1 },
-            "notes": { "type": ["string", "null"] }
-          }
-        }
-      }
-    },
-    "assets": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["logos", "designReferences", "productPhotos", "variantPhotos", "documents", "imports"],
-      "properties": {
-        "logos": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
-        "designReferences": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
-        "productPhotos": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
-        "variantPhotos": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
-        "documents": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
-        "imports": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } }
+        "logoAssetId": { "type": ["string", "null"], "minLength": 1 },
+        "designReferenceAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "documentAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
     },
     "catalog": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "currency", "minOrderPolicy", "importedFiles", "variationAttributes", "categories"],
+      "required": ["source", "currency", "minOrderPolicy", "importAssetIds", "variationAttributes", "categories"],
       "properties": {
         "source": { "type": "string", "enum": ["manual", "csv", "xlsx", "api_future"] },
         "currency": { "type": ["string", "null"], "enum": ["RUB", null] },
         "minOrderPolicy": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
-        "importedFiles": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
+        "importAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "variationAttributes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "categories": { "type": "array", "items": { "$ref": "#/$defs/category" } }
       }
@@ -134,6 +93,7 @@
         "perRegionOverridesAllowed": { "type": "boolean" }
       }
     },
+    "leadForms": { "type": "array", "items": { "$ref": "#/$defs/leadForm" } },
     "pagePlan": {
       "type": "object",
       "additionalProperties": false,
@@ -142,10 +102,7 @@
         "requiredPages": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "generatedPageTypes": {
           "type": "array",
-          "items": {
-            "type": "string",
-            "enum": ["home", "catalog", "category", "product", "region", "delivery", "payment", "contacts", "faq", "legal"]
-          }
+          "items": { "type": "string", "enum": ["home", "landing", "catalog", "category", "subcategory", "product", "region", "delivery", "payment", "contacts", "faq", "legal"] }
         },
         "noindexRules": { "type": "array", "items": { "type": "string", "minLength": 1 } }
       }
@@ -194,11 +151,15 @@
         "telegram": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "tokenStorage", "leadNotification"],
+          "required": ["enabled", "tokenStorage", "destinations", "routing"],
           "properties": {
             "enabled": { "type": "boolean" },
             "tokenStorage": { "type": "string", "enum": ["server_secret", "not_configured"] },
-            "leadNotification": { "type": "boolean" }
+            "destinations": { "type": "array", "items": { "$ref": "#/$defs/telegramDestination" } },
+            "routing": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/telegramRoute" }
+            }
           }
         },
         "wordpress": {
@@ -228,35 +189,26 @@
     "compliance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["personalDataPolicy", "approvalRequiredFor", "disallowedContent"],
+      "required": ["personalDataPolicy", "approvalRequiredFor", "disallowedContent", "regulatedProducts"],
       "properties": {
         "personalDataPolicy": { "type": "string", "minLength": 1 },
         "approvalRequiredFor": {
           "type": "array",
-          "items": {
-            "type": "string",
-            "enum": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"]
-          }
+          "items": { "type": "string", "enum": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"] }
         },
-        "disallowedContent": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "disallowedContent": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "regulatedProducts": { "$ref": "#/$defs/regulatedProductPolicy" }
       }
     },
-    "readiness": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["generation", "publish"],
-      "properties": {
-        "generation": { "$ref": "#/$defs/readinessGate" },
-        "publish": { "$ref": "#/$defs/readinessGate" }
-      }
-    }
+    "readiness": { "$ref": "#/$defs/readiness" }
   },
   "allOf": [
     {
       "if": { "properties": { "documentStage": { "const": "generation_ready" } }, "required": ["documentStage"] },
       "then": {
-        "required": ["network", "brand", "assets", "catalog", "regions", "contacts", "pagePlan", "seo", "design", "contentRules", "integrations", "deployment", "compliance"],
+        "required": ["network", "assetRegistry", "brand", "catalog", "contacts", "leadForms", "pagePlan", "seo", "design", "contentRules", "integrations", "deployment", "compliance"],
         "properties": {
+          "siteModel": { "type": "string" },
           "business": {
             "properties": {
               "name": { "type": "string", "minLength": 1 },
@@ -265,62 +217,36 @@
               "geography": { "minItems": 1 }
             }
           },
-          "network": {
-            "properties": {
-              "mode": { "type": "string" },
-              "siteStrategy": { "type": "string" },
-              "sites": { "minItems": 1 }
-            }
-          },
+          "network": { "properties": { "mode": { "type": "string" }, "siteStrategy": { "type": "string" }, "sites": { "minItems": 1 } } },
           "catalog": { "properties": { "categories": { "minItems": 1 } } },
-          "pagePlan": {
-            "properties": {
-              "requiredPages": { "minItems": 1 },
-              "generatedPageTypes": { "minItems": 1 }
-            }
-          },
-          "readiness": {
-            "properties": {
-              "generation": {
-                "properties": {
-                  "status": { "const": "passed" },
-                  "checks": { "minItems": 1 }
-                }
-              }
-            }
-          }
+          "pagePlan": { "properties": { "requiredPages": { "minItems": 1 }, "generatedPageTypes": { "minItems": 1 } } },
+          "readiness": { "properties": { "generation": { "properties": { "status": { "const": "passed" }, "checks": { "minItems": 1 } } } } }
         }
       }
     },
     {
       "if": { "properties": { "documentStage": { "const": "publish_ready" } }, "required": ["documentStage"] },
       "then": {
-        "required": ["network", "brand", "assets", "catalog", "regions", "contacts", "pagePlan", "seo", "design", "contentRules", "integrations", "deployment", "compliance"],
+        "required": ["network", "assetRegistry", "brand", "catalog", "contacts", "leadForms", "pagePlan", "seo", "design", "contentRules", "integrations", "deployment", "compliance"],
         "properties": {
+          "siteModel": { "type": "string" },
           "business": {
             "properties": {
               "name": { "type": "string", "minLength": 1 },
               "type": { "type": "string" },
               "audience": { "minItems": 1 },
-              "geography": { "minItems": 1 }
+              "geography": { "minItems": 1 },
+              "facts": { "contains": { "$ref": "#/$defs/publishableFact" } }
             }
           },
-          "contacts": { "properties": { "default": { "$ref": "#/$defs/contactSet" } } },
           "network": {
             "properties": {
               "mode": { "type": "string" },
               "siteStrategy": { "type": "string" },
-              "sites": { "minItems": 1 }
+              "sites": { "minItems": 1, "items": { "$ref": "#/$defs/publishableSite" } }
             }
           },
-          "regions": { "minItems": 1 },
-          "catalog": { "properties": { "categories": { "minItems": 1 } } },
-          "design": {
-            "properties": {
-              "selectedVariantId": { "type": "string" },
-              "tokens": { "$ref": "#/$defs/designTokens" }
-            }
-          },
+          "design": { "properties": { "selectedVariantId": { "type": "string" }, "tokens": { "$ref": "#/$defs/designTokens" } } },
           "deployment": {
             "properties": {
               "environment": { "enum": ["staging", "production"] },
@@ -328,49 +254,76 @@
               "rollbackPlan": { "type": "string", "minLength": 1 }
             }
           },
+          "integrations": { "properties": { "wordpress": { "properties": { "target": { "$ref": "#/$defs/wordpressTarget" } } } } },
           "readiness": {
             "properties": {
               "generation": { "properties": { "status": { "const": "passed" } } },
-              "publish": {
-                "properties": {
-                  "status": { "const": "passed" },
-                  "checks": { "minItems": 1 }
-                }
-              }
+              "publish": { "properties": { "status": { "const": "passed" }, "checks": { "minItems": 1 } } }
             }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "network": { "properties": { "mode": { "const": "single" } }, "required": ["mode"] } }, "required": ["network"] },
+            "then": { "properties": { "regions": { "maxItems": 0 } } },
+            "else": { "properties": { "regions": { "minItems": 1 } }, "required": ["regions"] }
+          },
+          {
+            "if": { "properties": { "siteModel": { "enum": ["catalog", "seo_network", "hybrid"] } }, "required": ["siteModel"] },
+            "then": { "properties": { "catalog": { "properties": { "categories": { "contains": { "$ref": "#/$defs/categoryWithPublishableProduct" } } } } } }
+          }
+        ],
+        "anyOf": [
+          { "properties": { "contacts": { "properties": { "default": { "$ref": "#/$defs/publishableContactSet" } } } } },
+          { "properties": { "leadForms": { "contains": { "$ref": "#/$defs/publishableLeadForm" } } } }
+        ]
       }
     }
   ],
   "$defs": {
+    "id": { "type": "string", "minLength": 3, "maxLength": 120, "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" },
     "fact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["key", "value", "status", "provenance", "verifiedAt", "publishAllowed"],
+      "required": ["key", "value", "status", "provenance", "verifiedAt", "verification", "publishAllowed"],
       "properties": {
         "key": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9_.-]*$" },
         "value": { "type": ["string", "number", "boolean", "object", "array", "null"] },
         "status": { "type": "string", "enum": ["unknown", "supplied", "imported", "verified"] },
         "provenance": { "$ref": "#/$defs/provenance" },
-        "verifiedAt": { "type": ["string", "null"] },
+        "verifiedAt": { "type": ["string", "null"], "format": "date-time" },
+        "verification": { "anyOf": [{ "$ref": "#/$defs/verification" }, { "type": "null" }] },
         "publishAllowed": { "type": "boolean" }
       },
       "allOf": [
         {
           "if": { "properties": { "status": { "const": "unknown" } }, "required": ["status"] },
+          "then": { "properties": { "value": { "type": "null" }, "verifiedAt": { "type": "null" }, "verification": { "type": "null" }, "publishAllowed": { "const": false } } }
+        },
+        {
+          "if": { "properties": { "status": { "const": "verified" } }, "required": ["status"] },
           "then": {
             "properties": {
-              "value": { "type": "null" },
-              "publishAllowed": { "const": false },
-              "verifiedAt": { "type": "null" }
+              "verifiedAt": { "type": "string", "format": "date-time" },
+              "verification": { "$ref": "#/$defs/verification" },
+              "provenance": { "properties": { "sourceType": { "not": { "const": "system_inference" } } } }
             }
           }
         },
         {
-          "if": { "properties": { "status": { "const": "verified" } }, "required": ["status"] },
-          "then": { "properties": { "verifiedAt": { "type": "string", "minLength": 1 } } }
+          "if": { "properties": { "publishAllowed": { "const": true } }, "required": ["publishAllowed"] },
+          "then": { "properties": { "status": { "const": "verified" }, "value": { "not": { "type": "null" } } } }
+        },
+        {
+          "if": { "properties": { "provenance": { "properties": { "sourceType": { "const": "system_inference" } }, "required": ["sourceType"] } }, "required": ["provenance"] },
+          "then": { "properties": { "status": { "not": { "const": "verified" } }, "publishAllowed": { "const": false } } }
         }
+      ]
+    },
+    "publishableFact": {
+      "allOf": [
+        { "$ref": "#/$defs/fact" },
+        { "properties": { "status": { "const": "verified" }, "publishAllowed": { "const": true }, "value": { "not": { "type": "null" } }, "verification": { "$ref": "#/$defs/verification" } } }
       ]
     },
     "provenance": {
@@ -384,11 +337,26 @@
         "notes": { "type": ["string", "null"] }
       }
     },
-    "assetRef": {
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorType", "actorId", "verifiedAt", "evidenceArtifactIds", "evidenceNote"],
+      "properties": {
+        "actorType": { "type": "string", "enum": ["operator", "trusted_import", "admin_review"] },
+        "actorId": { "type": "string", "minLength": 1 },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "evidenceArtifactIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "evidenceNote": { "type": "string", "minLength": 1 }
+      }
+    },
+    "assetRecord": {
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "role", "fileName", "contentType", "sha256", "sizeBytes"],
-      "anyOf": [{ "required": ["assetId"] }, { "required": ["artifactId"] }],
+      "oneOf": [
+        { "required": ["assetId"], "not": { "required": ["artifactId"] } },
+        { "required": ["artifactId"], "not": { "required": ["assetId"] } }
+      ],
       "properties": {
         "assetId": { "type": "string", "minLength": 1 },
         "artifactId": { "type": "string", "minLength": 1 },
@@ -396,8 +364,8 @@
         "role": { "type": "string", "minLength": 1 },
         "fileName": { "type": "string", "minLength": 1 },
         "contentType": { "type": "string", "minLength": 1 },
-        "sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
-        "sizeBytes": { "type": ["integer", "null"], "minimum": 0 }
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 1 }
       }
     },
     "site": {
@@ -405,24 +373,30 @@
       "additionalProperties": false,
       "required": ["id", "name", "domainMode", "host", "regionIds", "niche", "status", "overrides"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "id": { "$ref": "#/$defs/id" },
         "name": { "type": ["string", "null"], "minLength": 1 },
         "domainMode": { "type": ["string", "null"], "enum": ["single_domain", "subdomain", "subdirectory", "separate_domain", null] },
         "host": { "$ref": "#/$defs/hostConfig" },
-        "regionIds": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9-]+$" } },
+        "regionIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
         "niche": { "type": ["string", "null"], "minLength": 1 },
         "status": { "type": "string", "enum": ["draft", "staging", "published"] },
         "overrides": { "$ref": "#/$defs/overrideSet" }
       }
+    },
+    "publishableSite": {
+      "allOf": [
+        { "$ref": "#/$defs/site" },
+        { "properties": { "host": { "$ref": "#/$defs/publishableHostConfig" } } }
+      ]
     },
     "region": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "name", "slug", "facts", "overrides"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "id": { "$ref": "#/$defs/id" },
         "name": { "type": "string", "minLength": 1 },
-        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "slug": { "$ref": "#/$defs/slug" },
         "facts": { "type": "array", "items": { "$ref": "#/$defs/fact" } },
         "overrides": { "$ref": "#/$defs/overrideSet" }
       }
@@ -431,19 +405,31 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "contacts": { "$ref": "#/$defs/contactSet" },
-        "address": { "$ref": "#/$defs/fact" },
+        "contactOverrides": { "$ref": "#/$defs/contactOverrides" },
+        "address": { "$ref": "#/$defs/factOverride" },
         "delivery": { "$ref": "#/$defs/deliveryOverride" },
-        "regionalOffer": { "$ref": "#/$defs/fact" },
-        "minOrderPolicy": { "$ref": "#/$defs/fact" },
+        "regionalOffer": { "$ref": "#/$defs/factOverride" },
+        "minOrderPolicy": { "$ref": "#/$defs/factOverride" },
         "pricingPolicy": { "$ref": "#/$defs/pricingPolicy" },
         "catalogScope": { "$ref": "#/$defs/catalogScope" },
+        "priceOverrides": { "type": "array", "items": { "$ref": "#/$defs/productPriceOverride" } },
         "regionalStock": { "type": "array", "items": { "$ref": "#/$defs/regionalStock" } },
         "seo": { "$ref": "#/$defs/seoOverride" },
         "indexability": { "$ref": "#/$defs/indexability" },
         "canonicalPolicy": { "$ref": "#/$defs/canonicalPolicy" },
         "host": { "$ref": "#/$defs/hostConfig" }
       }
+    },
+    "factOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "clearAllowed"],
+      "properties": {
+        "value": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "clearAllowed": { "type": "boolean" }
+      },
+      "if": { "properties": { "value": { "type": "null" } }, "required": ["value"] },
+      "then": { "properties": { "clearAllowed": { "const": true } } }
     },
     "hostConfig": {
       "type": "object",
@@ -455,6 +441,12 @@
         "path": { "type": ["string", "null"], "pattern": "^/.*" }
       }
     },
+    "publishableHostConfig": {
+      "allOf": [
+        { "$ref": "#/$defs/hostConfig" },
+        { "anyOf": [{ "properties": { "domain": { "type": "string", "minLength": 1 } } }, { "properties": { "subdomain": { "type": "string", "minLength": 1 } } }] }
+      ]
+    },
     "contactSet": {
       "type": "object",
       "additionalProperties": false,
@@ -464,6 +456,28 @@
         "email": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
         "messengers": { "type": "array", "items": { "$ref": "#/$defs/messengerContact" } },
         "address": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] }
+      }
+    },
+    "publishableContactSet": {
+      "allOf": [
+        { "$ref": "#/$defs/contactSet" },
+        {
+          "anyOf": [
+            { "properties": { "phone": { "$ref": "#/$defs/publishableFact" } } },
+            { "properties": { "email": { "$ref": "#/$defs/publishableFact" } } },
+            { "properties": { "messengers": { "contains": { "properties": { "value": { "$ref": "#/$defs/publishableFact" } }, "required": ["value"] } } } }
+          ]
+        }
+      ]
+    },
+    "contactOverrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phone": { "$ref": "#/$defs/factOverride" },
+        "email": { "$ref": "#/$defs/factOverride" },
+        "address": { "$ref": "#/$defs/factOverride" },
+        "messengers": { "type": "array", "items": { "$ref": "#/$defs/messengerContact" } }
       }
     },
     "messengerContact": {
@@ -480,7 +494,7 @@
       "additionalProperties": false,
       "required": ["summary", "facts"],
       "properties": {
-        "summary": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "summary": { "$ref": "#/$defs/factOverride" },
         "facts": { "type": "array", "items": { "$ref": "#/$defs/fact" } }
       }
     },
@@ -490,7 +504,7 @@
       "required": ["mode", "notes"],
       "properties": {
         "mode": { "type": "string", "enum": ["inherit", "override", "hide", "on_request"] },
-        "notes": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] }
+        "notes": { "$ref": "#/$defs/factOverride" }
       }
     },
     "catalogScope": {
@@ -498,19 +512,32 @@
       "additionalProperties": false,
       "required": ["includeCategoryIds", "excludeCategoryIds", "includeProductIds", "excludeProductIds"],
       "properties": {
-        "includeCategoryIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "excludeCategoryIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "includeProductIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "excludeProductIds": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "includeCategoryIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "excludeCategoryIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "includeProductIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "excludeProductIds": { "type": "array", "items": { "$ref": "#/$defs/id" } }
       }
+    },
+    "productPriceOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productId", "variantId", "price", "clearAllowed"],
+      "properties": {
+        "productId": { "$ref": "#/$defs/id" },
+        "variantId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "price": { "anyOf": [{ "$ref": "#/$defs/price" }, { "type": "null" }] },
+        "clearAllowed": { "type": "boolean" }
+      },
+      "if": { "properties": { "price": { "type": "null" } }, "required": ["price"] },
+      "then": { "properties": { "clearAllowed": { "const": true } } }
     },
     "regionalStock": {
       "type": "object",
       "additionalProperties": false,
       "required": ["productId", "variantId", "stock", "quantity"],
       "properties": {
-        "productId": { "type": "string", "minLength": 1 },
-        "variantId": { "type": ["string", "null"], "minLength": 1 },
+        "productId": { "$ref": "#/$defs/id" },
+        "variantId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
         "stock": { "type": "string", "enum": ["in_stock", "limited", "on_request", "out_of_stock", "unknown"] },
         "quantity": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] }
       }
@@ -519,9 +546,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "title": { "$ref": "#/$defs/fact" },
-        "description": { "$ref": "#/$defs/fact" },
-        "h1": { "$ref": "#/$defs/fact" },
+        "title": { "$ref": "#/$defs/factOverride" },
+        "description": { "$ref": "#/$defs/factOverride" },
+        "h1": { "$ref": "#/$defs/factOverride" },
         "additionalBlocks": { "type": "array", "items": { "$ref": "#/$defs/contentBlock" } }
       }
     },
@@ -530,7 +557,7 @@
       "additionalProperties": false,
       "required": ["id", "role", "content"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
+        "id": { "$ref": "#/$defs/id" },
         "role": { "type": "string", "minLength": 1 },
         "content": { "$ref": "#/$defs/fact" }
       }
@@ -557,26 +584,35 @@
     "category": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "slug", "description", "products", "assetIds", "publicationStatus"],
+      "required": ["id", "parentId", "path", "name", "slug", "description", "productIds", "products", "assetIds", "publicationStatus"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "id": { "$ref": "#/$defs/id" },
+        "parentId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "path": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1 },
         "name": { "type": ["string", "null"], "minLength": 1 },
-        "slug": { "type": ["string", "null"], "pattern": "^[a-z0-9-]+$" },
+        "slug": { "anyOf": [{ "$ref": "#/$defs/slug" }, { "type": "null" }] },
         "description": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
+        "productIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
         "products": { "type": "array", "items": { "$ref": "#/$defs/product" } },
         "assetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "publicationStatus": { "type": "string", "enum": ["draft", "ready", "published", "noindex"] }
       }
     },
+    "categoryWithPublishableProduct": {
+      "allOf": [
+        { "$ref": "#/$defs/category" },
+        { "properties": { "products": { "contains": { "$ref": "#/$defs/publishableProduct" } } } }
+      ]
+    },
     "product": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "sku", "photos", "price", "stock", "minOrder", "variants", "publicationStatus"],
+      "required": ["id", "name", "sku", "photoAssetIds", "price", "stock", "minOrder", "variants", "publicationStatus"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "id": { "$ref": "#/$defs/id" },
         "name": { "type": ["string", "null"], "minLength": 1 },
         "sku": { "type": ["string", "null"], "minLength": 1 },
-        "photos": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
+        "photoAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "price": { "anyOf": [{ "$ref": "#/$defs/price" }, { "type": "null" }] },
         "stock": { "type": ["string", "null"], "enum": ["in_stock", "limited", "on_request", "out_of_stock", "unknown", null] },
         "minOrder": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
@@ -584,19 +620,25 @@
         "publicationStatus": { "type": "string", "enum": ["draft", "ready", "published", "hidden"] }
       }
     },
+    "publishableProduct": {
+      "allOf": [
+        { "$ref": "#/$defs/product" },
+        { "properties": { "publicationStatus": { "enum": ["ready", "published"] }, "name": { "type": "string" }, "sku": { "type": "string" }, "price": { "$ref": "#/$defs/price" } } }
+      ]
+    },
     "productVariant": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "sku", "attributes", "priceOverride", "stock", "minOrder", "packaging", "photos", "publicationStatus"],
+      "required": ["id", "sku", "attributes", "priceOverride", "stock", "minOrder", "packaging", "photoAssetIds", "publicationStatus"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "id": { "$ref": "#/$defs/id" },
         "sku": { "type": ["string", "null"], "minLength": 1 },
         "attributes": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
         "priceOverride": { "anyOf": [{ "$ref": "#/$defs/price" }, { "type": "null" }] },
         "stock": { "type": ["string", "null"], "enum": ["in_stock", "limited", "on_request", "out_of_stock", "unknown", null] },
         "minOrder": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
         "packaging": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] },
-        "photos": { "type": "array", "items": { "$ref": "#/$defs/assetRef" } },
+        "photoAssetIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "publicationStatus": { "type": "string", "enum": ["draft", "ready", "published", "hidden"] }
       }
     },
@@ -609,6 +651,96 @@
         "currency": { "type": ["string", "null"], "enum": ["RUB", null] },
         "visibility": { "type": "string", "enum": ["visible", "on_request", "hidden", "unknown"] },
         "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "leadForm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "cta", "fields", "consent", "antiSpam", "storage", "destinationIds", "publicationStatus"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": ["string", "null"], "minLength": 1 },
+        "cta": { "type": ["string", "null"], "minLength": 1 },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/leadFormField" } },
+        "consent": { "$ref": "#/$defs/leadFormConsent" },
+        "antiSpam": { "$ref": "#/$defs/antiSpam" },
+        "storage": { "$ref": "#/$defs/leadStorage" },
+        "destinationIds": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "publicationStatus": { "type": "string", "enum": ["draft", "approved", "disabled"] }
+      }
+    },
+    "publishableLeadForm": {
+      "allOf": [
+        { "$ref": "#/$defs/leadForm" },
+        {
+          "properties": {
+            "cta": { "type": "string", "minLength": 1 },
+            "fields": { "minItems": 1 },
+            "publicationStatus": { "const": "approved" },
+            "storage": { "properties": { "enabled": { "const": true } } },
+            "destinationIds": { "minItems": 1 }
+          }
+        }
+      ]
+    },
+    "leadFormField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "label", "type", "required"],
+      "properties": {
+        "name": { "$ref": "#/$defs/slug" },
+        "label": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "enum": ["text", "phone", "email", "textarea", "select", "checkbox"] },
+        "required": { "type": "boolean" }
+      }
+    },
+    "leadFormConsent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "textFact"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "textFact": { "anyOf": [{ "$ref": "#/$defs/fact" }, { "type": "null" }] }
+      }
+    },
+    "antiSpam": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "secretRef"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["honeypot", "turnstile", "captcha", "manual_review", "none"] },
+        "secretRef": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "leadStorage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "destination"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "destination": { "type": ["string", "null"], "enum": ["platform_database", "disabled", null] }
+      }
+    },
+    "telegramDestination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "secretRef", "enabled"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1 },
+        "secretRef": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "telegramRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "siteId", "regionId", "destinationId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/id" },
+        "siteId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "regionId": { "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "destinationId": { "$ref": "#/$defs/id" }
       }
     },
     "urlTemplate": {
@@ -646,11 +778,11 @@
     "designPrototype": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["variantId", "prototypeAssetId", "screenshotAssetId", "status"],
+      "required": ["variantId", "prototypeArtifactId", "screenshotArtifactId", "status"],
       "properties": {
-        "variantId": { "type": "string", "minLength": 1 },
-        "prototypeAssetId": { "type": "string", "minLength": 1 },
-        "screenshotAssetId": { "type": ["string", "null"], "minLength": 1 },
+        "variantId": { "$ref": "#/$defs/id" },
+        "prototypeArtifactId": { "type": "string", "minLength": 1 },
+        "screenshotArtifactId": { "type": ["string", "null"], "minLength": 1 },
         "status": { "type": "string", "enum": ["draft", "rendered", "selected", "rejected"] }
       }
     },
@@ -659,8 +791,8 @@
       "additionalProperties": false,
       "required": ["siteUrl", "authRef"],
       "properties": {
-        "siteUrl": { "type": ["string", "null"], "minLength": 1 },
-        "authRef": { "type": ["string", "null"], "minLength": 1 }
+        "siteUrl": { "type": "string", "minLength": 1 },
+        "authRef": { "type": "string", "minLength": 1 }
       }
     },
     "deploymentTarget": {
@@ -669,8 +801,33 @@
       "required": ["kind", "host", "path"],
       "properties": {
         "kind": { "type": "string", "enum": ["wordpress_staging", "wordpress_production"] },
-        "host": { "$ref": "#/$defs/hostConfig" },
+        "host": { "$ref": "#/$defs/publishableHostConfig" },
         "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "regulatedProductPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "categoryType", "jurisdictions", "ageGateRequired", "warningRequired", "legalReviewRequired", "publicationPolicy"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "categoryType": { "type": ["string", "null"], "minLength": 1 },
+        "jurisdictions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ageGateRequired": { "type": "boolean" },
+        "warningRequired": { "type": "boolean" },
+        "legalReviewRequired": { "type": "boolean" },
+        "publicationPolicy": { "type": "string", "enum": ["not_regulated", "block_until_reviewed", "allow_after_verified_review"] }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownedBy", "evaluatorVersion", "generation", "publish"],
+      "properties": {
+        "ownedBy": { "type": "string", "const": "server" },
+        "evaluatorVersion": { "type": "string", "minLength": 1 },
+        "generation": { "$ref": "#/$defs/readinessGate" },
+        "publish": { "$ref": "#/$defs/readinessGate" }
       }
     },
     "readinessGate": {
@@ -679,58 +836,47 @@
       "required": ["status", "checkedAt", "checks"],
       "properties": {
         "status": { "type": "string", "enum": ["not_ready", "passed", "failed"] },
-        "checkedAt": { "type": ["string", "null"] },
+        "checkedAt": { "type": ["string", "null"], "format": "date-time" },
         "checks": { "type": "array", "items": { "$ref": "#/$defs/readinessCheck" } }
-      }
+      },
+      "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+      "then": { "not": { "properties": { "checks": { "contains": { "properties": { "required": { "const": true }, "status": { "enum": ["missing", "failed"] } }, "required": ["required", "status"] } } }, "required": ["checks"] } }
     },
     "readinessCheck": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "status", "message"],
+      "required": ["id", "required", "status", "message"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
         "status": { "type": "string", "enum": ["missing", "passed", "failed", "not_applicable"] },
         "message": { "type": "string", "minLength": 1 }
       }
-    }
+    },
+    "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" }
   },
   "examples": [
     {
-      "version": "1.1.0",
-      "schemaRevision": 1,
+      "schemaVersion": "1.2.0",
+      "revision": 1,
       "projectId": "draft-wholesale-project",
       "documentStage": "draft",
+      "siteModel": null,
       "language": "ru-RU",
-      "business": {
-        "name": null,
-        "type": null,
-        "audience": [],
-        "geography": [],
-        "facts": [],
-        "missingFactKeys": ["company_name", "phone", "email", "address", "regions", "catalog"]
-      },
+      "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": ["company_name", "phone", "email", "address", "regions", "catalog"] },
       "readiness": {
-        "generation": {
-          "status": "not_ready",
-          "checkedAt": null,
-          "checks": [
-            { "id": "business_model_selected", "status": "missing", "message": "Business type has not been selected yet." }
-          ]
-        },
-        "publish": {
-          "status": "not_ready",
-          "checkedAt": null,
-          "checks": [
-            { "id": "contacts_verified", "status": "missing", "message": "Contacts are not supplied or verified yet." }
-          ]
-        }
+        "ownedBy": "server",
+        "evaluatorVersion": "site-readiness-1",
+        "generation": { "status": "not_ready", "checkedAt": null, "checks": [{ "id": "business_model_selected", "required": true, "status": "missing", "message": "Business type has not been selected yet." }] },
+        "publish": { "status": "not_ready", "checkedAt": null, "checks": [{ "id": "contacts_or_lead_form", "required": true, "status": "missing", "message": "Contacts or approved lead form are not ready." }] }
       }
     },
     {
-      "version": "1.1.0",
-      "schemaRevision": 7,
+      "schemaVersion": "1.2.0",
+      "revision": 8,
       "projectId": "demo-regional-wholesale-network",
       "documentStage": "generation_ready",
+      "siteModel": "seo_network",
       "language": "ru-RU",
       "business": {
         "name": "Demo Opt Market",
@@ -738,423 +884,205 @@
         "audience": ["розничные магазины", "региональные дилеры", "корпоративные закупщики"],
         "geography": ["Россия"],
         "facts": [
-          {
-            "key": "business.model",
-            "value": "Оптовая продажа товаров юридическим лицам.",
-            "status": "supplied",
-            "provenance": { "sourceType": "user_input", "sourceId": "brief-field-business-model", "assetId": null, "notes": "Demo example data, not a verified real company claim." },
-            "verifiedAt": null,
-            "publishAllowed": false
-          },
-          {
-            "key": "catalog.import_source",
-            "value": "Каталог загружен из демонстрационного XLSX-импорта.",
-            "status": "imported",
-            "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": "Used for schema example validation." },
-            "verifiedAt": null,
-            "publishAllowed": false
-          }
+          { "key": "business.model", "value": "Оптовая продажа товаров юридическим лицам.", "status": "supplied", "provenance": { "sourceType": "user_input", "sourceId": "brief-field-business-model", "assetId": null, "notes": "Demo example data; not verified for publication." }, "verifiedAt": null, "verification": null, "publishAllowed": false },
+          { "key": "catalog.import_source", "value": "Каталог загружен из демонстрационного XLSX-импорта.", "status": "imported", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": "Used for schema example validation." }, "verifiedAt": null, "verification": null, "publishAllowed": false }
         ],
         "missingFactKeys": ["legal_name", "real_phone", "real_email", "real_address", "certificates", "reviews"]
       },
       "network": {
         "mode": "regions",
         "siteStrategy": "one_wordpress_multiregion",
-        "inheritance": {
-          "shared": ["brand", "base_catalog", "design_tokens", "default_page_plan"],
-          "overridable": ["contacts", "address", "delivery", "regional_offer", "min_order", "pricing", "catalog_scope", "stock", "seo", "indexability", "canonical", "host"]
-        },
+        "inheritance": { "shared": ["brand", "base_catalog", "design_tokens", "default_page_plan"], "overridable": ["contacts", "address", "delivery", "regional_offer", "min_order", "pricing", "catalog_scope", "stock", "seo", "indexability", "canonical", "host"], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" },
         "sites": [
-          {
-            "id": "main-regional-site",
-            "name": "Demo Opt Market Russia",
-            "domainMode": "subdirectory",
-            "host": { "domain": null, "subdomain": null, "path": "/regions/" },
-            "regionIds": ["moscow", "spb", "kazan"],
-            "niche": "regional wholesale catalog",
-            "status": "draft",
-            "overrides": {
-              "host": { "domain": null, "subdomain": null, "path": "/regions/" },
-              "canonicalPolicy": { "mode": "self", "targetPath": null }
-            }
-          }
+          { "id": "main-regional-site", "name": "Demo Opt Market Russia", "domainMode": "subdirectory", "host": { "domain": null, "subdomain": null, "path": "/regions/" }, "regionIds": ["moscow", "spb", "kazan"], "niche": "regional wholesale catalog", "status": "draft", "overrides": { "host": { "domain": null, "subdomain": null, "path": "/regions/" }, "canonicalPolicy": { "mode": "self", "targetPath": null } } }
         ]
       },
-      "brand": {
-        "displayName": "Demo Opt Market",
-        "tone": ["деловой", "короткий", "без неподтвержденных обещаний"],
-        "assets": {
-          "logo": null,
-          "designReferences": [
-            {
-              "assetId": "asset_design_reference_001",
-              "kind": "design_reference",
-              "role": "uploaded_reference",
-              "fileName": "b2b-dashboard-reference.png",
-              "contentType": "image/png",
-              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "sizeBytes": 204800
-            }
-          ],
-          "documents": []
-        },
-        "designReference": {
-          "source": "html_css_prototype",
-          "selectedAssetId": "asset_design_reference_001",
-          "notes": "Create executable HTML/CSS prototypes before WordPress implementation."
-        }
-      },
-      "assets": {
-        "logos": [],
-        "designReferences": [
-          {
-            "assetId": "asset_design_reference_001",
-            "kind": "design_reference",
-            "role": "uploaded_reference",
-            "fileName": "b2b-dashboard-reference.png",
-            "contentType": "image/png",
-            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "sizeBytes": 204800
-          }
-        ],
-        "productPhotos": [
-          {
-            "assetId": "asset_product_photo_tea_001",
-            "kind": "product_photo",
-            "role": "catalog_photo",
-            "fileName": "tea-classic.png",
-            "contentType": "image/png",
-            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "sizeBytes": 153600
-          }
-        ],
-        "variantPhotos": [
-          {
-            "assetId": "asset_variant_photo_tea_100",
-            "kind": "variant_photo",
-            "role": "variant_packaging_photo",
-            "fileName": "tea-classic-100g.png",
-            "contentType": "image/png",
-            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-            "sizeBytes": 102400
-          }
-        ],
-        "documents": [],
-        "imports": [
-          {
-            "assetId": "asset_import_demo_xlsx",
-            "kind": "import_file",
-            "role": "catalog_import",
-            "fileName": "demo-catalog.xlsx",
-            "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            "sizeBytes": 40960
-          }
+      "assetRegistry": {
+        "assets": [
+          { "assetId": "asset_design_reference_001", "kind": "design_reference", "role": "uploaded_reference", "fileName": "b2b-dashboard-reference.png", "contentType": "image/png", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "sizeBytes": 204800 },
+          { "assetId": "asset_product_photo_tea_001", "kind": "product_photo", "role": "catalog_photo", "fileName": "tea-classic.png", "contentType": "image/png", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "sizeBytes": 153600 },
+          { "assetId": "asset_variant_photo_tea_100", "kind": "variant_photo", "role": "variant_packaging_photo", "fileName": "tea-classic-100g.png", "contentType": "image/png", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "sizeBytes": 102400 },
+          { "assetId": "asset_import_demo_xlsx", "kind": "import_file", "role": "catalog_import", "fileName": "demo-catalog.xlsx", "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "sizeBytes": 40960 },
+          { "artifactId": "artifact_prototype_001", "kind": "prototype", "role": "design_variant", "fileName": "reference-001.html", "contentType": "text/html", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "sizeBytes": 24576 }
         ]
       },
+      "brand": { "displayName": "Demo Opt Market", "tone": ["деловой", "короткий", "без неподтвержденных обещаний"], "logoAssetId": null, "designReferenceAssetIds": ["asset_design_reference_001"], "documentAssetIds": [] },
       "catalog": {
         "source": "xlsx",
         "currency": "RUB",
-        "minOrderPolicy": {
-          "key": "catalog.min_order_policy",
-          "value": "Минимальная партия задается на уровне товара или варианта.",
-          "status": "imported",
-          "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": "Demo catalog import." },
-          "verifiedAt": null,
-          "publishAllowed": false
-        },
-        "importedFiles": [
-          {
-            "assetId": "asset_import_demo_xlsx",
-            "kind": "import_file",
-            "role": "catalog_import",
-            "fileName": "demo-catalog.xlsx",
-            "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            "sizeBytes": 40960
-          }
-        ],
+        "minOrderPolicy": { "key": "catalog.min_order_policy", "value": "Минимальная партия задается на уровне товара или варианта.", "status": "imported", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": "Demo catalog import." }, "verifiedAt": null, "verification": null, "publishAllowed": false },
+        "importAssetIds": ["asset_import_demo_xlsx"],
         "variationAttributes": ["вкус", "фасовка", "крепость", "размер", "цвет", "SKU"],
         "categories": [
-          {
-            "id": "tea",
-            "name": "Чай оптом",
-            "slug": "tea-optom",
-            "description": {
-              "key": "category.tea.description",
-              "value": "Оптовая категория для листового и пакетированного чая.",
-              "status": "imported",
-              "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null },
-              "verifiedAt": null,
-              "publishAllowed": false
-            },
-            "products": [
-              {
-                "id": "black-tea-classic",
-                "name": "Чай черный классический",
-                "sku": "TEA-BLK-001",
-                "photos": [
-                  {
-                    "assetId": "asset_product_photo_tea_001",
-                    "kind": "product_photo",
-                    "role": "catalog_photo",
-                    "fileName": "tea-classic.png",
-                    "contentType": "image/png",
-                    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "sizeBytes": 153600
-                  }
-                ],
-                "price": { "value": 420, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null } },
-                "stock": "in_stock",
-                "minOrder": {
-                  "key": "product.black-tea-classic.min_order",
-                  "value": "10 коробок",
-                  "status": "imported",
-                  "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null },
-                  "verifiedAt": null,
-                  "publishAllowed": false
-                },
-                "variants": [
-                  {
-                    "id": "black-tea-100",
-                    "sku": "TEA-BLK-001-100",
-                    "attributes": { "фасовка": "100 г", "вкус": "классический" },
-                    "priceOverride": null,
-                    "stock": "in_stock",
-                    "minOrder": null,
-                    "packaging": {
-                      "key": "variant.black-tea-100.packaging",
-                      "value": "100 г",
-                      "status": "imported",
-                      "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null },
-                      "verifiedAt": null,
-                      "publishAllowed": false
-                    },
-                    "photos": [
-                      {
-                        "assetId": "asset_variant_photo_tea_100",
-                        "kind": "variant_photo",
-                        "role": "variant_packaging_photo",
-                        "fileName": "tea-classic-100g.png",
-                        "contentType": "image/png",
-                        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-                        "sizeBytes": 102400
-                      }
-                    ],
-                    "publicationStatus": "draft"
-                  }
-                ],
-                "publicationStatus": "draft"
-              }
-            ],
-            "assetIds": [],
-            "publicationStatus": "draft"
-          },
-          {
-            "id": "coffee",
-            "name": "Кофе оптом",
-            "slug": "coffee-optom",
-            "description": null,
-            "products": [
-              {
-                "id": "coffee-arabica",
-                "name": "Кофе арабика",
-                "sku": "COF-ARA-001",
-                "photos": [],
-                "price": { "value": 890, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null } },
-                "stock": "limited",
-                "minOrder": null,
-                "variants": [
-                  { "id": "coffee-arabica-beans", "sku": "COF-ARA-001-B", "attributes": { "помол": "зерно", "фасовка": "1 кг" }, "priceOverride": null, "stock": "limited", "minOrder": null, "packaging": null, "photos": [], "publicationStatus": "draft" }
-                ],
-                "publicationStatus": "draft"
-              }
-            ],
-            "assetIds": [],
-            "publicationStatus": "draft"
-          },
-          { "id": "sweets", "name": "Сладости оптом", "slug": "sweets-optom", "description": null, "products": [], "assetIds": [], "publicationStatus": "draft" },
-          { "id": "snacks", "name": "Снеки оптом", "slug": "snacks-optom", "description": null, "products": [], "assetIds": [], "publicationStatus": "draft" },
-          { "id": "drinks", "name": "Напитки оптом", "slug": "drinks-optom", "description": null, "products": [], "assetIds": [], "publicationStatus": "draft" },
-          { "id": "packaging", "name": "Упаковка оптом", "slug": "packaging-optom", "description": null, "products": [], "assetIds": [], "publicationStatus": "draft" }
+          { "id": "tea", "parentId": null, "path": ["tea"], "name": "Чай оптом", "slug": "tea-optom", "description": null, "productIds": ["black-tea-classic"], "products": [{ "id": "black-tea-classic", "name": "Чай черный классический", "sku": "TEA-BLK-001", "photoAssetIds": ["asset_product_photo_tea_001"], "price": { "value": 420, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null } }, "stock": "in_stock", "minOrder": null, "variants": [{ "id": "black-tea-100", "sku": "TEA-BLK-001-100", "attributes": { "фасовка": "100 г", "вкус": "классический" }, "priceOverride": { "value": 390, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null } }, "stock": "in_stock", "minOrder": null, "packaging": null, "photoAssetIds": ["asset_variant_photo_tea_100"], "publicationStatus": "draft" }], "publicationStatus": "draft" }], "assetIds": [], "publicationStatus": "draft" },
+          { "id": "green-tea", "parentId": "tea", "path": ["tea", "green-tea"], "name": "Зеленый чай оптом", "slug": "green-tea-optom", "description": null, "productIds": [], "products": [], "assetIds": [], "publicationStatus": "draft" },
+          { "id": "coffee", "parentId": null, "path": ["coffee"], "name": "Кофе оптом", "slug": "coffee-optom", "description": null, "productIds": ["coffee-arabica"], "products": [{ "id": "coffee-arabica", "name": "Кофе арабика", "sku": "COF-ARA-001", "photoAssetIds": [], "price": { "value": 890, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "import-demo-001", "assetId": "asset_import_demo_xlsx", "notes": null } }, "stock": "limited", "minOrder": null, "variants": [{ "id": "coffee-arabica-beans", "sku": "COF-ARA-001-B", "attributes": { "помол": "зерно", "фасовка": "1 кг" }, "priceOverride": null, "stock": "limited", "minOrder": null, "packaging": null, "photoAssetIds": [], "publicationStatus": "draft" }], "publicationStatus": "draft" }], "assetIds": [], "publicationStatus": "draft" },
+          { "id": "sweets", "parentId": null, "path": ["sweets"], "name": "Сладости оптом", "slug": "sweets-optom", "description": null, "productIds": [], "products": [], "assetIds": [], "publicationStatus": "draft" },
+          { "id": "snacks", "parentId": null, "path": ["snacks"], "name": "Снеки оптом", "slug": "snacks-optom", "description": null, "productIds": [], "products": [], "assetIds": [], "publicationStatus": "draft" },
+          { "id": "drinks", "parentId": null, "path": ["drinks"], "name": "Напитки оптом", "slug": "drinks-optom", "description": null, "productIds": [], "products": [], "assetIds": [], "publicationStatus": "draft" }
         ]
       },
       "regions": [
-        {
-          "id": "moscow",
-          "name": "Москва",
-          "slug": "moskva",
-          "facts": [
-            {
-              "key": "region.moscow.delivery",
-              "value": "Для Москвы задан отдельный демонстрационный блок доставки.",
-              "status": "supplied",
-              "provenance": { "sourceType": "user_input", "sourceId": "brief-region-moscow", "assetId": null, "notes": "Demo value; not verified for publication." },
-              "verifiedAt": null,
-              "publishAllowed": false
-            }
-          ],
-          "overrides": {
-            "delivery": {
-              "summary": {
-                "key": "region.moscow.delivery_summary",
-                "value": "Доставка по Москве уточняется перед публикацией.",
-                "status": "supplied",
-                "provenance": { "sourceType": "user_input", "sourceId": "brief-region-moscow", "assetId": null, "notes": null },
-                "verifiedAt": null,
-                "publishAllowed": false
-              },
-              "facts": []
-            },
-            "regionalOffer": {
-              "key": "region.moscow.offer",
-              "value": "Региональный оффер должен быть подтвержден оператором перед публикацией.",
-              "status": "supplied",
-              "provenance": { "sourceType": "user_input", "sourceId": "brief-region-moscow", "assetId": null, "notes": null },
-              "verifiedAt": null,
-              "publishAllowed": false
-            },
-            "catalogScope": {
-              "includeCategoryIds": ["tea", "coffee"],
-              "excludeCategoryIds": [],
-              "includeProductIds": [],
-              "excludeProductIds": []
-            },
-            "regionalStock": [{ "productId": "black-tea-classic", "variantId": "black-tea-100", "stock": "unknown", "quantity": null }],
-            "seo": {
-              "title": {
-                "key": "region.moscow.seo_title",
-                "value": "Чай и кофе оптом в Москве",
-                "status": "supplied",
-                "provenance": { "sourceType": "user_input", "sourceId": "seo-plan-demo", "assetId": null, "notes": null },
-                "verifiedAt": null,
-                "publishAllowed": false
-              },
-              "description": {
-                "key": "region.moscow.seo_description",
-                "value": "Демонстрационный SEO-title требует проверки фактов перед публикацией.",
-                "status": "supplied",
-                "provenance": { "sourceType": "user_input", "sourceId": "seo-plan-demo", "assetId": null, "notes": null },
-                "verifiedAt": null,
-                "publishAllowed": false
-              },
-              "h1": {
-                "key": "region.moscow.h1",
-                "value": "Оптовый каталог для Москвы",
-                "status": "supplied",
-                "provenance": { "sourceType": "user_input", "sourceId": "seo-plan-demo", "assetId": null, "notes": null },
-                "verifiedAt": null,
-                "publishAllowed": false
-              },
-              "additionalBlocks": []
-            },
-            "indexability": {
-              "indexable": false,
-              "reason": "Generation-ready draft keeps regional pages noindex until facts are verified for publication.",
-              "noindexUntilFacts": ["real_phone", "real_delivery_terms"]
-            },
-            "canonicalPolicy": { "mode": "noindex", "targetPath": null },
-            "host": { "domain": null, "subdomain": null, "path": "/regions/moskva/" }
-          }
-        },
-        {
-          "id": "spb",
-          "name": "Санкт-Петербург",
-          "slug": "sankt-peterburg",
-          "facts": [],
-          "overrides": {
-            "indexability": { "indexable": false, "reason": "Regional facts are incomplete.", "noindexUntilFacts": ["real_delivery_terms"] },
-            "canonicalPolicy": { "mode": "noindex", "targetPath": null },
-            "host": { "domain": null, "subdomain": null, "path": "/regions/sankt-peterburg/" }
-          }
-        },
-        {
-          "id": "kazan",
-          "name": "Казань",
-          "slug": "kazan",
-          "facts": [],
-          "overrides": {
-            "indexability": { "indexable": false, "reason": "No confirmed regional facts yet.", "noindexUntilFacts": ["real_regional_offer", "real_delivery_terms"] },
-            "canonicalPolicy": { "mode": "noindex", "targetPath": null },
-            "host": { "domain": null, "subdomain": null, "path": "/regions/kazan/" }
-          }
-        }
+        { "id": "moscow", "name": "Москва", "slug": "moskva", "facts": [], "overrides": { "delivery": { "summary": { "value": { "key": "region.moscow.delivery_summary", "value": "Доставка по Москве уточняется перед публикацией.", "status": "supplied", "provenance": { "sourceType": "user_input", "sourceId": "brief-region-moscow", "assetId": null, "notes": null }, "verifiedAt": null, "verification": null, "publishAllowed": false }, "clearAllowed": false }, "facts": [] }, "regionalOffer": { "value": { "key": "region.moscow.offer", "value": "Региональный оффер должен быть подтвержден оператором перед публикацией.", "status": "supplied", "provenance": { "sourceType": "user_input", "sourceId": "brief-region-moscow", "assetId": null, "notes": null }, "verifiedAt": null, "verification": null, "publishAllowed": false }, "clearAllowed": false }, "catalogScope": { "includeCategoryIds": ["tea", "coffee"], "excludeCategoryIds": [], "includeProductIds": [], "excludeProductIds": [] }, "priceOverrides": [{ "productId": "black-tea-classic", "variantId": "black-tea-100", "price": { "value": 405, "currency": "RUB", "visibility": "visible", "provenance": { "sourceType": "xlsx_import", "sourceId": "regional-price-demo", "assetId": "asset_import_demo_xlsx", "notes": null } }, "clearAllowed": false }], "regionalStock": [{ "productId": "black-tea-classic", "variantId": "black-tea-100", "stock": "unknown", "quantity": null }], "seo": { "title": { "value": { "key": "region.moscow.seo_title", "value": "Чай и кофе оптом в Москве", "status": "supplied", "provenance": { "sourceType": "user_input", "sourceId": "seo-plan-demo", "assetId": null, "notes": null }, "verifiedAt": null, "verification": null, "publishAllowed": false }, "clearAllowed": false } }, "indexability": { "indexable": false, "reason": "Generation-ready draft keeps regional pages noindex until facts are verified for publication.", "noindexUntilFacts": ["real_phone", "real_delivery_terms"] }, "canonicalPolicy": { "mode": "noindex", "targetPath": null }, "host": { "domain": null, "subdomain": null, "path": "/regions/moskva/" } } },
+        { "id": "spb", "name": "Санкт-Петербург", "slug": "sankt-peterburg", "facts": [], "overrides": { "indexability": { "indexable": false, "reason": "Regional facts are incomplete.", "noindexUntilFacts": ["real_delivery_terms"] }, "canonicalPolicy": { "mode": "noindex", "targetPath": null }, "host": { "domain": null, "subdomain": null, "path": "/regions/sankt-peterburg/" } } },
+        { "id": "kazan", "name": "Казань", "slug": "kazan", "facts": [], "overrides": { "indexability": { "indexable": false, "reason": "No confirmed regional facts yet.", "noindexUntilFacts": ["real_regional_offer", "real_delivery_terms"] }, "canonicalPolicy": { "mode": "noindex", "targetPath": null }, "host": { "domain": null, "subdomain": null, "path": "/regions/kazan/" } } }
       ],
       "contacts": { "default": null, "perRegionOverridesAllowed": true },
-      "pagePlan": {
-        "requiredPages": ["Главная", "Каталог", "Доставка и оплата", "Контакты", "FAQ"],
-        "generatedPageTypes": ["home", "catalog", "category", "product", "region", "delivery", "payment", "contacts", "faq"],
-        "noindexRules": ["Не индексировать региональные страницы без подтвержденных региональных фактов.", "Не индексировать пустые категории."]
-      },
-      "seo": {
-        "primarySearchEngine": "yandex",
-        "secondarySearchEngines": ["google"],
-        "urlTemplates": [
-          { "pageType": "category", "template": "/catalog/{categorySlug}/" },
-          { "pageType": "product", "template": "/catalog/{categorySlug}/{productSlug}/" },
-          { "pageType": "region", "template": "/regions/{regionSlug}/{categorySlug}-optom/" }
-        ],
-        "metadataRules": {
-          "title": "{categoryName} оптом в {regionName} - {brand}",
-          "description": "Оптовый каталог {categoryName}: цены, минимальная партия и заявка на поставку.",
-          "h1": "{categoryName} оптом",
-          "canonical": "Use noindex or canonical to the strongest page when regional facts are missing.",
-          "breadcrumbs": true,
-          "schemaOrg": ["Organization", "Product", "BreadcrumbList"]
-        },
-        "technicalChecks": ["robots", "sitemap", "canonical", "breadcrumbs", "schema.org", "broken_links", "duplicate_titles"]
-      },
-      "design": {
-        "variantCount": 3,
-        "prototypeFormat": "html_css",
-        "selectedVariantId": "reference-001",
-        "tokens": {
-          "colors": { "primary": "#f97316", "accent": "#22d3ee", "background": "#0b1118" },
-          "typography": { "heading": "system-ui", "body": "system-ui" },
-          "radius": "8px"
-        },
-        "componentRules": ["Dense B2B catalog layout", "Clear wholesale CTA", "No invented badges or awards"],
-        "prototypes": [
-          { "variantId": "reference-001", "prototypeAssetId": "asset_design_reference_001", "screenshotAssetId": null, "status": "selected" }
-        ]
-      },
-      "contentRules": {
-        "tone": ["деловой", "конкретный", "без воды"],
-        "mustUseFactsOnly": true,
-        "forbiddenClaims": ["сертификаты без источника", "реальные отзывы без источника", "гарантии сроков без подтверждения"],
-        "regionalUniquenessRules": ["Использовать реальные региональные условия.", "Noindex для регионов без фактов.", "Не заменять факты бессмысленным перефразированием."]
-      },
-      "integrations": {
-        "telegram": { "enabled": true, "tokenStorage": "server_secret", "leadNotification": true },
-        "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": null },
-        "analytics": ["yandex_metrica"]
-      },
+      "leadForms": [
+        { "id": "lead-form-wholesale-request", "name": "Wholesale request", "cta": "Получить оптовый прайс", "fields": [{ "name": "phone", "label": "Телефон", "type": "phone", "required": true }, { "name": "comment", "label": "Комментарий", "type": "textarea", "required": false }], "consent": { "required": true, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-sales-demo"], "publicationStatus": "draft" }
+      ],
+      "pagePlan": { "requiredPages": ["Главная", "Каталог", "Доставка и оплата", "Контакты", "FAQ"], "generatedPageTypes": ["home", "catalog", "category", "subcategory", "product", "region", "delivery", "payment", "contacts", "faq"], "noindexRules": ["Не индексировать региональные страницы без подтвержденных региональных фактов.", "Не индексировать пустые категории."] },
+      "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "category", "template": "/catalog/{categorySlug}/" }, { "pageType": "product", "template": "/catalog/{categorySlug}/{productSlug}/" }, { "pageType": "region", "template": "/regions/{regionSlug}/{categorySlug}-optom/" }], "metadataRules": { "title": "{categoryName} оптом в {regionName} - {brand}", "description": "Оптовый каталог {categoryName}: цены, минимальная партия и заявка на поставку.", "h1": "{categoryName} оптом", "canonical": "Use noindex or canonical to the strongest page when regional facts are missing.", "breadcrumbs": true, "schemaOrg": ["Organization", "Product", "BreadcrumbList"] }, "technicalChecks": ["robots", "sitemap", "canonical", "breadcrumbs", "schema.org", "broken_links", "duplicate_titles"] },
+      "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "reference-001", "tokens": { "colors": { "primary": "#f97316", "accent": "#22d3ee", "background": "#0b1118" }, "typography": { "heading": "system-ui", "body": "system-ui" }, "radius": "8px" }, "componentRules": ["Dense B2B catalog layout", "Clear wholesale CTA", "No invented badges or awards"], "prototypes": [{ "variantId": "reference-001", "prototypeArtifactId": "artifact_prototype_001", "screenshotArtifactId": null, "status": "selected" }] },
+      "contentRules": { "tone": ["деловой", "конкретный", "без воды"], "mustUseFactsOnly": true, "forbiddenClaims": ["сертификаты без источника", "реальные отзывы без источника", "гарантии сроков без подтверждения"], "regionalUniquenessRules": ["Использовать реальные региональные условия.", "Noindex для регионов без фактов.", "Не заменять факты бессмысленным перефразированием."] },
+      "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-sales-demo", "label": "Sales queue", "secretRef": "secret.telegram.sales.demo", "enabled": true }], "routing": [{ "projectId": "demo-regional-wholesale-network", "siteId": "main-regional-site", "regionId": null, "destinationId": "tg-sales-demo" }] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": null }, "analytics": ["yandex_metrica"] },
       "deployment": { "environment": "staging", "target": null, "requiresApproval": true, "rollbackPlan": null },
-      "compliance": {
-        "personalDataPolicy": "Do not include personal data in generated examples; store real lead data only in protected backend storage.",
-        "approvalRequiredFor": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"],
-        "disallowedContent": ["invented company facts", "secret tokens in frontend", "thin indexed regional pages"]
-      },
-      "readiness": {
-        "generation": {
-          "status": "passed",
-          "checkedAt": "2026-09-02T12:30:00Z",
-          "checks": [
-            { "id": "business_model_selected", "status": "passed", "message": "Business type, audience, and geography are present." },
-            { "id": "catalog_imported_or_entered", "status": "passed", "message": "Catalog has six categories and partial product data." },
-            { "id": "page_plan_created", "status": "passed", "message": "Required pages and generated page types are defined." },
-            { "id": "draft_safe_missing_contacts", "status": "passed", "message": "Contacts are intentionally missing and blocked from publication." }
-          ]
-        },
-        "publish": {
-          "status": "not_ready",
-          "checkedAt": null,
-          "checks": [
-            { "id": "contacts_verified", "status": "missing", "message": "Real contacts are not supplied or verified." },
-            { "id": "domain_selected", "status": "missing", "message": "Production domain is not configured." },
-            { "id": "regional_facts_verified", "status": "missing", "message": "Regional pages remain noindex until facts are verified." }
-          ]
-        }
+      "compliance": { "personalDataPolicy": "Store real lead data only in protected backend storage.", "approvalRequiredFor": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"], "disallowedContent": ["invented company facts", "secret tokens in frontend", "thin indexed regional pages"], "regulatedProducts": { "enabled": true, "categoryType": "regulated_category_requires_review", "jurisdictions": ["RU"], "ageGateRequired": true, "warningRequired": true, "legalReviewRequired": true, "publicationPolicy": "block_until_reviewed" } },
+      "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:30:00Z", "checks": [{ "id": "business_model_selected", "required": true, "status": "passed", "message": "Business type, audience, and geography are present." }, { "id": "catalog_imported_or_entered", "required": true, "status": "passed", "message": "Catalog has six categories and partial product data." }, { "id": "page_plan_created", "required": true, "status": "passed", "message": "Required pages and generated page types are defined." }, { "id": "draft_safe_missing_contacts", "required": false, "status": "passed", "message": "Contacts are intentionally missing and blocked from publication." }] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [{ "id": "contacts_or_lead_form", "required": true, "status": "missing", "message": "Real contacts or approved lead form are not ready." }, { "id": "domain_selected", "required": true, "status": "missing", "message": "Production domain is not configured." }, { "id": "regional_facts_verified", "required": true, "status": "missing", "message": "Regional pages remain noindex until facts are verified." }] } }
+    },
+    {
+      "schemaVersion": "1.2.0",
+      "revision": 3,
+      "projectId": "single-site-no-region",
+      "documentStage": "publish_ready",
+      "siteModel": "landing",
+      "language": "ru-RU",
+      "business": { "name": "Reviewed Demo Business", "type": "b2b_services", "audience": ["B2B buyers"], "geography": ["Russia"], "facts": [{ "key": "business.reviewed_offer", "value": "Offer text approved for demo publication.", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": "asset_review_doc_001", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["asset_review_doc_001"], "evidenceNote": "Demo review evidence." }, "publishAllowed": true }], "missingFactKeys": [] },
+      "network": { "mode": "single", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": ["brand", "landing_page", "lead_form"], "overridable": ["seo", "host"], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Reviewed Demo Business", "domainMode": "single_domain", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "regionIds": [], "niche": "single B2B landing", "status": "staging", "overrides": {} }] },
+      "assetRegistry": { "assets": [{ "assetId": "asset_review_doc_001", "kind": "document", "role": "operator_review_evidence", "fileName": "review-note.md", "contentType": "text/markdown", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "sizeBytes": 1024 }] },
+      "brand": { "displayName": "Reviewed Demo Business", "tone": ["деловой"], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": ["asset_review_doc_001"] },
+      "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [] },
+      "regions": [],
+      "contacts": { "default": null, "perRegionOverridesAllowed": false },
+      "leadForms": [{ "id": "lead-form-main", "name": "Lead form", "cta": "Оставить заявку", "fields": [{ "name": "phone", "label": "Телефон", "type": "phone", "required": true }], "consent": { "required": true, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-main"], "publicationStatus": "approved" }],
+      "pagePlan": { "requiredPages": ["Главная", "Контакты"], "generatedPageTypes": ["home", "landing", "contacts"], "noindexRules": [] },
+      "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "landing", "template": "/" }], "metadataRules": { "title": "Reviewed Demo Business", "description": "Reviewed demo landing description.", "h1": "Reviewed Demo Business", "canonical": "self", "breadcrumbs": false, "schemaOrg": ["Organization"] }, "technicalChecks": ["robots", "sitemap", "canonical"] },
+      "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "landing-001", "tokens": { "colors": { "primary": "#f97316" }, "typography": { "body": "system-ui" }, "radius": "8px" }, "componentRules": ["Clear lead form"], "prototypes": [] },
+      "contentRules": { "tone": ["деловой"], "mustUseFactsOnly": true, "forbiddenClaims": ["unverified guarantees"], "regionalUniquenessRules": [] },
+      "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-main", "label": "Main leads", "secretRef": "secret.telegram.main", "enabled": true }], "routing": [{ "projectId": "single-site-no-region", "siteId": "main-site", "regionId": null, "destinationId": "tg-main" }] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] },
+      "deployment": { "environment": "staging", "target": { "kind": "wordpress_staging", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "path": "/" }, "requiresApproval": true, "rollbackPlan": "Restore previous WordPress revision." },
+      "compliance": { "personalDataPolicy": "Lead data is stored in protected backend storage.", "approvalRequiredFor": ["wordpress_publish", "dns_change", "production_deploy"], "disallowedContent": ["invented company facts"], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+      "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:10:00Z", "checks": [{ "id": "site_model_selected", "required": true, "status": "passed", "message": "Site model selected." }] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:15:00Z", "checks": [{ "id": "lead_form_approved", "required": true, "status": "passed", "message": "Approved lead form and Telegram route exist." }, { "id": "host_target_ready", "required": true, "status": "passed", "message": "Host and WordPress target exist." }] } }
+    }
+  ],
+  "x-negativeExamples": [
+    {
+      "name": "passed_gate_with_missing_required_check",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-readiness",
+        "documentStage": "draft",
+        "siteModel": null,
+        "language": "ru-RU",
+        "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [{ "id": "required_missing", "required": true, "status": "missing", "message": "Required check is missing." }] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+      }
+    },
+    {
+      "name": "passed_gate_with_failed_required_check",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-readiness-failed",
+        "documentStage": "draft",
+        "siteModel": null,
+        "language": "ru-RU",
+        "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [], "missingFactKeys": [] },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [{ "id": "required_failed", "required": true, "status": "failed", "message": "Required check failed." }] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+      }
+    },
+    {
+      "name": "publish_ready_with_empty_contacts_and_no_lead_form",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-empty-contacts",
+        "documentStage": "publish_ready",
+        "siteModel": "landing",
+        "language": "ru-RU",
+        "business": { "name": "Demo", "type": "b2b_services", "audience": ["B2B"], "geography": ["RU"], "facts": [], "missingFactKeys": [] },
+        "network": { "mode": "single", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Demo", "domainMode": "single_domain", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "regionIds": [], "niche": "landing", "status": "staging", "overrides": {} }] },
+        "assetRegistry": { "assets": [] },
+        "brand": { "displayName": "Demo", "tone": [], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": [] },
+        "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [] },
+        "regions": [],
+        "contacts": { "default": { "phone": null, "email": null, "messengers": [], "address": null }, "perRegionOverridesAllowed": false },
+        "leadForms": [],
+        "pagePlan": { "requiredPages": ["Главная"], "generatedPageTypes": ["home"], "noindexRules": [] },
+        "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "landing", "template": "/" }], "metadataRules": { "title": "Demo", "description": "Demo", "h1": "Demo", "canonical": "self", "breadcrumbs": false, "schemaOrg": [] }, "technicalChecks": ["robots"] },
+        "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "v1", "tokens": { "colors": { "primary": "#000" }, "typography": { "body": "system-ui" }, "radius": "8px" }, "componentRules": [], "prototypes": [] },
+        "contentRules": { "tone": [], "mustUseFactsOnly": true, "forbiddenClaims": [], "regionalUniquenessRules": [] },
+        "integrations": { "telegram": { "enabled": false, "tokenStorage": "not_configured", "destinations": [], "routing": [] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": { "siteUrl": "https://demo.example.test", "authRef": "secret.wordpress.demo" } }, "analytics": ["none"] },
+        "deployment": { "environment": "staging", "target": { "kind": "wordpress_staging", "host": { "domain": "demo.example.test", "subdomain": null, "path": "/" }, "path": "/" }, "requiresApproval": true, "rollbackPlan": "Rollback." },
+        "compliance": { "personalDataPolicy": "Protected.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": [], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [] } }
+      }
+    },
+    {
+      "name": "system_inference_cannot_be_publishable_or_verified",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-system-inference",
+        "documentStage": "draft",
+        "siteModel": null,
+        "language": "ru-RU",
+        "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [{ "key": "ai.guess", "value": "Guessed claim", "status": "verified", "provenance": { "sourceType": "system_inference", "sourceId": "ai-guess", "assetId": null, "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["artifact-001"], "evidenceNote": "Bad fixture." }, "publishAllowed": true }], "missingFactKeys": [] },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+      }
+    },
+    {
+      "name": "unknown_fact_cannot_be_publishable",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-unknown-publish",
+        "documentStage": "draft",
+        "siteModel": null,
+        "language": "ru-RU",
+        "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [{ "key": "business.phone", "value": null, "status": "unknown", "provenance": { "sourceType": "unknown", "sourceId": null, "assetId": null, "notes": null }, "verifiedAt": null, "verification": null, "publishAllowed": true }], "missingFactKeys": [] },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+      }
+    },
+    {
+      "name": "verified_fact_without_trusted_evidence",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-verified-fact",
+        "documentStage": "draft",
+        "siteModel": null,
+        "language": "ru-RU",
+        "business": { "name": null, "type": null, "audience": [], "geography": [], "facts": [{ "key": "business.claim", "value": "Claim", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": null, "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": null, "publishAllowed": true }], "missingFactKeys": [] },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } }
+      }
+    },
+    {
+      "name": "publish_ready_without_host_and_wordpress_target",
+      "value": {
+        "schemaVersion": "1.2.0",
+        "revision": 1,
+        "projectId": "bad-host-target",
+        "documentStage": "publish_ready",
+        "siteModel": "landing",
+        "language": "ru-RU",
+        "business": { "name": "Demo", "type": "b2b_services", "audience": ["B2B"], "geography": ["RU"], "facts": [{ "key": "business.reviewed_offer", "value": "Offer", "status": "verified", "provenance": { "sourceType": "operator_review", "sourceId": "review-001", "assetId": "asset_review_doc_001", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["asset_review_doc_001"], "evidenceNote": "Evidence." }, "publishAllowed": true }], "missingFactKeys": [] },
+        "network": { "mode": "single", "siteStrategy": "one_wordpress_multiregion", "inheritance": { "shared": [], "overridable": [], "overrideSemantics": "missing_inherits_explicit_value_overrides_null_clears_only_when_clearAllowed_true" }, "sites": [{ "id": "main-site", "name": "Demo", "domainMode": "single_domain", "host": { "domain": null, "subdomain": null, "path": "/" }, "regionIds": [], "niche": "landing", "status": "staging", "overrides": {} }] },
+        "assetRegistry": { "assets": [{ "assetId": "asset_review_doc_001", "kind": "document", "role": "operator_review_evidence", "fileName": "review.md", "contentType": "text/markdown", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "sizeBytes": 1024 }] },
+        "brand": { "displayName": "Demo", "tone": [], "logoAssetId": null, "designReferenceAssetIds": [], "documentAssetIds": [] },
+        "catalog": { "source": "manual", "currency": "RUB", "minOrderPolicy": null, "importAssetIds": [], "variationAttributes": [], "categories": [] },
+        "regions": [],
+        "contacts": { "default": null, "perRegionOverridesAllowed": false },
+        "leadForms": [{ "id": "lead-form-main", "name": "Lead", "cta": "Send", "fields": [{ "name": "phone", "label": "Phone", "type": "phone", "required": true }], "consent": { "required": true, "textFact": null }, "antiSpam": { "mode": "honeypot", "secretRef": null }, "storage": { "enabled": true, "destination": "platform_database" }, "destinationIds": ["tg-main"], "publicationStatus": "approved" }],
+        "pagePlan": { "requiredPages": ["Главная"], "generatedPageTypes": ["home"], "noindexRules": [] },
+        "seo": { "primarySearchEngine": "yandex", "secondarySearchEngines": ["google"], "urlTemplates": [{ "pageType": "landing", "template": "/" }], "metadataRules": { "title": "Demo", "description": "Demo", "h1": "Demo", "canonical": "self", "breadcrumbs": false, "schemaOrg": [] }, "technicalChecks": ["robots"] },
+        "design": { "variantCount": 3, "prototypeFormat": "html_css", "selectedVariantId": "v1", "tokens": { "colors": { "primary": "#000" }, "typography": { "body": "system-ui" }, "radius": "8px" }, "componentRules": [], "prototypes": [] },
+        "contentRules": { "tone": [], "mustUseFactsOnly": true, "forbiddenClaims": [], "regionalUniquenessRules": [] },
+        "integrations": { "telegram": { "enabled": true, "tokenStorage": "server_secret", "destinations": [{ "id": "tg-main", "label": "Main", "secretRef": "secret.telegram.main", "enabled": true }], "routing": [{ "projectId": "bad-host-target", "siteId": "main-site", "regionId": null, "destinationId": "tg-main" }] }, "wordpress": { "targetType": "staging_first", "realWordPressRequired": true, "target": null }, "analytics": ["none"] },
+        "deployment": { "environment": "staging", "target": null, "requiresApproval": true, "rollbackPlan": "Rollback." },
+        "compliance": { "personalDataPolicy": "Protected.", "approvalRequiredFor": ["wordpress_publish"], "disallowedContent": [], "regulatedProducts": { "enabled": false, "categoryType": null, "jurisdictions": [], "ageGateRequired": false, "warningRequired": false, "legalReviewRequired": false, "publicationPolicy": "not_regulated" } },
+        "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [] }, "publish": { "status": "passed", "checkedAt": "2026-09-02T12:00:00Z", "checks": [{ "id": "host", "required": true, "status": "passed", "message": "Bad fixture claims host is ready." }] } }
       }
     }
   ]

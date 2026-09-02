@@ -21,6 +21,7 @@ Responsibilities:
 - upload references and catalog files;
 - display import previews and validation errors;
 - show job state, logs, screenshots, artifacts, and final results;
+- show independent review state and reviewer findings separately from execution status;
 - request approvals for publishing, deletion, DNS, production deploy, and other irreversible operations.
 
 ### Server API And Orchestrator
@@ -30,13 +31,15 @@ The server API owns project state and decides which jobs should exist. The orche
 Responsibilities:
 
 - validate SiteSpec and job specs;
-- run separate readiness checks for `draft`, `generation_ready`, and `publish_ready`;
+- own and derive readiness checks for `draft`, `generation_ready`, and `publish_ready`;
 - split large goals into small jobs with dependencies;
 - store state transitions and events;
+- store independent review decisions separately from execution results;
 - pin each job to repository identifier, base ref, base commit SHA, SiteSpec revision, SiteSpec sha256, and input artifact checksums;
 - enforce idempotency keys;
 - enforce approvals;
 - expose agent API endpoints;
+- negotiate Agent API, JobSpec, SiteSpec, and validation registry versions;
 - never send raw user text or arbitrary validation commands as executable shell.
 
 ### PostgreSQL Source Of Truth
@@ -60,6 +63,8 @@ Core tables planned for MVP:
 - `job_attempts`;
 - `job_events`;
 - `job_logs`;
+- `job_reviews`;
+- `readiness_checks`;
 - `artifacts`;
 - `approvals`;
 - `wordpress_targets`;
@@ -77,7 +82,17 @@ The architecture uses one draft-friendly SiteSpec schema with explicit stages:
 - `generation_ready`: has enough structure to generate plans, designs, pages, or implementation tasks, and must pass generation readiness checks.
 - `publish_ready`: has all publish-critical facts, contacts, domains, WordPress target, selected design, rollback plan, and indexability decisions, and must pass publish readiness checks.
 
-Readiness checks are stored as structured results. They are not a substitute for facts and must not be satisfied with placeholder contact data, placeholder addresses, or invented company claims.
+Readiness checks are stored as structured server-owned derived results. They are not a substitute for facts and must not be satisfied with placeholder contact data, placeholder addresses, or invented company claims.
+
+Rules:
+
+- the browser may submit inputs, but cannot set a readiness gate to `passed`;
+- a readiness gate cannot be `passed` while any required check is `missing` or `failed`;
+- `publish_ready` requirements depend on `siteModel` and network mode;
+- single-site projects do not require a fake region;
+- catalog, SEO-network, and hybrid publication require publishable category/product data when those pages are generated;
+- publication requires real usable contacts or an approved lead intake path;
+- publication requires actual host/target, selected design, rollback plan, publishable facts, WordPress target, and required approvals.
 
 ### MVP Queue With Lease And Heartbeat
 
@@ -86,6 +101,8 @@ The MVP queue can be implemented in PostgreSQL before introducing a separate que
 Job states:
 
 `draft -> queued -> claimed -> running -> awaiting_approval -> validating -> succeeded | failed | cancelled`
+
+Execution terminal states are only `succeeded`, `failed`, and `cancelled`. Independent acceptance states are separate: `accepted`, `changes_required`, and `blocked`.
 
 Queue behavior:
 
@@ -99,6 +116,7 @@ Queue behavior:
 - After execution, registered validation checks run and the job moves to `validating`.
 - A running job moves to `cancel_requested` before terminal cancellation; it becomes `cancelled` only after agent acknowledgement.
 - Terminal states are `succeeded`, `failed`, and `cancelled`.
+- Terminal `succeeded` moves the result to `review_pending`; it is not accepted until independent review passes.
 
 Lease rules:
 
@@ -140,6 +158,13 @@ Safety requirements:
 - secrets are masked in logs;
 - logs and artifacts have size limits;
 - publication and other irreversible operations require approval.
+- Codex, Node, npm scripts, and repository code run as untrusted code in a sandboxed low-privilege process;
+- environment variables are allowlisted and production secrets are unavailable;
+- network is disabled by default unless a capability explicitly allowlists it;
+- CPU, memory, time, file count, and file size limits are enforced;
+- only normalized POSIX-relative paths are accepted in contracts;
+- backslash, colon, Windows absolute paths, UNC/device paths, control/NUL, and traversal segments are rejected;
+- after resolving paths, realpath containment must hold and symlink/junction/reparse-point escape is rejected.
 
 ### Codex Execution
 
@@ -151,7 +176,7 @@ Rules:
 - use allowed paths, allowed capabilities, allowed actions, and forbidden actions from the job spec;
 - map execution profiles through configuration, not hard-coded model names in business logic;
 - produce a final report with changed files, checks, assumptions, and risks;
-- never merge to main or deploy unless a job explicitly allows it and approval is present.
+- never merge to main or deploy unless a job explicitly allows it, required approval is present, and independent acceptance is `accepted`.
 
 ### Registered Validation Checks
 
@@ -166,6 +191,44 @@ Initial local registry:
 - `static_html_exists`.
 
 Registry entries are local agent code/configuration. Every check runs with shell mode false, typed parameters, normalized relative paths, and workspace allowlist checks. Unknown checks and missing capabilities are denied.
+
+`npm_lint` and `npm_build` are still treated as execution of untrusted repository code. They must run inside the sandbox, with allowlisted environment, no production secrets, network disabled by default, and resource limits.
+
+### Independent Review Gate
+
+Independent review is first-class architecture, not a chat convention.
+
+Entities:
+
+- `job_reviews`: reviewer principal, job ID, attempt, checked diff SHA, checked validation result IDs, acceptance result, comments, risks, and reviewed timestamp.
+- `task_review` can aggregate multiple job reviews for a PR, milestone, or publication package.
+
+Rules:
+
+- Codex execution report and successful command output are supporting evidence only.
+- Reviewer or CI checks the factual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment.
+- The executor cannot accept its own work.
+- `accepted` is required before merge, production deploy, WordPress publication, DNS changes, and other irreversible actions.
+- `changes_required` keeps fixes in the same feature branch or PR and triggers a full recheck.
+- `blocked` records the missing external input or dependency and keeps irreversible actions locked.
+
+### Safe GitHub Workflow
+
+GitHub writes are modeled as allowlisted actions:
+
+- `git_commit`;
+- `git_push_feature_branch`;
+- `create_or_update_pull_request`.
+
+Rules:
+
+- agent verifies exact repository identifier, provider repository ID, and remote origin before any git write;
+- commits happen only in a dedicated branch or worktree;
+- push is only to a feature branch, normally with the `codex/` prefix;
+- force-push is forbidden;
+- push to `main` is forbidden;
+- merge is forbidden until independent acceptance is `accepted`;
+- job results include commit SHA, branch name, and PR URL when those actions are performed.
 
 ### Logs, Events, And Artifacts
 
@@ -222,15 +285,19 @@ Actions requiring approval:
 - payment or external account changes;
 - destructive database migrations.
 
-Approval records must include requester, action, target, reason, preview, created time, expiration, status, approver, and decision time.
+Approval records must include requester principal, action, target, reason, preview, created time, expiration, status, approver principal, and decision time. Human/operator principals come from authentication and RBAC, not request body fields.
 
 Approval flow:
 
 - agent or server creates an approval request and the job enters `awaiting_approval`;
-- user/operator approves or rejects the request;
-- agent receives the decision through heartbeat or approval lookup;
+- agent checkpoints, uploads preview artifacts when required, releases the lease, and stops local execution;
+- user/operator approves or rejects the request through a human-authenticated endpoint;
+- actor is derived from authenticated principal, not request body;
+- self-approval is forbidden;
+- approval is bound to job ID, attempt, exact action, exact target, environment, SiteSpec hash, input artifact hashes, preview artifacts, and expiry;
+- after approval, continuation is requeued with a new lease token or split into a separate irreversible-action job;
 - rejected approval blocks the action and normally fails or returns the job to a safe state;
-- approved action is still limited by allowed capabilities/actions and current lease.
+- approved action is still limited by allowed capabilities/actions, current input hashes, readiness, and independent acceptance.
 
 ### WordPress Site Factory
 
@@ -251,12 +318,14 @@ Boundary 1: Browser to server API.
 
 - Browser is not trusted to enforce permissions.
 - API validates all SiteSpec, job, and approval mutations.
+- Browser cannot mark readiness as passed or set review acceptance.
 
 Boundary 2: Server API to local agent.
 
 - Agent authenticates with a scoped token.
 - Agent receives jobs by `workspaceId` and resolves the local path itself.
 - API must not trust agent logs as proof of success without validation results.
+- API must not treat execution success as independent acceptance.
 - Lease token and attempt must match before the server accepts progress, logs, artifacts, validation, or terminal states.
 
 Boundary 3: Local agent to Codex/workspace.
@@ -265,6 +334,7 @@ Boundary 3: Local agent to Codex/workspace.
 - Job spec constrains file access through allowed paths, allowed capabilities, allowed actions, and forbidden actions.
 - Raw user text is never executed as shell.
 - Server-supplied absolute paths and server-supplied shell commands are not trusted.
+- Repository scripts and generated code are untrusted and run only inside sandbox limits.
 
 Boundary 4: Platform to WordPress.
 
@@ -286,9 +356,10 @@ Boundary 4: Platform to WordPress.
 10. Agent streams events, progress, and masked logs with the current lease token.
 11. Agent creates artifact uploads, uploads bytes, and completes each artifact with size and sha256.
 12. Agent starts validation and runs registered validation checks.
-13. Server accepts success only after required validation passes and input versions still match.
-14. User reviews previews and approves irreversible actions if needed.
-15. WordPress publication jobs run only after approval.
+13. Server accepts execution success only after required validation passes and input versions still match.
+14. Independent reviewer or CI checks the diff, outputs, tests, and risks.
+15. User reviews previews and approves irreversible actions if needed.
+16. WordPress publication jobs run only after readiness, approval, and independent acceptance.
 
 ## Execution Profiles
 
