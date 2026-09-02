@@ -143,7 +143,7 @@ export default function Home() {
   }, [business, network, siteType]);
 
   return (
-    <main className="min-h-screen bg-[#06090d] text-slate-100">
+    <main className="min-h-screen overflow-x-hidden bg-[#06090d] text-slate-100">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_5%,rgba(249,115,22,0.18),transparent_24%),radial-gradient(circle_at_75%_0%,rgba(34,211,238,0.16),transparent_28%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.98))]" />
       <div className="relative grid min-h-screen grid-cols-[230px_minmax(0,1fr)] max-lg:grid-cols-1">
         <aside className="border-r border-white/10 bg-black/35 px-4 py-4 backdrop-blur max-lg:hidden">
@@ -175,9 +175,9 @@ export default function Home() {
         </aside>
 
         <section className="flex min-w-0 flex-col">
-          <header className="border-b border-white/10 bg-black/25 px-5 py-4 backdrop-blur">
+          <header className="border-b border-white/10 bg-black/25 px-5 py-4 backdrop-blur max-sm:px-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-medium uppercase text-orange-300">Обзор проекта</p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-normal">Создание сайта под клиента</h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
@@ -199,8 +199,8 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="grid flex-1 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-            <section className="rounded-lg border border-white/10 bg-[#0b1118]/90 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+          <div className="grid min-w-0 flex-1 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <section className="min-w-0 rounded-lg border border-white/10 bg-[#0b1118]/90 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <Badge className="border-cyan-400/25 bg-cyan-400/10 text-cyan-200" variant="outline">
@@ -213,18 +213,18 @@ export default function Home() {
 
               <Tabs defaultValue="business">
                 <TabsList
-                  className="!h-auto w-full flex-wrap justify-start rounded-md border border-white/10 bg-black/25 p-1"
+                  className="!h-auto grid w-full grid-cols-1 rounded-md border border-white/10 bg-black/25 p-1 sm:grid-cols-3"
                   variant="line"
                 >
-                  <TabsTrigger className="h-9 min-w-[150px] px-3 text-slate-400 data-active:text-orange-300" value="business">
+                  <TabsTrigger className="h-9 min-w-0 px-3 text-slate-400 data-active:text-orange-300" value="business">
                     <Building2 className="size-4" />
                     Кто клиент
                   </TabsTrigger>
-                  <TabsTrigger className="h-9 min-w-[150px] px-3 text-slate-400 data-active:text-orange-300" value="site">
+                  <TabsTrigger className="h-9 min-w-0 px-3 text-slate-400 data-active:text-orange-300" value="site">
                     <Store className="size-4" />
                     Тип сайта
                   </TabsTrigger>
-                  <TabsTrigger className="h-9 min-w-[150px] px-3 text-slate-400 data-active:text-orange-300" value="network">
+                  <TabsTrigger className="h-9 min-w-0 px-3 text-slate-400 data-active:text-orange-300" value="network">
                     <Network className="size-4" />
                     Сеть сайтов
                   </TabsTrigger>
@@ -295,7 +295,7 @@ export default function Home() {
               </Tabs>
             </section>
 
-            <aside className="space-y-4">
+            <aside className="min-w-0 space-y-4">
               <section className="rounded-lg border border-white/10 bg-[#0b1118]/90 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -369,7 +369,7 @@ function ChoiceGrid({
 
           return (
             <button
-              className={`min-h-[118px] rounded-md border p-4 text-left transition ${
+              className={`min-h-[118px] min-w-0 rounded-md border p-4 text-left transition ${
                 active
                   ? 'border-orange-500/55 bg-orange-500/15 shadow-[0_0_0_1px_rgba(249,115,22,0.12)]'
                   : 'border-white/10 bg-white/[0.035] hover:border-cyan-400/35 hover:bg-cyan-400/10'
@@ -378,11 +378,11 @@ function ChoiceGrid({
               onClick={() => onSelect(item.value)}
               type="button"
             >
-              <span className="flex items-center justify-between gap-3">
-                <span className={active ? 'text-orange-200' : 'text-slate-100'}>{item.title}</span>
+              <span className="flex min-w-0 items-center justify-between gap-3">
+                <span className={`min-w-0 break-words ${active ? 'text-orange-200' : 'text-slate-100'}`}>{item.title}</span>
                 {active ? <Check className="size-4 text-orange-300" /> : null}
               </span>
-              <span className="mt-2 block text-sm leading-6 text-slate-400">{item.description}</span>
+              <span className="mt-2 block break-words text-sm leading-6 text-slate-400">{item.description}</span>
             </button>
           );
         })}
