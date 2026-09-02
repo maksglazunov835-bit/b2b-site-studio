@@ -18,6 +18,8 @@ const ACTION_CAPABILITIES = {
   write_files: ["file_write"],
   create_branch: ["git"],
   create_worktree: ["git"],
+  run_registered_validation: ["codex"],
+  request_approval: ["codex"],
   create_artifact: ["file_write"],
   upload_artifact: ["artifact_upload"],
   git_commit: ["git"],
@@ -74,7 +76,7 @@ function isSafeGitBranchRef(ref) {
   if (hasControlChars(ref) || /[\\ ~^:?*[\]]/.test(ref)) return false;
   if (ref.includes("..") || ref.includes("@{") || ref.includes("//")) return false;
   const segments = ref.split("/");
-  if (segments.some((segment) => segment === "" || segment === "." || segment === ".." || segment.endsWith(".lock"))) return false;
+  if (segments.some((segment) => segment === "" || segment === "." || segment === ".." || segment.startsWith(".") || segment.endsWith(".lock"))) return false;
   return !["main", "master"].includes(ref);
 }
 

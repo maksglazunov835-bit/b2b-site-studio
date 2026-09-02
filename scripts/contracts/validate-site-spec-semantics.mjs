@@ -75,6 +75,46 @@ function checkFactAssets(fact, path, keys, errors) {
   }
 }
 
+function escapeJsonPointerSegment(segment) {
+  return segment.replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+function isAssetReferenceKey(key) {
+  return key === "assetId" || key === "artifactId" || key.endsWith("AssetId") || key.endsWith("ArtifactId");
+}
+
+function isAssetReferenceListKey(key) {
+  return key.endsWith("AssetIds") || key.endsWith("ArtifactIds");
+}
+
+function checkAllAssetReferences(value, path, keys, errors) {
+  if (!value || typeof value !== "object") return;
+  if (path.startsWith("/assetRegistry/assets/")) return;
+
+  if (Array.isArray(value)) {
+    for (const [index, entry] of value.entries()) {
+      checkAllAssetReferences(entry, `${path}/${index}`, keys, errors);
+    }
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    const entryPath = `${path}/${escapeJsonPointerSegment(key)}`;
+    if (typeof entry === "string" && isAssetReferenceKey(key)) {
+      checkAssetRef(entry, entryPath, keys, errors);
+      continue;
+    }
+    if (Array.isArray(entry) && isAssetReferenceListKey(key)) {
+      for (const [index, id] of entry.entries()) {
+        if (typeof id === "string") {
+          checkAssetRef(id, `${entryPath}/${index}`, keys, errors);
+        }
+      }
+    }
+    checkAllAssetReferences(entry, entryPath, keys, errors);
+  }
+}
+
 function checkCommercialValue(value, path, keys, errors) {
   if (!value || typeof value !== "object") return;
   checkFactAssets(value.quantity, `${path}/quantity`, keys, errors);
@@ -348,6 +388,7 @@ export function validateSiteSpecSemantics(spec) {
   const errors = [];
   const assetKeys = buildAssetKeys(spec, errors);
 
+  checkAllAssetReferences(spec, "", assetKeys, errors);
   checkBrand(spec, assetKeys, errors);
   checkCatalog(spec, assetKeys, errors);
   checkDesign(spec, assetKeys, errors);

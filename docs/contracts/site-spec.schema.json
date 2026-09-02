@@ -1293,6 +1293,12 @@
       "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-missing-asset", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Semantic Missing Asset", "type": "b2b_services", "audience": [], "geography": [], "facts": [], "missingFactKeys": [] }, "assetRegistry": { "assets": [] }, "brand": { "displayName": "Semantic Missing Asset", "tone": [], "logoAssetId": "asset-missing-logo", "designReferenceAssetIds": [], "documentAssetIds": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
     },
     {
+      "name": "missing_fact_asset_reference",
+      "expectedReason": "business fact provenance and verification evidence must resolve to assetRegistry",
+      "expectedCode": "MISSING_ASSET_REFERENCE",
+      "value": { "schemaVersion": "1.2.0", "revision": 1, "projectId": "semantic-missing-fact-asset", "documentStage": "draft", "siteModel": "landing", "language": "ru-RU", "business": { "name": "Semantic Missing Fact Asset", "type": "b2b_services", "audience": [], "geography": [], "facts": [{ "key": "business.offer", "value": "Reviewed offer.", "status": "verified", "provenance": { "sourceType": "external_document", "sourceId": "brief-doc", "assetId": "asset-missing-fact-doc", "notes": null }, "verifiedAt": "2026-09-02T12:00:00Z", "verification": { "actorType": "operator", "actorId": "operator-001", "verifiedAt": "2026-09-02T12:00:00Z", "evidenceArtifactIds": ["artifact-missing-evidence"], "evidenceNote": "Missing evidence artifact." }, "publishAllowed": true }], "missingFactKeys": [] }, "assetRegistry": { "assets": [] }, "readiness": { "ownedBy": "server", "evaluatorVersion": "site-readiness-1", "generation": { "status": "not_ready", "checkedAt": null, "checks": [] }, "publish": { "status": "not_ready", "checkedAt": null, "checks": [] } } }
+    },
+    {
       "name": "ready_variant_with_nonpublishable_commercial_override",
       "expectedReason": "ready or published variants cannot carry nonpublishable price, stock, or minimum-order overrides",
       "expectedCode": "VARIANT_COMMERCIAL_NOT_PUBLISHABLE",
