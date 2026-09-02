@@ -2,19 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://b2b-site-studio.local/contracts/job.schema.json",
   "title": "B2B Site Studio Local Agent Job",
-  "description": "Structured job contract for the local Windows Codex agent.",
+  "description": "Safe, reproducible job contract for the local Windows Codex agent.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "id",
     "type",
     "projectId",
-    "workspacePath",
+    "workspaceId",
+    "repository",
+    "baseRef",
+    "baseCommitSha",
+    "siteSpec",
+    "inputArtifacts",
     "instructions",
     "constraints",
     "inputs",
-    "expectedOutputs",
+    "expectedOutputManifest",
     "allowedPaths",
+    "allowedCapabilities",
+    "allowedActions",
     "forbiddenActions",
     "modelProfile",
     "reasoningEffort",
@@ -22,13 +29,10 @@
     "timeoutSeconds",
     "idempotencyKey",
     "dependsOn",
-    "validationCommands"
+    "validationChecks"
   ],
   "properties": {
-    "id": {
-      "type": "string",
-      "pattern": "^job_[a-z0-9][a-z0-9_\\-]{6,80}$"
-    },
+    "id": { "type": "string", "pattern": "^job_[a-z0-9][a-z0-9_\\-]{6,80}$" },
     "type": {
       "type": "string",
       "enum": ["sandbox_file_test", "design_reference_prototype", "site_spec_validation", "catalog_import_review", "page_plan_generation", "seo_review", "wordpress_publish"]
@@ -45,10 +49,19 @@
       "maxLength": 80,
       "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
     },
-    "workspacePath": {
+    "workspaceId": {
       "type": "string",
       "minLength": 3,
-      "description": "Absolute local path that must be inside the agent allowlist."
+      "maxLength": 120,
+      "description": "Logical workspace key resolved by the local agent from protected local configuration."
+    },
+    "repository": { "$ref": "#/$defs/repositoryRef" },
+    "baseRef": { "type": "string", "minLength": 1 },
+    "baseCommitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "siteSpec": { "$ref": "#/$defs/siteSpecInputRef" },
+    "inputArtifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/inputArtifactRef" }
     },
     "instructions": {
       "type": "object",
@@ -57,25 +70,18 @@
       "properties": {
         "displaySummary": { "type": "string", "minLength": 1 },
         "objective": { "type": "string", "minLength": 1 },
-        "steps": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "minItems": 1
-        },
-        "acceptanceCriteria": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "minItems": 1
-        }
+        "steps": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 },
+        "acceptanceCriteria": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
       }
     },
     "constraints": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["noRawUserTextAsShell", "requiresBranchOrWorktree", "maxLogBytes", "maxArtifactBytes"],
+      "required": ["denyByDefault", "noRawUserTextAsShell", "requiresBranchOrWorktree", "maxLogBytes", "maxArtifactBytes"],
       "properties": {
+        "denyByDefault": { "type": "boolean", "const": true },
         "noRawUserTextAsShell": { "type": "boolean", "const": true },
-        "requiresBranchOrWorktree": { "type": "boolean" },
+        "requiresBranchOrWorktree": { "type": "boolean", "const": true },
         "maxLogBytes": { "type": "integer", "minimum": 1024 },
         "maxArtifactBytes": { "type": "integer", "minimum": 1024 }
       }
@@ -92,88 +98,178 @@
         }
       }
     },
-    "expectedOutputs": {
+    "expectedOutputManifest": {
       "type": "array",
       "items": { "$ref": "#/$defs/expectedOutput" },
       "minItems": 1
     },
     "allowedPaths": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": { "$ref": "#/$defs/relativePathPattern" },
       "minItems": 1
+    },
+    "allowedCapabilities": {
+      "type": "array",
+      "description": "Deny-by-default. A missing capability is forbidden.",
+      "items": {
+        "type": "string",
+        "enum": ["codex", "git", "node", "file_read", "file_write", "browser_screenshot", "artifact_upload", "wordpress_api"]
+      },
+      "uniqueItems": true
+    },
+    "allowedActions": {
+      "type": "array",
+      "description": "Deny-by-default. A missing action is forbidden even when not listed in forbiddenActions.",
+      "items": {
+        "type": "string",
+        "enum": ["read_files", "write_files", "create_branch", "create_worktree", "run_registered_validation", "create_artifact", "upload_artifact", "request_approval", "wordpress_stage"]
+      },
+      "uniqueItems": true
     },
     "forbiddenActions": {
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text"]
+        "enum": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text", "arbitrary_shell"]
       },
-      "minItems": 1
+      "minItems": 1,
+      "uniqueItems": true
     },
-    "modelProfile": {
-      "type": "string",
-      "enum": ["fast", "standard", "deep", "review"]
-    },
-    "reasoningEffort": {
-      "type": "string",
-      "enum": ["minimal", "low", "medium", "high", "xhigh", "max"]
-    },
-    "requiresApproval": {
-      "type": "boolean"
-    },
-    "timeoutSeconds": {
-      "type": "integer",
-      "minimum": 30,
-      "maximum": 14400
-    },
-    "idempotencyKey": {
-      "type": "string",
-      "minLength": 12,
-      "maxLength": 120
-    },
+    "modelProfile": { "type": "string", "enum": ["fast", "standard", "deep", "review"] },
+    "reasoningEffort": { "type": "string", "enum": ["minimal", "low", "medium", "high", "xhigh", "max"] },
+    "requiresApproval": { "type": "boolean" },
+    "timeoutSeconds": { "type": "integer", "minimum": 30, "maximum": 14400 },
+    "idempotencyKey": { "type": "string", "minLength": 12, "maxLength": 120 },
     "dependsOn": {
       "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^job_[a-z0-9][a-z0-9_\\-]{6,80}$"
-      }
+      "items": { "type": "string", "pattern": "^job_[a-z0-9][a-z0-9_\\-]{6,80}$" }
     },
-    "validationCommands": {
+    "validationChecks": {
       "type": "array",
-      "items": { "$ref": "#/$defs/validationCommand" }
+      "items": { "$ref": "#/$defs/validationCheck" }
     }
   },
   "$defs": {
+    "repositoryRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "owner", "name", "identifier"],
+      "properties": {
+        "provider": { "type": "string", "enum": ["github"] },
+        "owner": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "identifier": { "type": "string", "minLength": 1 }
+      }
+    },
+    "siteSpecInputRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "revision", "sha256", "stage"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1 },
+        "revision": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "stage": { "type": "string", "enum": ["draft", "generation_ready", "publish_ready"] }
+      }
+    },
+    "inputArtifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "kind", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
     "expectedOutput": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "path", "description"],
+      "required": ["path", "kind", "required", "contentType", "maxSizeBytes", "sha256"],
       "properties": {
-        "kind": { "type": "string", "enum": ["file", "directory", "screenshot", "report", "diff"] },
-        "path": { "type": "string", "minLength": 1 },
-        "description": { "type": "string", "minLength": 1 }
+        "path": { "$ref": "#/$defs/relativePathPattern" },
+        "kind": { "type": "string", "enum": ["file", "directory", "screenshot", "report", "diff", "manifest"] },
+        "required": { "type": "boolean" },
+        "contentType": { "type": "string", "minLength": 1 },
+        "maxSizeBytes": { "type": "integer", "minimum": 1 },
+        "sha256": {
+          "description": "Null before creation; filled by the agent after artifact creation and verified during artifact completion.",
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        }
       }
     },
-    "validationCommand": {
+    "relativePathPattern": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "anyOf": [
+          { "pattern": "^[A-Za-z]:" },
+          { "pattern": "^/" },
+          { "pattern": "\\.\\." }
+        ]
+      }
+    },
+    "validationCheck": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "source", "workingDirectory", "command", "timeoutSeconds"],
+      "required": ["id", "registryVersion", "shellMode", "parameters", "timeoutSeconds"],
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "source": {
-          "type": "string",
-          "description": "Only system-defined commands are executable.",
-          "const": "system_defined"
-        },
-        "workingDirectory": { "type": "string", "minLength": 1 },
-        "command": {
-          "type": "array",
-          "description": "Structured argv array, not shell text from the user.",
-          "items": { "type": "string", "minLength": 1 },
-          "minItems": 1
-        },
+        "id": { "type": "string", "enum": ["file_exists", "npm_lint", "npm_build", "git_diff_check", "static_html_exists"] },
+        "registryVersion": { "type": "string", "minLength": 1 },
+        "shellMode": { "type": "boolean", "const": false },
+        "parameters": { "type": "object" },
         "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "id": { "const": "file_exists" } }, "required": ["id"] },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "mustExist"],
+                "properties": {
+                  "path": { "$ref": "#/$defs/relativePathPattern" },
+                  "mustExist": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "id": { "const": "static_html_exists" } }, "required": ["id"] },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["htmlPath", "cssPath"],
+                "properties": {
+                  "htmlPath": { "$ref": "#/$defs/relativePathPattern" },
+                  "cssPath": { "$ref": "#/$defs/relativePathPattern" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "id": { "enum": ["npm_lint", "npm_build", "git_diff_check"] } }, "required": ["id"] },
+          "then": {
+            "properties": {
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "scope": { "type": "string", "enum": ["workspace"] }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "examples": [
@@ -181,7 +277,22 @@
       "id": "job_sandbox_file_test_001",
       "type": "sandbox_file_test",
       "projectId": "demo-regional-wholesale-network",
-      "workspacePath": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
+      "workspaceId": "local-demo-workspace",
+      "repository": {
+        "provider": "github",
+        "owner": "maksglazunov835-bit",
+        "name": "b2b-site-studio",
+        "identifier": "github:maksglazunov835-bit/b2b-site-studio"
+      },
+      "baseRef": "main",
+      "baseCommitSha": "1111111111111111111111111111111111111111",
+      "siteSpec": {
+        "version": "1.1.0",
+        "revision": 7,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "stage": "draft"
+      },
+      "inputArtifacts": [],
       "instructions": {
         "displaySummary": "Create one safe test file in the sandbox folder.",
         "objective": "Verify that the local agent can write an allowed artifact without touching project or production files.",
@@ -193,10 +304,11 @@
         "acceptanceCriteria": [
           "The file exists inside the allowed sandbox path.",
           "No forbidden paths are modified.",
-          "Validation command succeeds."
+          "Registered validation checks pass."
         ]
       },
       "constraints": {
+        "denyByDefault": true,
         "noRawUserTextAsShell": true,
         "requiresBranchOrWorktree": true,
         "maxLogBytes": 65536,
@@ -204,31 +316,34 @@
       },
       "inputs": {
         "source": "system_test",
-        "payload": {
-          "message": "Agent smoke test completed."
-        }
+        "payload": { "message": "Agent smoke test completed." }
       },
-      "expectedOutputs": [
+      "expectedOutputManifest": [
         {
-          "kind": "file",
           "path": "sandbox/agent-smoke-test.txt",
-          "description": "Single text artifact created inside sandbox."
+          "kind": "file",
+          "required": true,
+          "contentType": "text/plain",
+          "maxSizeBytes": 4096,
+          "sha256": null
         }
       ],
       "allowedPaths": ["sandbox/**"],
-      "forbiddenActions": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text"],
+      "allowedCapabilities": ["codex", "git", "file_read", "file_write", "artifact_upload"],
+      "allowedActions": ["create_branch", "write_files", "run_registered_validation", "create_artifact", "upload_artifact"],
+      "forbiddenActions": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text", "arbitrary_shell"],
       "modelProfile": "fast",
       "reasoningEffort": "low",
       "requiresApproval": false,
       "timeoutSeconds": 300,
       "idempotencyKey": "sandbox-file-test-001",
       "dependsOn": [],
-      "validationCommands": [
+      "validationChecks": [
         {
-          "name": "Check smoke-test file",
-          "source": "system_defined",
-          "workingDirectory": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
-          "command": ["powershell", "-NoProfile", "-Command", "Test-Path -LiteralPath .\\sandbox\\agent-smoke-test.txt"],
+          "id": "file_exists",
+          "registryVersion": "2026-09-02",
+          "shellMode": false,
+          "parameters": { "path": "sandbox/agent-smoke-test.txt", "mustExist": true },
           "timeoutSeconds": 30
         }
       ]
@@ -238,14 +353,36 @@
       "type": "design_reference_prototype",
       "projectId": "demo-regional-wholesale-network",
       "siteId": "main-regional-site",
-      "workspacePath": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
+      "workspaceId": "local-demo-workspace",
+      "repository": {
+        "provider": "github",
+        "owner": "maksglazunov835-bit",
+        "name": "b2b-site-studio",
+        "identifier": "github:maksglazunov835-bit/b2b-site-studio"
+      },
+      "baseRef": "main",
+      "baseCommitSha": "2222222222222222222222222222222222222222",
+      "siteSpec": {
+        "version": "1.1.0",
+        "revision": 7,
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stage": "generation_ready"
+      },
+      "inputArtifacts": [
+        {
+          "artifactId": "asset_design_reference_001",
+          "kind": "design_reference",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "sizeBytes": 204800
+        }
+      ],
       "instructions": {
         "displaySummary": "Create an executable HTML/CSS design-reference prototype without publishing.",
         "objective": "Generate one prototype variant for a B2B wholesale catalog so the user can compare visual directions before WordPress implementation.",
         "steps": [
           "Create design-prototypes/reference-001/index.html.",
           "Create design-prototypes/reference-001/styles.css.",
-          "Render or capture a screenshot artifact if browser tooling is available.",
+          "Capture a screenshot artifact if the local browser_screenshot capability is available.",
           "Do not publish, deploy, install packages, or change production configuration."
         ],
         "acceptanceCriteria": [
@@ -255,6 +392,7 @@
         ]
       },
       "constraints": {
+        "denyByDefault": true,
         "noRawUserTextAsShell": true,
         "requiresBranchOrWorktree": true,
         "maxLogBytes": 131072,
@@ -267,37 +405,51 @@
           "requiredBlocks": ["hero", "category grid", "product cards", "lead form", "regional trust block"]
         }
       },
-      "expectedOutputs": [
+      "expectedOutputManifest": [
         {
-          "kind": "file",
           "path": "design-prototypes/reference-001/index.html",
-          "description": "Static HTML prototype."
-        },
-        {
           "kind": "file",
-          "path": "design-prototypes/reference-001/styles.css",
-          "description": "Prototype stylesheet."
+          "required": true,
+          "contentType": "text/html",
+          "maxSizeBytes": 524288,
+          "sha256": null
         },
         {
-          "kind": "screenshot",
+          "path": "design-prototypes/reference-001/styles.css",
+          "kind": "file",
+          "required": true,
+          "contentType": "text/css",
+          "maxSizeBytes": 524288,
+          "sha256": null
+        },
+        {
           "path": "design-prototypes/reference-001/screenshot.png",
-          "description": "Visual proof of the prototype when screenshot tooling is available."
+          "kind": "screenshot",
+          "required": false,
+          "contentType": "image/png",
+          "maxSizeBytes": 4194304,
+          "sha256": null
         }
       ],
       "allowedPaths": ["design-prototypes/reference-001/**"],
-      "forbiddenActions": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text"],
+      "allowedCapabilities": ["codex", "git", "node", "file_read", "file_write", "browser_screenshot", "artifact_upload"],
+      "allowedActions": ["create_branch", "write_files", "run_registered_validation", "create_artifact", "upload_artifact"],
+      "forbiddenActions": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text", "arbitrary_shell"],
       "modelProfile": "standard",
       "reasoningEffort": "medium",
       "requiresApproval": false,
       "timeoutSeconds": 1800,
       "idempotencyKey": "design-reference-prototype-001",
       "dependsOn": [],
-      "validationCommands": [
+      "validationChecks": [
         {
-          "name": "Check prototype files",
-          "source": "system_defined",
-          "workingDirectory": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
-          "command": ["powershell", "-NoProfile", "-Command", "Test-Path .\\design-prototypes\\reference-001\\index.html; Test-Path .\\design-prototypes\\reference-001\\styles.css"],
+          "id": "static_html_exists",
+          "registryVersion": "2026-09-02",
+          "shellMode": false,
+          "parameters": {
+            "htmlPath": "design-prototypes/reference-001/index.html",
+            "cssPath": "design-prototypes/reference-001/styles.css"
+          },
           "timeoutSeconds": 30
         }
       ]

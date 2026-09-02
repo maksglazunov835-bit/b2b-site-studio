@@ -17,6 +17,8 @@ The first MVP scenario is a regional wholesale catalog for Russia: several categ
 1. Create a project.
    - User enters company name, business type, target audience, geography, and fixed facts.
    - The app stores unknown or unverified details as missing data, not as AI-written facts.
+   - User can save an incomplete draft, close the app, and continue later without entering fake phone, email, address, regions, products, variants, domains, or verified facts.
+   - Draft SiteSpec validation is intentionally permissive; readiness gates decide when the same SiteSpec can move to `generation_ready` or `publish_ready`.
 
 2. Choose site model.
    - Single site.
@@ -28,12 +30,14 @@ The first MVP scenario is a regional wholesale catalog for Russia: several categ
    - User chooses what is shared across the network and what can be overridden per site or region.
    - Shared information can include brand, catalog, design tokens, core contacts, legal facts, and base delivery/payment terms.
    - Regional information can include phone, address, delivery conditions, region-specific offer, stock notes, SEO text, and indexed page eligibility.
+   - Overrides replace only explicitly supplied fields. Missing override fields inherit shared values and must not erase them.
 
 4. Import catalog data.
    - User uploads CSV or XLSX.
    - App maps columns to categories, products, variants, prices, stock, SKU, photos, minimum order quantity, and attributes.
    - App shows a preview and an error report before saving.
    - Invalid rows remain visible and must not silently disappear.
+   - Imported files, product photos, variant photos, documents, logos, and design references are stored as assets/artifacts and referenced by IDs, checksums, content type, filename, and size. Binary data is not stored inside SiteSpec.
 
 5. Build the page plan.
    - User chooses required pages.
@@ -54,7 +58,8 @@ The first MVP scenario is a regional wholesale catalog for Russia: several categ
 
 8. Generate work packages.
    - The server orchestrator splits large goals into small Codex jobs.
-   - Every job contains dependencies, allowed paths, forbidden actions, acceptance criteria, expected outputs, model profile, reasoning effort, and validation commands.
+   - Every job contains dependencies, allowed paths, allowed capabilities, allowed actions, forbidden actions, acceptance criteria, expected output manifest, model profile, reasoning effort, and registered validation checks.
+   - Every job is pinned to repository identifier, base ref, base commit SHA, SiteSpec revision, SiteSpec sha256, and input artifact checksums.
    - Codex jobs run in a separate branch or worktree.
 
 9. Review previews and validation.
@@ -90,13 +95,37 @@ Regional or site-level overrides:
 - local phone or tracking number;
 - local address or pickup point;
 - delivery cost, timing, and coverage;
-- regional stock or assortment;
-- local offer and minimum order;
+- local offer, minimum order, and pricing policy;
+- included/excluded categories or products;
+- regional stock per product or variant;
 - regional SEO title, description, H1, content blocks, canonical behavior;
-- domain, subdomain, or directory path;
+- actual domain, subdomain, or directory path;
 - indexability flag.
 
 If a regional page has no real regional value, it should be generated as draft or noindex, not published as an indexed thin page.
+
+## SiteSpec Stages
+
+The product uses one draft-friendly SiteSpec schema with explicit document stages:
+
+- `draft`: user can save partial work. Confirmed facts can be empty; contacts, regions, sites, catalog, categories, products, variants, selected design, and domain can be missing.
+- `generation_ready`: enough structure exists to generate plans, prototypes, pages, or implementation tasks, but missing publish facts are allowed. This stage must pass generation readiness checks.
+- `publish_ready`: all publish-critical facts, contacts, domains, WordPress target, approval requirements, selected design, rollback plan, and indexability decisions must pass publish readiness checks.
+
+Generation readiness is not allowed to fabricate missing data. Publish readiness is stricter and blocks publication when contact, legal, domain, regional, SEO, or rollback facts are missing.
+
+## Structured Facts And Provenance
+
+Facts are not plain strings. Each fact stores:
+
+- stable key;
+- value, which can be `null` while unknown;
+- status: `unknown`, `supplied`, `imported`, or `verified`;
+- provenance: source type, source ID, asset ID when relevant, and notes;
+- verification date when applicable;
+- publication permission.
+
+AI can use supplied/imported facts for draft generation only when the job allows it, but it cannot convert `unknown` to `verified`. Verification requires an explicit import, operator review, or other trusted process. `unknown` facts must remain unpublished.
 
 ## Catalog Requirements
 
@@ -105,8 +134,9 @@ The catalog must support:
 - categories and subcategories;
 - product cards;
 - variants such as taste, packaging, strength, size, color, material, or SKU;
-- photos per product and per variant when available;
+- product-level and variant-level photos by asset ID;
 - price, old price, currency, stock state, minimum order quantity, and wholesale pack size;
+- variant-specific SKU, price override, stock, minimum party, packaging, photos, and publication status;
 - import source tracking;
 - row-level validation errors;
 - filters based on real attributes;
@@ -208,9 +238,13 @@ Excluded from first MVP:
 ## Success Criteria
 
 - A user can create a project and store a valid SiteSpec.
+- A user can save and resume an incomplete draft SiteSpec without fake required data.
+- `generation_ready` and `publish_ready` are reached only through explicit readiness checks.
+- Facts keep status, provenance, verification metadata, and publication permission.
+- Uploaded files are represented by asset/artifact references with checksums and sizes, not embedded binary data.
 - A catalog import can be previewed, mapped, validated, and saved.
 - The system can split work into bounded Codex jobs.
-- A local Windows agent can claim, run, heartbeat, validate, and return artifacts for safe jobs.
+- A local Windows agent can resolve `workspaceId`, claim with lease token, run, heartbeat, validate through registered checks, and return verified artifacts for safe jobs.
 - The product can generate and compare design-reference prototypes.
 - The publication path produces a real WordPress site on staging before production.
 - The system prevents unapproved irreversible actions and avoids invented company facts.

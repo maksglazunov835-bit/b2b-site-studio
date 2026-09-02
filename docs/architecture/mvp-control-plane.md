@@ -17,6 +17,7 @@ The web interface is the operator-facing control plane. It collects project data
 Responsibilities:
 
 - collect and edit SiteSpec;
+- save incomplete SiteSpec drafts and resume later without fake data;
 - upload references and catalog files;
 - display import previews and validation errors;
 - show job state, logs, screenshots, artifacts, and final results;
@@ -29,12 +30,14 @@ The server API owns project state and decides which jobs should exist. The orche
 Responsibilities:
 
 - validate SiteSpec and job specs;
+- run separate readiness checks for `draft`, `generation_ready`, and `publish_ready`;
 - split large goals into small jobs with dependencies;
 - store state transitions and events;
+- pin each job to repository identifier, base ref, base commit SHA, SiteSpec revision, SiteSpec sha256, and input artifact checksums;
 - enforce idempotency keys;
 - enforce approvals;
 - expose agent API endpoints;
-- never send raw user text as executable shell commands.
+- never send raw user text or arbitrary validation commands as executable shell.
 
 ### PostgreSQL Source Of Truth
 
@@ -45,11 +48,16 @@ Core tables planned for MVP:
 - `workspaces`;
 - `projects`;
 - `site_specs`;
+- `site_spec_revisions`;
 - `sites`;
 - `regions`;
+- `site_region_overrides`;
+- `facts`;
 - `catalog_imports`;
 - `catalog_items`;
+- `catalog_variants`;
 - `jobs`;
+- `job_attempts`;
 - `job_events`;
 - `job_logs`;
 - `artifacts`;
@@ -57,7 +65,19 @@ Core tables planned for MVP:
 - `wordpress_targets`;
 - `leads`.
 
-Files and large artifacts should be stored in object storage or a filesystem-backed artifact store, with metadata and checksums in PostgreSQL.
+Files and large artifacts should be stored in object storage or a filesystem-backed artifact store, with metadata and checksums in PostgreSQL. SiteSpec stores only structured asset references such as asset/artifact ID, role, filename, content type, size, and sha256; binary payloads stay outside SiteSpec.
+
+SiteSpec revisions are immutable once used by a job. If a user changes the brief while a job is running, the new SiteSpec revision receives a new sha256 and existing jobs cannot report success against the old input unless their job spec explicitly allowed that stale base.
+
+### SiteSpec Stages And Readiness
+
+The architecture uses one draft-friendly SiteSpec schema with explicit stages:
+
+- `draft`: can be incomplete and can omit contacts, regions, sites, products, variants, selected design, domain, and verified facts.
+- `generation_ready`: has enough structure to generate plans, designs, pages, or implementation tasks, and must pass generation readiness checks.
+- `publish_ready`: has all publish-critical facts, contacts, domains, WordPress target, selected design, rollback plan, and indexability decisions, and must pass publish readiness checks.
+
+Readiness checks are stored as structured results. They are not a substitute for facts and must not be satisfied with placeholder contact data, placeholder addresses, or invented company claims.
 
 ### MVP Queue With Lease And Heartbeat
 
@@ -71,21 +91,25 @@ Queue behavior:
 
 - A job starts as `draft` while being composed.
 - A ready job moves to `queued`.
-- One agent claims a job atomically and receives a lease.
+- One agent claims a job atomically and receives a lease with a random lease token.
 - Claimed jobs move to `running` when execution begins.
 - The agent sends heartbeat while running.
 - If a lease expires, the job can return to `queued` or move to `failed` depending on retry policy.
 - Jobs requiring irreversible actions move to `awaiting_approval`.
-- After execution, validation commands run and the job moves to `validating`.
+- After execution, registered validation checks run and the job moves to `validating`.
+- A running job moves to `cancel_requested` before terminal cancellation; it becomes `cancelled` only after agent acknowledgement.
 - Terminal states are `succeeded`, `failed`, and `cancelled`.
 
 Lease rules:
 
-- each claim assigns `claimedBy`, `leaseUntil`, and `attempt`;
-- heartbeat extends `leaseUntil`;
+- each claim assigns `claimedBy`, `leaseUntil`, `attempt`, and a random `leaseToken`;
+- start, heartbeat, events, logs, artifacts, validation, complete, fail, and cancel acknowledgement require the active lease token;
+- heartbeat extends `leaseUntil` only for the active lease token;
 - stale leases are recoverable;
+- stale processes cannot upload artifacts or terminal state after the lease token expires;
 - idempotency key prevents duplicate side effects;
 - terminal jobs cannot be claimed again;
+- repeated terminal updates with the same idempotency key return the stored result;
 - retries must create a new attempt record while preserving previous logs and artifacts.
 
 ### Local Windows Agent
@@ -97,9 +121,10 @@ Responsibilities:
 - register with the configured API;
 - poll or long-poll for eligible jobs;
 - claim a job and renew the lease;
+- resolve `workspaceId` to a local path from protected local configuration;
 - create a dedicated branch or worktree;
 - run Codex only inside allowlisted directories;
-- execute only structured validation commands from the job spec;
+- execute only local registered validation checks requested by ID with typed parameters;
 - upload logs, events, screenshots, diffs, reports, and artifacts;
 - stop when cancelled or when approval is required.
 
@@ -107,8 +132,11 @@ Safety requirements:
 
 - token comes from an environment variable or protected local storage;
 - agent only talks to the configured API origin;
-- workspace path must be inside an allowlist;
+- the server cannot choose arbitrary absolute paths on the user's computer;
+- resolved workspace path must be inside an allowlist;
+- capabilities and actions are deny-by-default;
 - raw user text is data, not a shell command;
+- `powershell -Command`, `cmd /c`, `bash -c`, `sh -c`, and arbitrary executables are not accepted from job specs;
 - secrets are masked in logs;
 - logs and artifacts have size limits;
 - publication and other irreversible operations require approval.
@@ -120,10 +148,24 @@ Codex is invoked by the local agent for implementation, validation, review, or a
 Rules:
 
 - run in a dedicated branch or worktree;
-- use allowed paths and forbidden actions from the job spec;
+- use allowed paths, allowed capabilities, allowed actions, and forbidden actions from the job spec;
 - map execution profiles through configuration, not hard-coded model names in business logic;
 - produce a final report with changed files, checks, assumptions, and risks;
 - never merge to main or deploy unless a job explicitly allows it and approval is present.
+
+### Registered Validation Checks
+
+The server sends validation check IDs, not command text.
+
+Initial local registry:
+
+- `file_exists`;
+- `npm_lint`;
+- `npm_build`;
+- `git_diff_check`;
+- `static_html_exists`.
+
+Registry entries are local agent code/configuration. Every check runs with shell mode false, typed parameters, normalized relative paths, and workspace allowlist checks. Unknown checks and missing capabilities are denied.
 
 ### Logs, Events, And Artifacts
 
@@ -138,6 +180,9 @@ Event examples:
 - `job.progress`;
 - `job.awaiting_approval`;
 - `job.validation_started`;
+- `job.validation_result`;
+- `job.cancel_requested`;
+- `job.cancel_acknowledged`;
 - `job.succeeded`;
 - `job.failed`;
 - `job.cancelled`;
@@ -160,6 +205,8 @@ Artifact examples:
 - design prototypes;
 - WordPress export packages.
 
+Artifact upload is two-phase: the agent creates an upload record, uploads bytes, then completes upload with size and sha256. The server checks the manifest, path, content type, size, checksum, job attempt, and lease token before accepting it.
+
 ### Approvals
 
 Approvals are first-class state, not chat conventions.
@@ -176,6 +223,14 @@ Actions requiring approval:
 - destructive database migrations.
 
 Approval records must include requester, action, target, reason, preview, created time, expiration, status, approver, and decision time.
+
+Approval flow:
+
+- agent or server creates an approval request and the job enters `awaiting_approval`;
+- user/operator approves or rejects the request;
+- agent receives the decision through heartbeat or approval lookup;
+- rejected approval blocks the action and normally fails or returns the job to a safe state;
+- approved action is still limited by allowed capabilities/actions and current lease.
 
 ### WordPress Site Factory
 
@@ -200,14 +255,16 @@ Boundary 1: Browser to server API.
 Boundary 2: Server API to local agent.
 
 - Agent authenticates with a scoped token.
-- Agent receives only jobs for allowlisted workspaces.
+- Agent receives jobs by `workspaceId` and resolves the local path itself.
 - API must not trust agent logs as proof of success without validation results.
+- Lease token and attempt must match before the server accepts progress, logs, artifacts, validation, or terminal states.
 
 Boundary 3: Local agent to Codex/workspace.
 
 - Codex works inside allowed paths.
-- Job spec constrains file access and forbidden actions.
+- Job spec constrains file access through allowed paths, allowed capabilities, allowed actions, and forbidden actions.
 - Raw user text is never executed as shell.
+- Server-supplied absolute paths and server-supplied shell commands are not trusted.
 
 Boundary 4: Platform to WordPress.
 
@@ -222,15 +279,16 @@ Boundary 4: Platform to WordPress.
 3. User imports catalog or updates brief data.
 4. Orchestrator creates draft jobs from SiteSpec changes.
 5. Ready jobs move to queued.
-6. Local agent claims a job and receives a lease.
-7. Agent prepares branch/worktree in an allowlisted workspace.
-8. Agent runs Codex with structured instructions and constraints.
-9. Agent streams events, progress, and masked logs.
-10. Agent runs predefined validation commands.
-11. Agent uploads artifacts and final report.
-12. Server records result and updates project status.
-13. User reviews previews and approves irreversible actions if needed.
-14. WordPress publication jobs run only after approval.
+6. Local agent claims a job and receives a lease token.
+7. Agent resolves `workspaceId` locally and verifies repository/base commit/SiteSpec hash.
+8. Agent prepares branch/worktree in an allowlisted workspace.
+9. Agent runs Codex with structured instructions and constraints.
+10. Agent streams events, progress, and masked logs with the current lease token.
+11. Agent creates artifact uploads, uploads bytes, and completes each artifact with size and sha256.
+12. Agent starts validation and runs registered validation checks.
+13. Server accepts success only after required validation passes and input versions still match.
+14. User reviews previews and approves irreversible actions if needed.
+15. WordPress publication jobs run only after approval.
 
 ## Execution Profiles
 
@@ -247,8 +305,9 @@ Each profile maps to an available model, reasoning effort, timeout, validation d
 
 - Every job has an idempotency key.
 - Claim is atomic.
-- Lease ownership is checked before accepting heartbeat, logs, artifacts, or terminal updates.
+- Lease ownership and lease token are checked before accepting heartbeat, logs, artifacts, validation, or terminal updates.
 - Terminal updates are idempotent.
+- Repository base commit SHA, SiteSpec revision, SiteSpec sha256, and input artifact checksums are checked before terminal success.
 - Retried jobs preserve previous attempts and use a new attempt number.
 - External side effects require both idempotency key and approval when irreversible.
 
@@ -256,8 +315,11 @@ Each profile maps to an available model, reasoning effort, timeout, validation d
 
 Cancellation:
 
-- server marks job as `cancelled` if it is not terminal;
-- agent stops at the next safe checkpoint;
+- server marks queued/draft jobs as `cancelled` immediately when safe;
+- server marks running jobs as `cancel_requested`;
+- agent sees cancellation through heartbeat, stops at the next safe checkpoint, and sends cancel acknowledgement with the active lease token;
+- running jobs become terminal `cancelled` only after agent acknowledgement;
+- if the lease expires before acknowledgement, the stale process is fenced off and the attempt moves to a retryable failure or stale-lease recovery path, not terminal `cancelled`;
 - partial artifacts remain attached to the cancelled attempt.
 
 Retry:

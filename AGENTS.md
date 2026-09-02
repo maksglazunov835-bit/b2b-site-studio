@@ -6,6 +6,8 @@
 - The first MVP target is a wholesale catalog scenario with categories, products, product variations, regional pages, SEO metadata, forms, and WordPress publication.
 - The current web interface is only the operator/control-plane surface. Do not treat dashboard mock data as company facts or production analytics.
 - The product source of truth for generated sites is a structured SiteSpec. AI-generated work must read from SiteSpec, job specs, and approved user input, not from ad hoc chat text.
+- SiteSpec must support incomplete `draft` state without fake phone, email, address, regions, sites, products, variants, domain, selected design, or verified facts.
+- `generation_ready` and `publish_ready` are explicit document stages with separate readiness checks. Do not use placeholder values to satisfy readiness.
 
 ## MVP Boundaries
 
@@ -35,13 +37,19 @@
 - Do not ask the user for root passwords when key-based access is already available.
 - Never commit tokens, private keys, `.env` files, production credentials, personal data dumps, or secret-bearing logs.
 - Do not invent company facts: addresses, certificates, reviews, delivery terms, legal names, stock, prices, guarantees, or contact data must be supplied, imported, or explicitly marked as assumptions.
-- User-visible instructions, user chat text, and uploaded content must not be turned directly into shell commands. Convert work into structured job specs with allowlisted paths, typed inputs, and predefined validation commands.
+- Company facts must be structured with key/value, status, provenance, optional verification date, and publication permission. AI must not promote `unknown` facts to `verified`.
+- Uploaded media and documents belong in artifact/asset storage and are referenced by `assetId` or `artifactId`; do not store binary payloads in SiteSpec.
+- User-visible instructions, user chat text, and uploaded content must not be turned directly into shell commands. Convert work into structured job specs with allowlisted paths, typed inputs, and registered validation checks.
 - Mask secrets in logs and reports. Keep logs and artifacts bounded in size.
 
 ## Local Agent Safety Rules
 
 - Run Codex jobs only inside allowlisted folders and preferably in a dedicated branch or worktree.
 - A local agent must accept jobs only from the configured API, use a token from an environment variable or protected local storage, and report heartbeat/lease status while running.
+- Jobs use `workspaceId`; the local agent maps that ID to a local path from protected configuration. The server must not choose arbitrary absolute paths on the user's computer.
+- Validation is deny-by-default through locally registered check IDs such as `file_exists`, `npm_lint`, `npm_build`, and `git_diff_check`; arbitrary shell, `powershell -Command`, `cmd /c`, `bash -c`, and `sh -c` are not valid job validation inputs.
+- Missing `allowedCapabilities` or `allowedActions` entries mean the action is denied, even if it is not listed in `forbiddenActions`.
+- Claimed jobs require a random lease token for start, heartbeat, logs, artifacts, validation, completion, failure, and cancellation acknowledgement.
 - Irreversible actions in local-agent jobs require an approval state before execution.
 
 ## Final Reports

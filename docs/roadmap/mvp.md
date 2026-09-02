@@ -6,9 +6,10 @@ Definition of done:
 
 - Product requirements are documented.
 - Control-plane architecture is documented.
-- SiteSpec schema exists with a valid regional wholesale example.
-- Local agent job schema exists with safe examples.
-- Agent API contract documents lifecycle, lease, heartbeat, logs, artifacts, approvals, retry, and cancellation.
+- SiteSpec schema supports incomplete drafts plus `generation_ready` and `publish_ready` stages.
+- SiteSpec schema includes valid draft and generation-ready regional wholesale examples without placeholder contacts.
+- Local agent job schema uses `workspaceId`, pinned input versions, output manifests, allowed capabilities/actions, and safe examples.
+- Agent API contract documents lifecycle, lease token, heartbeat, logs, two-phase artifacts, validation, approvals, retry, cancel request, and cancel acknowledgement.
 - JSON Schema and examples are locally validated.
 
 ## 2. PostgreSQL And Project/SiteSpec Persistence
@@ -16,6 +17,10 @@ Definition of done:
 Definition of done:
 
 - PostgreSQL schema stores workspaces, projects, SiteSpec versions, sites, regions, and audit timestamps.
+- SiteSpec revisions are immutable once a job references them.
+- Draft SiteSpec can be saved and resumed without contacts, domains, regions, sites, catalog, products, variants, or verified facts.
+- Facts are stored as structured records with provenance, verification status, verification date, and publication permission.
+- Assets store metadata and checksums outside SiteSpec; SiteSpec stores asset/artifact references only.
 - API can create, update, fetch, and version SiteSpec.
 - Invalid SiteSpec writes are rejected.
 - Tests cover valid and invalid SiteSpec payloads.
@@ -26,17 +31,22 @@ Definition of done:
 
 - Jobs can be created from server-side orchestration code.
 - Queue states follow `draft -> queued -> claimed -> running -> awaiting_approval -> validating -> succeeded | failed | cancelled`.
+- Running cancellation uses `cancel_requested` before terminal `cancelled`.
 - Events and logs are stored with job attempt IDs.
-- Lease expiration returns jobs to a safe retry path.
+- Claim returns a random lease token.
+- Start, heartbeat, events, logs, artifacts, validation, complete, fail, and cancel acknowledgement require the active lease token.
+- Lease expiration fences off stale local processes and returns jobs to a safe retry path.
 
 ## 4. Server To Local Agent Test Loop
 
 Definition of done:
 
 - Local Windows agent registers and passes health check.
-- Agent claims a safe sandbox job.
+- Agent resolves `workspaceId` from protected local configuration and rejects unknown workspaces.
+- Agent claims a safe sandbox job and receives a lease token.
 - Agent heartbeats while running.
-- Agent uploads a small artifact and final report.
+- Agent uploads a small artifact through create/complete upload with size and sha256 verification.
+- Agent runs registered validation checks and submits validation results.
 - Server displays job progress and result.
 
 ## 5. Safe Codex Execution And Profiles
@@ -48,6 +58,8 @@ Definition of done:
 - Execution profiles `fast`, `standard`, `deep`, and `review` map through configuration.
 - No business logic stores one hard-coded model name.
 - User text cannot become a shell command.
+- Validation uses local registered check IDs such as `file_exists`, `npm_lint`, `npm_build`, `git_diff_check`, and `static_html_exists`; server-supplied shell is rejected.
+- Security is deny-by-default through allowed capabilities and actions.
 
 ## 6. Catalog Wizard And CSV/XLSX Import
 
@@ -56,6 +68,7 @@ Definition of done:
 - User uploads CSV/XLSX.
 - UI supports column mapping.
 - Preview shows parsed categories, products, variants, prices, stock, photos, and minimum order.
+- Product variants can carry their own SKU, attributes, price override, stock, minimum order, packaging, photos, and publication status.
 - Error report identifies invalid rows and missing required fields.
 - Valid import updates SiteSpec/catalog state.
 
@@ -101,7 +114,8 @@ Definition of done:
 Definition of done:
 
 - Shared network data is inherited by default.
-- Region/site overrides work for contacts, delivery, offers, content, SEO, and indexability.
+- Region/site overrides work for contacts, address, delivery, regional offer, minimum order, pricing policy, category/product inclusion and exclusion, stock, SEO Title/Description/H1, additional content blocks, indexability, canonical policy, and host/path.
+- Missing override fields inherit shared values and do not erase them.
 - Pages without real regional facts are noindex or draft.
 - Regional clone report shows what changed per region.
 
