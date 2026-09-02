@@ -8,9 +8,15 @@ Definition of done:
 - Control-plane architecture is documented.
 - SiteSpec schema supports incomplete drafts plus `generation_ready` and `publish_ready` stages.
 - SiteSpec schema includes valid draft, generation-ready, and publish-ready examples without placeholder contacts.
+- SiteSpec generation and publication readiness depend on `siteModel` and generated page types, so landing, multipage, corporate, and single WordPress site jobs do not require fake catalog data.
+- SiteSpec catalog uses one canonical product registry: categories reference product IDs and do not embed product arrays.
+- SiteSpec commercial fields for price, stock, and minimum order require provenance and publication permission; `system_inference` values are never publishable.
+- Required lead-form consent must include publishable verified consent text before `publish_ready`.
 - SiteSpec schema includes negative fixtures for invalid readiness, missing publish targets, empty contacts, and nonpublishable facts.
 - Local agent job schema uses `jobSpecVersion`, `workspaceId`, pinned input versions, output manifests, safe POSIX-relative paths, sandbox policy, allowed capabilities/actions, approval policy, GitHub workflow, and safe examples.
+- Local agent job schema allows external network only through typed allowlist destinations for GitHub, artifact upload, and WordPress targets.
 - Job schema includes negative fixtures for Windows absolute paths, UNC paths, traversal paths, and self-approved irreversible actions.
+- Job schema includes negative fixtures for GitHub push/PR attempts without matching allowlisted network destinations or without a `codex/` target branch.
 - Agent API contract is versioned under `/api/v1` and documents registration/claim version negotiation, lifecycle, lease token, heartbeat, logs, two-phase artifacts, validation, approvals, retry, cancel request, and cancel acknowledgement.
 - Independent Review And Verification is documented in `AGENTS.md`, product requirements, architecture, and this roadmap.
 - Execution result is separated from independent acceptance result.
@@ -40,7 +46,7 @@ Definition of done:
 - Queue states follow `draft -> queued -> claimed -> running -> awaiting_approval -> validating -> succeeded | failed | cancelled`.
 - `succeeded`, `failed`, and `cancelled` are execution results only.
 - Independent acceptance states are `accepted`, `changes_required`, and `blocked`.
-- `succeeded` jobs move to review pending until an independent reviewer or CI gate checks actual diff and validation evidence.
+- `succeeded` jobs move to review pending until an independent reviewer, or configured CI when available, checks actual diff and validation evidence.
 - Running cancellation uses `cancel_requested` before terminal `cancelled`.
 - Events and logs are stored with job attempt IDs.
 - Claim returns a random lease token.
@@ -70,12 +76,14 @@ Definition of done:
 - Every job uses a branch or worktree.
 - Codex, Node, npm scripts, and repository code run in a sandboxed low-privilege process.
 - Sandbox uses allowlisted environment variables, no production secrets, network disabled by default, and CPU/memory/time/filesystem limits.
+- External network is available only through typed allowlist destinations; arbitrary hosts from user text are rejected.
 - Execution profiles `fast`, `standard`, `deep`, and `review` map through configuration.
 - No business logic stores one hard-coded model name.
 - User text cannot become a shell command.
 - Validation uses local registered check IDs such as `file_exists`, `npm_lint`, `npm_build`, `git_diff_check`, and `static_html_exists`; server-supplied shell is rejected.
 - Security is deny-by-default through allowed capabilities and actions.
 - Safe GitHub actions support `git_commit`, feature-branch push only, and create/update PR, with repository ID/origin verification, no force-push, and no push to `main`.
+- GitHub push/PR allowlist entries must match repository identifier, provider repository ID, remote origin, and `codex/` target branch.
 
 ## 6. Catalog Wizard And CSV/XLSX Import
 

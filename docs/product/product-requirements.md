@@ -63,6 +63,7 @@ The first MVP scenario is a regional wholesale catalog for Russia: several categ
    - The server orchestrator splits large goals into small Codex jobs.
    - Every job contains dependencies, allowed paths, allowed capabilities, allowed actions, forbidden actions, acceptance criteria, expected output manifest, model profile, reasoning effort, and registered validation checks.
    - Every job is pinned to repository identifier, base ref, base commit SHA, SiteSpec revision, SiteSpec sha256, and input artifact checksums.
+   - Networked job actions require typed allowlist destinations. GitHub push and PR jobs must bind `github_git` and `github_api` destinations to the expected repository and `codex/` branch; arbitrary hosts from user text are never execution targets.
    - Codex jobs run in a separate branch or worktree.
 
 9. Review previews and validation.
@@ -122,7 +123,7 @@ The product uses one draft-friendly SiteSpec schema with explicit document stage
 - `generation_ready`: enough structure exists to generate plans, prototypes, pages, or implementation tasks, but missing publish facts are allowed. This stage must pass generation readiness checks.
 - `publish_ready`: all publish-critical facts, contacts, domains, WordPress target, approval requirements, selected design, rollback plan, and indexability decisions must pass publish readiness checks.
 
-Generation readiness is not allowed to fabricate missing data. Publish readiness is stricter and blocks publication when contact, legal, domain, regional, SEO, or rollback facts are missing.
+Generation readiness is not allowed to fabricate missing data. Landing, multipage, corporate, and single WordPress site work can be generation-ready without catalog data when their page plan has no category, catalog, or product pages. Catalog, SEO-network, and hybrid work require canonical catalog data only when those generated page types are in scope. Publish readiness is stricter and blocks publication when contact, legal, domain, regional, SEO, consent, commercial, or rollback facts are missing.
 
 ## Server-Owned Readiness
 
@@ -132,12 +133,13 @@ Readiness evaluator rules:
 
 - a gate cannot be `passed` while any required check is `missing` or `failed`;
 - `checkedAt` and verification timestamps use date-time values;
-- `generation_ready` depends on enough brief, catalog, page-plan, and design information for generation, but can still keep contacts, domains, and publication facts missing;
+- `generation_ready` depends on enough brief, page-plan, and design information for the selected site model, and requires catalog data only for catalog/product page generation;
 - `publish_ready` depends on the chosen `siteModel` and network mode;
 - single-site publish readiness does not require a fake region;
 - catalog, SEO-network, and hybrid models require publishable category/product data when those pages are part of the target;
 - network publication requires real region/site facts for pages that will be indexed;
 - publication requires real usable contacts or an approved lead intake path;
+- required consent requires publishable verified consent text;
 - publication requires actual host/target, selected design, rollback plan, publishable facts, WordPress target, and approval requirements.
 
 The evaluator must reject placeholder contacts, placeholder domains, unverifiable claims, invented regional uniqueness, and user-supplied `passed` flags that are not backed by required checks.
@@ -155,6 +157,8 @@ Facts are not plain strings. Each fact stores:
 
 AI can use supplied/imported facts for draft generation only when the job allows it, but it cannot convert `unknown` to `verified`. Verification requires an explicit import, operator review, or other trusted process. `unknown` facts must remain unpublished.
 
+Commercial data follows the same rule. Price, stock, and minimum order must carry structured provenance, publication permission, and explicit visibility. AI may mark them unknown or draft-only, but may not invent or publish commercial values from `system_inference`.
+
 ## Catalog Requirements
 
 The catalog must support:
@@ -169,6 +173,13 @@ The catalog must support:
 - row-level validation errors;
 - filters based on real attributes;
 - category landing content and internal links.
+
+Canonical catalog model:
+
+- `catalog.categories` stores the category tree, slugs, paths, asset IDs, and product ID membership.
+- `catalog.products` stores products and variants.
+- Product IDs referenced by categories, region overrides, variants, prices, stock, and page plans must resolve to `catalog.products`.
+- Categories must not embed product arrays, because that creates two sources of truth.
 
 ## Page Requirements
 
@@ -233,6 +244,8 @@ Lead forms must be structured in SiteSpec before generation:
 - routing by project, site, and region.
 
 Telegram tokens are represented only by secret references. Generated frontend code must never receive Telegram bot tokens or chat secrets.
+
+If consent is mandatory, the consent copy must be a publishable verified fact before publication. A missing or draft consent text keeps the SiteSpec below `publish_ready`.
 
 ## Regulated Product Compliance
 
@@ -310,7 +323,7 @@ The product must support an independent review gate before merge, production dep
 
 Review requirements:
 
-- reviewer or CI checks the actual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment;
+- independent reviewer, or configured CI when available, checks the actual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment;
 - executor cannot accept its own work;
 - successful command output and a Codex final report are supporting evidence, not proof of readiness;
 - forbidden files, unrelated changes, secrets, dangerous commands, and invented facts must be checked independently;

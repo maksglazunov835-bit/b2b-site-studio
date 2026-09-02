@@ -36,6 +36,7 @@ Responsibilities:
 - store state transitions and events;
 - store independent review decisions separately from execution results;
 - pin each job to repository identifier, base ref, base commit SHA, SiteSpec revision, SiteSpec sha256, and input artifact checksums;
+- bind networked job actions to typed allowlist destinations for GitHub, artifact storage, or WordPress targets;
 - enforce idempotency keys;
 - enforce approvals;
 - expose agent API endpoints;
@@ -89,10 +90,15 @@ Rules:
 - the browser may submit inputs, but cannot set a readiness gate to `passed`;
 - a readiness gate cannot be `passed` while any required check is `missing` or `failed`;
 - `publish_ready` requirements depend on `siteModel` and network mode;
+- `generation_ready` requirements depend on `siteModel` and generated page types: landing, multipage, corporate, and single WordPress site jobs can be ready without catalog data when no catalog/category/product pages are generated;
 - single-site projects do not require a fake region;
 - catalog, SEO-network, and hybrid publication require publishable category/product data when those pages are generated;
+- commercial price, stock, and minimum-order values require explicit provenance and publish permission; system inference cannot publish them;
+- required lead-form consent requires publishable verified consent text;
 - publication requires real usable contacts or an approved lead intake path;
 - publication requires actual host/target, selected design, rollback plan, publishable facts, WordPress target, and required approvals.
+
+Catalog data has one canonical shape: categories store hierarchy and product ID membership; products and variants live only in `catalog.products`. Semantic validation must confirm category paths, parent references, product references, asset references, selected design artifacts, Telegram routes, site/region references, and target host consistency.
 
 ### MVP Queue With Lease And Heartbeat
 
@@ -160,7 +166,7 @@ Safety requirements:
 - publication and other irreversible operations require approval.
 - Codex, Node, npm scripts, and repository code run as untrusted code in a sandboxed low-privilege process;
 - environment variables are allowlisted and production secrets are unavailable;
-- network is disabled by default unless a capability explicitly allowlists it;
+- network is disabled by default unless typed destinations explicitly allow it;
 - CPU, memory, time, file count, and file size limits are enforced;
 - only normalized POSIX-relative paths are accepted in contracts;
 - backslash, colon, Windows absolute paths, UNC/device paths, control/NUL, and traversal segments are rejected;
@@ -206,7 +212,7 @@ Entities:
 Rules:
 
 - Codex execution report and successful command output are supporting evidence only.
-- Reviewer or CI checks the factual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment.
+- An independent reviewer, or configured CI when available, checks the factual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment.
 - The executor cannot accept its own work.
 - `accepted` is required before merge, production deploy, WordPress publication, DNS changes, and other irreversible actions.
 - `changes_required` keeps fixes in the same feature branch or PR and triggers a full recheck.
@@ -224,11 +230,13 @@ Rules:
 
 - agent verifies exact repository identifier, provider repository ID, and remote origin before any git write;
 - commits happen only in a dedicated branch or worktree;
-- push is only to a feature branch, normally with the `codex/` prefix;
+- push is only to a feature branch with the `codex/` prefix;
 - force-push is forbidden;
 - push to `main` is forbidden;
 - merge is forbidden until independent acceptance is `accepted`;
 - job results include commit SHA, branch name, and PR URL when those actions are performed.
+
+GitHub push and PR jobs require `github_git` and `github_api` network allowlist entries. Each entry must match the repository identifier, provider repository ID, remote origin, and target `codex/` branch. Hosts are selected from typed destinations, not copied from user text.
 
 ### Logs, Events, And Artifacts
 
@@ -327,6 +335,7 @@ Boundary 2: Server API to local agent.
 - API must not trust agent logs as proof of success without validation results.
 - API must not treat execution success as independent acceptance.
 - Lease token and attempt must match before the server accepts progress, logs, artifacts, validation, or terminal states.
+- API may authorize network only through typed destinations; unallowlisted external network writes are denied.
 
 Boundary 3: Local agent to Codex/workspace.
 
@@ -340,6 +349,7 @@ Boundary 4: Platform to WordPress.
 
 - Publishing requires approval.
 - WordPress credentials are stored server-side or in protected agent storage.
+- Staging actions use staging targets and production actions use production targets from protected configuration.
 - Generated frontend code must not contain secrets.
 
 ## Data Flow
@@ -357,7 +367,7 @@ Boundary 4: Platform to WordPress.
 11. Agent creates artifact uploads, uploads bytes, and completes each artifact with size and sha256.
 12. Agent starts validation and runs registered validation checks.
 13. Server accepts execution success only after required validation passes and input versions still match.
-14. Independent reviewer or CI checks the diff, outputs, tests, and risks.
+14. Independent reviewer, or configured CI when available, checks the diff, outputs, tests, and risks.
 15. User reviews previews and approves irreversible actions if needed.
 16. WordPress publication jobs run only after readiness, approval, and independent acceptance.
 

@@ -6,6 +6,8 @@ This contract describes how the B2B Site Studio server communicates with a local
 
 The server never sends arbitrary shell text. The local agent resolves `workspaceId` to a local path from protected local configuration and executes only registered validation checks with typed parameters.
 
+Network is disabled by default. When a job needs an external side effect, the JobSpec must include a typed `sandbox.networkAllowlist` entry for the exact purpose: `github_git`, `github_api`, `artifact_upload`, `wordpress_staging`, or `wordpress_production`. The agent must not derive arbitrary hosts from user text.
+
 ## Protocol Versions
 
 The first supported API namespace is `/api/v1`.
@@ -60,7 +62,7 @@ Independent acceptance result is the review decision:
 - `changes_required`;
 - `blocked`.
 
-`succeeded` only means the executor finished and required execution checks passed. It is not proof that the task is ready to merge, deploy, or publish. Acceptance requires an independent reviewer or CI gate that checks the actual diff, changed files, tests, architecture, migration/configuration/security impact, and alignment with the source Issue or JobSpec. The executor cannot accept its own work.
+`succeeded` only means the executor finished and required execution checks passed. It is not proof that the task is ready to merge, deploy, or publish. Acceptance requires an independent reviewer, or a configured CI gate when available, that checks the actual diff, changed files, tests, architecture, migration/configuration/security impact, and alignment with the source Issue or JobSpec. The executor cannot accept its own work.
 
 ## State Lifecycle
 
@@ -215,8 +217,40 @@ Response:
         "revision": 7,
         "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
       },
-      "allowedCapabilities": ["codex", "git", "node", "file_write", "artifact_upload"],
-      "allowedActions": ["create_branch", "write_files", "run_registered_validation", "create_artifact", "upload_artifact"],
+      "sandbox": {
+        "networkAccess": "allowlisted",
+        "networkAllowlist": [
+          {
+            "purpose": "github_git",
+            "host": "github.com",
+            "binding": {
+              "repositoryIdentifier": "github:maksglazunov835-bit/b2b-site-studio",
+              "providerRepositoryId": "repo_123456789",
+              "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git",
+              "targetBranch": "codex/job-design-reference-001"
+            }
+          },
+          {
+            "purpose": "github_api",
+            "host": "api.github.com",
+            "binding": {
+              "repositoryIdentifier": "github:maksglazunov835-bit/b2b-site-studio",
+              "providerRepositoryId": "repo_123456789",
+              "originUrl": "git@github.com:maksglazunov835-bit/b2b-site-studio.git",
+              "targetBranch": "codex/job-design-reference-001"
+            }
+          },
+          {
+            "purpose": "artifact_upload",
+            "host": "artifact-storage.local",
+            "binding": {
+              "artifactTargetId": "artifact-store-demo"
+            }
+          }
+        ]
+      },
+      "allowedCapabilities": ["codex", "git", "github_pr", "node", "file_write", "artifact_upload"],
+      "allowedActions": ["create_branch", "write_files", "run_registered_validation", "create_artifact", "upload_artifact", "git_commit", "git_push_feature_branch", "create_or_update_pull_request"],
       "allowedPaths": ["design-prototypes/reference-001/**"]
     }
   }
@@ -259,6 +293,7 @@ Before starting, the agent verifies:
 - symlink, junction, or reparse-point traversal cannot escape the workspace;
 - repository identifier and origin match the expected checkout;
 - base ref resolves to the expected base commit SHA;
+- any GitHub, artifact, or WordPress network destination is present in `sandbox.networkAllowlist` and bound to the expected repository, target branch, artifact target, or WordPress target;
 - SiteSpec `schemaVersion`, `revision`, and sha256 match the job input.
 
 ## Heartbeat
@@ -327,7 +362,7 @@ Response:
 ```json
 {
   "artifactId": "artifact_001",
-  "uploadUrl": "https://storage.example.test/upload/artifact_001",
+  "uploadUrl": "https://artifact-storage.local/upload/artifact_001",
   "expiresInSeconds": 300,
   "maxSizeBytes": 4194304
 }
@@ -632,7 +667,9 @@ Rules:
 
 - Agent verifies exact repository identifier, provider repository ID, and remote origin before any git write.
 - Commits are allowed only in a dedicated branch or worktree.
-- Push is allowed only to a feature branch, normally with the `codex/` prefix.
+- Push is allowed only to a feature branch with the `codex/` prefix.
+- `git_push_feature_branch` requires an allowlisted `github_git` network destination bound to the same repository identifier, provider repository ID, origin URL, and target branch.
+- `create_or_update_pull_request` requires an allowlisted `github_api` network destination bound to the same repository identifier, provider repository ID, origin URL, and target branch.
 - Force-push is forbidden.
 - Push to `main` is forbidden.
 - Merge to `main` is forbidden until independent acceptance is `accepted`.
@@ -660,13 +697,15 @@ Registry rules:
 - missing capability or action is denied;
 - repository code and npm scripts are untrusted and run only inside sandbox limits.
 
+Unallowlisted external network writes are forbidden even when user text includes a URL or host. The orchestrator must convert intent into typed destinations from protected configuration before the agent can use them.
+
 ## Sandbox And Path Isolation
 
 The local agent must run Codex, Node, npm scripts, and repository code in a sandboxed low-privilege process with:
 
 - allowlisted environment variables only;
 - no production secrets;
-- network disabled by default or explicitly allowlisted;
+- network disabled by default or explicitly allowlisted by typed destination;
 - CPU, memory, time, file count, and file size limits;
 - normalized POSIX-relative path inputs only;
 - no backslash, colon, UNC, device path, Windows absolute path, control/NUL, or traversal segments;
@@ -684,6 +723,8 @@ The local agent must run Codex, Node, npm scripts, and repository code in a sand
 - exact approval binding to job ID, attempt, target, environment, SiteSpec hash, input hashes, preview artifacts, and expiry.
 
 WordPress publication is still blocked until the SiteSpec is `publish_ready`, server-owned readiness gates pass, staging/smoke/rollback requirements are met, and independent review acceptance is `accepted`.
+
+WordPress staging and production use separate typed network destinations. A staging job cannot silently use a production destination, and a production job cannot run without the production target and approval binding.
 
 ## Error Codes
 
