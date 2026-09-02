@@ -1,0 +1,757 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-site-studio.local/contracts/site-spec.schema.json",
+  "title": "B2B Site Studio SiteSpec",
+  "description": "Structured source of truth for generating one WordPress site or a network of SEO sites.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "projectId",
+    "language",
+    "business",
+    "network",
+    "brand",
+    "catalog",
+    "regions",
+    "contacts",
+    "pagePlan",
+    "seo",
+    "design",
+    "contentRules",
+    "integrations",
+    "deployment",
+    "compliance"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.0$"
+    },
+    "projectId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+    },
+    "language": {
+      "type": "string",
+      "enum": ["ru-RU"]
+    },
+    "business": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "audience", "geography", "fixedFacts", "unknownFacts"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["wholesale", "manufacturer", "distributor", "b2b_services"]
+        },
+        "audience": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "geography": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "fixedFacts": {
+          "type": "array",
+          "description": "Verified facts that AI may use without inventing new company claims.",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "unknownFacts": {
+          "type": "array",
+          "description": "Missing facts that must remain unknown until supplied or imported.",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "siteStrategy", "inheritance", "sites"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["single", "regions", "niches", "separate_domains"]
+        },
+        "siteStrategy": {
+          "type": "string",
+          "enum": ["one_wordpress_multiregion", "multiple_wordpress_sites", "hybrid"]
+        },
+        "inheritance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shared", "overridable"],
+          "properties": {
+            "shared": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            },
+            "overridable": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            }
+          }
+        },
+        "sites": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/site" },
+          "minItems": 1
+        }
+      }
+    },
+    "brand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["displayName", "tone", "assets", "designReference"],
+      "properties": {
+        "displayName": { "type": "string", "minLength": 1 },
+        "tone": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "assets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["logoStatus", "photoPolicy"],
+          "properties": {
+            "logoStatus": { "type": "string", "enum": ["provided", "missing", "generate_placeholder"] },
+            "photoPolicy": { "type": "string", "enum": ["shared", "per_product", "per_region", "mixed"] }
+          }
+        },
+        "designReference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "notes"],
+          "properties": {
+            "source": { "type": "string", "enum": ["uploaded", "html_css_prototype", "text_brief", "none"] },
+            "notes": { "type": "string" }
+          }
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "currency", "minOrderPolicy", "categories", "variationAttributes"],
+      "properties": {
+        "source": { "type": "string", "enum": ["manual", "csv", "xlsx", "api_future"] },
+        "currency": { "type": "string", "enum": ["RUB"] },
+        "minOrderPolicy": { "type": "string", "minLength": 1 },
+        "variationAttributes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "categories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/category" },
+          "minItems": 1
+        }
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/region" },
+      "minItems": 1
+    },
+    "contacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "perRegionOverridesAllowed"],
+      "properties": {
+        "default": { "$ref": "#/$defs/contactSet" },
+        "perRegionOverridesAllowed": { "type": "boolean" }
+      }
+    },
+    "pagePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredPages", "generatedPageTypes", "noindexRules"],
+      "properties": {
+        "requiredPages": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "generatedPageTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["home", "catalog", "category", "product", "region", "delivery", "payment", "contacts", "faq", "legal"]
+          },
+          "minItems": 1
+        },
+        "noindexRules": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "seo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primarySearchEngine", "secondarySearchEngines", "urlTemplates", "metadataRules", "technicalChecks"],
+      "properties": {
+        "primarySearchEngine": { "type": "string", "enum": ["yandex"] },
+        "secondarySearchEngines": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["google"] }
+        },
+        "urlTemplates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/urlTemplate" },
+          "minItems": 1
+        },
+        "metadataRules": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "description", "h1", "canonical", "breadcrumbs", "schemaOrg"],
+          "properties": {
+            "title": { "type": "string", "minLength": 1 },
+            "description": { "type": "string", "minLength": 1 },
+            "h1": { "type": "string", "minLength": 1 },
+            "canonical": { "type": "string", "minLength": 1 },
+            "breadcrumbs": { "type": "boolean" },
+            "schemaOrg": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "technicalChecks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      }
+    },
+    "design": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["variantCount", "prototypeFormat", "selectedVariantId", "tokens", "componentRules"],
+      "properties": {
+        "variantCount": { "type": "integer", "minimum": 3, "maximum": 5 },
+        "prototypeFormat": { "type": "string", "enum": ["html_css"] },
+        "selectedVariantId": { "type": ["string", "null"] },
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["colors", "typography", "radius"],
+          "properties": {
+            "colors": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "typography": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "radius": { "type": "string", "minLength": 1 }
+          }
+        },
+        "componentRules": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "contentRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tone", "mustUseFactsOnly", "forbiddenClaims", "regionalUniquenessRules"],
+      "properties": {
+        "tone": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "mustUseFactsOnly": { "type": "boolean", "const": true },
+        "forbiddenClaims": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "regionalUniquenessRules": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["telegram", "wordpress", "analytics"],
+      "properties": {
+        "telegram": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "tokenStorage", "leadNotification"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "tokenStorage": { "type": "string", "enum": ["server_secret", "not_configured"] },
+            "leadNotification": { "type": "boolean" }
+          }
+        },
+        "wordpress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targetType", "realWordPressRequired"],
+          "properties": {
+            "targetType": { "type": "string", "enum": ["staging_first", "production_after_approval", "not_configured"] },
+            "realWordPressRequired": { "type": "boolean", "const": true }
+          }
+        },
+        "analytics": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["yandex_metrica", "google_analytics", "none"] }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["environment", "requiresApproval", "rollbackPlan"],
+      "properties": {
+        "environment": { "type": "string", "enum": ["draft", "staging", "production"] },
+        "requiresApproval": { "type": "boolean", "const": true },
+        "rollbackPlan": { "type": "string", "minLength": 1 }
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["personalDataPolicy", "approvalRequiredFor", "disallowedContent"],
+      "properties": {
+        "personalDataPolicy": { "type": "string", "minLength": 1 },
+        "approvalRequiredFor": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"]
+          },
+          "minItems": 1
+        },
+        "disallowedContent": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "domainMode", "regionIds", "niche", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "domainMode": { "type": "string", "enum": ["single_domain", "subdomain", "subdirectory", "separate_domain"] },
+        "regionIds": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "minItems": 1
+        },
+        "niche": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["draft", "staging", "published"] }
+      }
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "slug", "indexable", "facts", "contactOverride"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "indexable": { "type": "boolean" },
+        "facts": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "contactOverride": {
+          "anyOf": [{ "$ref": "#/$defs/contactSet" }, { "type": "null" }]
+        }
+      }
+    },
+    "contactSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phone", "email", "messengers", "address"],
+      "properties": {
+        "phone": { "type": "string", "minLength": 1 },
+        "email": { "type": "string", "format": "email" },
+        "messengers": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["telegram", "whatsapp", "none"] }
+        },
+        "address": { "type": "string", "minLength": 1 }
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "slug", "description", "products"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "description": { "type": "string", "minLength": 1 },
+        "products": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/product" },
+          "minItems": 1
+        }
+      }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "sku", "photoStatus", "price", "stock", "minOrder", "variants"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "sku": { "type": "string", "minLength": 1 },
+        "photoStatus": { "type": "string", "enum": ["provided", "missing", "shared_placeholder"] },
+        "price": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "currency", "visibility"],
+          "properties": {
+            "value": { "type": "number", "minimum": 0 },
+            "currency": { "type": "string", "enum": ["RUB"] },
+            "visibility": { "type": "string", "enum": ["visible", "on_request", "hidden"] }
+          }
+        },
+        "stock": { "type": "string", "enum": ["in_stock", "limited", "on_request", "unknown"] },
+        "minOrder": { "type": "string", "minLength": 1 },
+        "variants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/productVariant" },
+          "minItems": 1
+        }
+      }
+    },
+    "productVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sku", "attributes"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "sku": { "type": "string", "minLength": 1 },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 },
+          "minProperties": 1
+        }
+      }
+    },
+    "urlTemplate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pageType", "template"],
+      "properties": {
+        "pageType": { "type": "string", "minLength": 1 },
+        "template": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": "1.0.0",
+      "projectId": "demo-regional-wholesale-network",
+      "language": "ru-RU",
+      "business": {
+        "name": "Demo Opt Market",
+        "type": "wholesale",
+        "audience": ["розничные магазины", "региональные дилеры", "корпоративные закупщики"],
+        "geography": ["Россия"],
+        "fixedFacts": [
+          "Компания продает товары оптом юридическим лицам.",
+          "Минимальная партия указывается в карточке товара.",
+          "Заявки обрабатываются через форму сайта и Telegram-уведомление."
+        ],
+        "unknownFacts": ["юридический адрес", "сертификаты", "реальные отзывы клиентов"]
+      },
+      "network": {
+        "mode": "regions",
+        "siteStrategy": "one_wordpress_multiregion",
+        "inheritance": {
+          "shared": ["brand", "base_catalog", "design_tokens", "default_contacts"],
+          "overridable": ["phone", "address", "delivery_terms", "regional_offer", "seo_text"]
+        },
+        "sites": [
+          {
+            "id": "main-regional-site",
+            "name": "Demo Opt Market Russia",
+            "domainMode": "subdirectory",
+            "regionIds": ["moscow", "spb", "kazan"],
+            "niche": "regional wholesale catalog",
+            "status": "draft"
+          }
+        ]
+      },
+      "brand": {
+        "displayName": "Demo Opt Market",
+        "tone": ["деловой", "короткий", "без неподтвержденных обещаний"],
+        "assets": {
+          "logoStatus": "generate_placeholder",
+          "photoPolicy": "mixed"
+        },
+        "designReference": {
+          "source": "html_css_prototype",
+          "notes": "Create 3-5 executable dark/light B2B catalog prototypes before selecting final tokens."
+        }
+      },
+      "catalog": {
+        "source": "xlsx",
+        "currency": "RUB",
+        "minOrderPolicy": "Minimum order is defined per product or variant.",
+        "variationAttributes": ["вкус", "фасовка", "крепость", "размер", "цвет", "SKU"],
+        "categories": [
+          {
+            "id": "tea",
+            "name": "Чай оптом",
+            "slug": "tea-optom",
+            "description": "Оптовая категория для листового и пакетированного чая.",
+            "products": [
+              {
+                "id": "black-tea-classic",
+                "name": "Чай черный классический",
+                "sku": "TEA-BLK-001",
+                "photoStatus": "shared_placeholder",
+                "price": { "value": 420, "currency": "RUB", "visibility": "visible" },
+                "stock": "in_stock",
+                "minOrder": "10 коробок",
+                "variants": [
+                  { "id": "black-tea-100", "sku": "TEA-BLK-001-100", "attributes": { "фасовка": "100 г", "вкус": "классический" } },
+                  { "id": "black-tea-250", "sku": "TEA-BLK-001-250", "attributes": { "фасовка": "250 г", "вкус": "классический" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "coffee",
+            "name": "Кофе оптом",
+            "slug": "coffee-optom",
+            "description": "Зерновой и молотый кофе для оптовых поставок.",
+            "products": [
+              {
+                "id": "coffee-arabica",
+                "name": "Кофе арабика",
+                "sku": "COF-ARA-001",
+                "photoStatus": "shared_placeholder",
+                "price": { "value": 890, "currency": "RUB", "visibility": "visible" },
+                "stock": "limited",
+                "minOrder": "6 кг",
+                "variants": [
+                  { "id": "coffee-arabica-beans", "sku": "COF-ARA-001-B", "attributes": { "помол": "зерно", "фасовка": "1 кг" } },
+                  { "id": "coffee-arabica-ground", "sku": "COF-ARA-001-G", "attributes": { "помол": "молотый", "фасовка": "1 кг" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sweets",
+            "name": "Сладости оптом",
+            "slug": "sweets-optom",
+            "description": "Кондитерские позиции для розничных магазинов.",
+            "products": [
+              {
+                "id": "chocolate-box",
+                "name": "Шоколадный набор",
+                "sku": "SWT-CHC-001",
+                "photoStatus": "missing",
+                "price": { "value": 310, "currency": "RUB", "visibility": "visible" },
+                "stock": "in_stock",
+                "minOrder": "24 штуки",
+                "variants": [
+                  { "id": "chocolate-dark", "sku": "SWT-CHC-001-D", "attributes": { "вкус": "темный шоколад", "фасовка": "180 г" } },
+                  { "id": "chocolate-milk", "sku": "SWT-CHC-001-M", "attributes": { "вкус": "молочный шоколад", "фасовка": "180 г" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "snacks",
+            "name": "Снеки оптом",
+            "slug": "snacks-optom",
+            "description": "Снеки и бакалея для оптового каталога.",
+            "products": [
+              {
+                "id": "nuts-mix",
+                "name": "Ореховая смесь",
+                "sku": "SNK-NUT-001",
+                "photoStatus": "shared_placeholder",
+                "price": { "value": 540, "currency": "RUB", "visibility": "on_request" },
+                "stock": "on_request",
+                "minOrder": "12 упаковок",
+                "variants": [
+                  { "id": "nuts-mix-500", "sku": "SNK-NUT-001-500", "attributes": { "фасовка": "500 г", "состав": "микс" } },
+                  { "id": "nuts-mix-1000", "sku": "SNK-NUT-001-1000", "attributes": { "фасовка": "1 кг", "состав": "микс" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "drinks",
+            "name": "Напитки оптом",
+            "slug": "drinks-optom",
+            "description": "Безалкогольные напитки для региональных поставок.",
+            "products": [
+              {
+                "id": "lemonade-classic",
+                "name": "Лимонад классический",
+                "sku": "DRK-LEM-001",
+                "photoStatus": "missing",
+                "price": { "value": 75, "currency": "RUB", "visibility": "visible" },
+                "stock": "in_stock",
+                "minOrder": "5 коробок",
+                "variants": [
+                  { "id": "lemonade-05", "sku": "DRK-LEM-001-05", "attributes": { "объем": "0.5 л", "вкус": "лимон" } },
+                  { "id": "lemonade-15", "sku": "DRK-LEM-001-15", "attributes": { "объем": "1.5 л", "вкус": "лимон" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "packaging",
+            "name": "Упаковка оптом",
+            "slug": "packaging-optom",
+            "description": "Расходные упаковочные материалы для B2B-заказов.",
+            "products": [
+              {
+                "id": "paper-bag",
+                "name": "Пакет бумажный",
+                "sku": "PKG-BAG-001",
+                "photoStatus": "shared_placeholder",
+                "price": { "value": 18, "currency": "RUB", "visibility": "visible" },
+                "stock": "in_stock",
+                "minOrder": "500 штук",
+                "variants": [
+                  { "id": "paper-bag-small", "sku": "PKG-BAG-001-S", "attributes": { "размер": "S", "цвет": "крафт" } },
+                  { "id": "paper-bag-large", "sku": "PKG-BAG-001-L", "attributes": { "размер": "L", "цвет": "крафт" } }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "regions": [
+        {
+          "id": "moscow",
+          "name": "Москва",
+          "slug": "moskva",
+          "indexable": true,
+          "facts": ["Региональная страница использует отдельный оффер для Москвы."],
+          "contactOverride": null
+        },
+        {
+          "id": "spb",
+          "name": "Санкт-Петербург",
+          "slug": "sankt-peterburg",
+          "indexable": true,
+          "facts": ["Региональная страница использует отдельный текст доставки для Санкт-Петербурга."],
+          "contactOverride": null
+        },
+        {
+          "id": "kazan",
+          "name": "Казань",
+          "slug": "kazan",
+          "indexable": false,
+          "facts": ["Недостаточно подтвержденных региональных данных для индексируемой страницы."],
+          "contactOverride": null
+        }
+      ],
+      "contacts": {
+        "default": {
+          "phone": "8 800 000-00-00",
+          "email": "sales@example.test",
+          "messengers": ["telegram"],
+          "address": "Адрес не подтвержден, не публиковать как факт"
+        },
+        "perRegionOverridesAllowed": true
+      },
+      "pagePlan": {
+        "requiredPages": ["Главная", "Каталог", "Доставка и оплата", "Контакты", "FAQ"],
+        "generatedPageTypes": ["home", "catalog", "category", "product", "region", "delivery", "payment", "contacts", "faq"],
+        "noindexRules": ["Не индексировать региональные страницы без уникальных фактов.", "Не индексировать пустые категории."]
+      },
+      "seo": {
+        "primarySearchEngine": "yandex",
+        "secondarySearchEngines": ["google"],
+        "urlTemplates": [
+          { "pageType": "category", "template": "/catalog/{categorySlug}/" },
+          { "pageType": "product", "template": "/catalog/{categorySlug}/{productSlug}/" },
+          { "pageType": "region", "template": "/regions/{regionSlug}/{categorySlug}-optom/" }
+        ],
+        "metadataRules": {
+          "title": "{categoryName} оптом в {regionName} - {brand}",
+          "description": "Оптовый каталог {categoryName}: цены, минимальная партия и заявка на поставку.",
+          "h1": "{categoryName} оптом",
+          "canonical": "Use canonical to the strongest non-duplicate page when regional facts are missing.",
+          "breadcrumbs": true,
+          "schemaOrg": ["Organization", "Product", "BreadcrumbList"]
+        },
+        "technicalChecks": ["robots", "sitemap", "canonical", "breadcrumbs", "schema.org", "broken_links", "duplicate_titles"]
+      },
+      "design": {
+        "variantCount": 3,
+        "prototypeFormat": "html_css",
+        "selectedVariantId": null,
+        "tokens": {
+          "colors": {
+            "primary": "#f97316",
+            "accent": "#22d3ee",
+            "background": "#0b1118"
+          },
+          "typography": {
+            "heading": "system-ui",
+            "body": "system-ui"
+          },
+          "radius": "8px"
+        },
+        "componentRules": ["Dense B2B catalog layout", "Clear wholesale CTA", "No invented badges or awards"]
+      },
+      "contentRules": {
+        "tone": ["деловой", "конкретный", "без воды"],
+        "mustUseFactsOnly": true,
+        "forbiddenClaims": ["сертификаты без источника", "реальные отзывы без источника", "гарантии сроков без подтверждения"],
+        "regionalUniquenessRules": ["Использовать реальные региональные условия.", "Noindex для регионов без фактов.", "Не заменять факты бессмысленным перефразированием."]
+      },
+      "integrations": {
+        "telegram": {
+          "enabled": true,
+          "tokenStorage": "server_secret",
+          "leadNotification": true
+        },
+        "wordpress": {
+          "targetType": "staging_first",
+          "realWordPressRequired": true
+        },
+        "analytics": ["yandex_metrica"]
+      },
+      "deployment": {
+        "environment": "staging",
+        "requiresApproval": true,
+        "rollbackPlan": "Keep previous WordPress revision and artifact package before publishing."
+      },
+      "compliance": {
+        "personalDataPolicy": "Do not include personal data in generated examples; store real lead data only in protected backend storage.",
+        "approvalRequiredFor": ["delete", "wordpress_publish", "dns_change", "production_deploy", "repository_visibility", "credential_rotation"],
+        "disallowedContent": ["invented company facts", "secret tokens in frontend", "thin indexed regional pages"]
+      }
+    }
+  ]
+}

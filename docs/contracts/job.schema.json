@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-site-studio.local/contracts/job.schema.json",
+  "title": "B2B Site Studio Local Agent Job",
+  "description": "Structured job contract for the local Windows Codex agent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "projectId",
+    "workspacePath",
+    "instructions",
+    "constraints",
+    "inputs",
+    "expectedOutputs",
+    "allowedPaths",
+    "forbiddenActions",
+    "modelProfile",
+    "reasoningEffort",
+    "requiresApproval",
+    "timeoutSeconds",
+    "idempotencyKey",
+    "dependsOn",
+    "validationCommands"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^job_[a-z0-9][a-z0-9_\\-]{6,80}$"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["sandbox_file_test", "design_reference_prototype", "site_spec_validation", "catalog_import_review", "page_plan_generation", "seo_review", "wordpress_publish"]
+    },
+    "projectId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+    },
+    "siteId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+    },
+    "workspacePath": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Absolute local path that must be inside the agent allowlist."
+    },
+    "instructions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["displaySummary", "objective", "steps", "acceptanceCriteria"],
+      "properties": {
+        "displaySummary": { "type": "string", "minLength": 1 },
+        "objective": { "type": "string", "minLength": 1 },
+        "steps": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["noRawUserTextAsShell", "requiresBranchOrWorktree", "maxLogBytes", "maxArtifactBytes"],
+      "properties": {
+        "noRawUserTextAsShell": { "type": "boolean", "const": true },
+        "requiresBranchOrWorktree": { "type": "boolean" },
+        "maxLogBytes": { "type": "integer", "minimum": 1024 },
+        "maxArtifactBytes": { "type": "integer", "minimum": 1024 }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source", "payload"],
+      "properties": {
+        "source": { "type": "string", "enum": ["site_spec", "user_upload", "operator_request", "system_test"] },
+        "payload": {
+          "description": "Structured data. This field is never executed directly as shell.",
+          "type": ["object", "array", "string", "number", "boolean", "null"]
+        }
+      }
+    },
+    "expectedOutputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/expectedOutput" },
+      "minItems": 1
+    },
+    "allowedPaths": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "forbiddenActions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text"]
+      },
+      "minItems": 1
+    },
+    "modelProfile": {
+      "type": "string",
+      "enum": ["fast", "standard", "deep", "review"]
+    },
+    "reasoningEffort": {
+      "type": "string",
+      "enum": ["minimal", "low", "medium", "high", "xhigh", "max"]
+    },
+    "requiresApproval": {
+      "type": "boolean"
+    },
+    "timeoutSeconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 14400
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 120
+    },
+    "dependsOn": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^job_[a-z0-9][a-z0-9_\\-]{6,80}$"
+      }
+    },
+    "validationCommands": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/validationCommand" }
+    }
+  },
+  "$defs": {
+    "expectedOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "description"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["file", "directory", "screenshot", "report", "diff"] },
+        "path": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "validationCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source", "workingDirectory", "command", "timeoutSeconds"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "source": {
+          "type": "string",
+          "description": "Only system-defined commands are executable.",
+          "const": "system_defined"
+        },
+        "workingDirectory": { "type": "string", "minLength": 1 },
+        "command": {
+          "type": "array",
+          "description": "Structured argv array, not shell text from the user.",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": "job_sandbox_file_test_001",
+      "type": "sandbox_file_test",
+      "projectId": "demo-regional-wholesale-network",
+      "workspacePath": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
+      "instructions": {
+        "displaySummary": "Create one safe test file in the sandbox folder.",
+        "objective": "Verify that the local agent can write an allowed artifact without touching project or production files.",
+        "steps": [
+          "Create sandbox/agent-smoke-test.txt.",
+          "Write a short non-secret status line.",
+          "Do not modify files outside the sandbox folder."
+        ],
+        "acceptanceCriteria": [
+          "The file exists inside the allowed sandbox path.",
+          "No forbidden paths are modified.",
+          "Validation command succeeds."
+        ]
+      },
+      "constraints": {
+        "noRawUserTextAsShell": true,
+        "requiresBranchOrWorktree": true,
+        "maxLogBytes": 65536,
+        "maxArtifactBytes": 1048576
+      },
+      "inputs": {
+        "source": "system_test",
+        "payload": {
+          "message": "Agent smoke test completed."
+        }
+      },
+      "expectedOutputs": [
+        {
+          "kind": "file",
+          "path": "sandbox/agent-smoke-test.txt",
+          "description": "Single text artifact created inside sandbox."
+        }
+      ],
+      "allowedPaths": ["sandbox/**"],
+      "forbiddenActions": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text"],
+      "modelProfile": "fast",
+      "reasoningEffort": "low",
+      "requiresApproval": false,
+      "timeoutSeconds": 300,
+      "idempotencyKey": "sandbox-file-test-001",
+      "dependsOn": [],
+      "validationCommands": [
+        {
+          "name": "Check smoke-test file",
+          "source": "system_defined",
+          "workingDirectory": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
+          "command": ["powershell", "-NoProfile", "-Command", "Test-Path -LiteralPath .\\sandbox\\agent-smoke-test.txt"],
+          "timeoutSeconds": 30
+        }
+      ]
+    },
+    {
+      "id": "job_design_reference_001",
+      "type": "design_reference_prototype",
+      "projectId": "demo-regional-wholesale-network",
+      "siteId": "main-regional-site",
+      "workspacePath": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
+      "instructions": {
+        "displaySummary": "Create an executable HTML/CSS design-reference prototype without publishing.",
+        "objective": "Generate one prototype variant for a B2B wholesale catalog so the user can compare visual directions before WordPress implementation.",
+        "steps": [
+          "Create design-prototypes/reference-001/index.html.",
+          "Create design-prototypes/reference-001/styles.css.",
+          "Render or capture a screenshot artifact if browser tooling is available.",
+          "Do not publish, deploy, install packages, or change production configuration."
+        ],
+        "acceptanceCriteria": [
+          "Prototype opens as static HTML/CSS.",
+          "No external secrets or real personal data are embedded.",
+          "All files stay inside design-prototypes/reference-001."
+        ]
+      },
+      "constraints": {
+        "noRawUserTextAsShell": true,
+        "requiresBranchOrWorktree": true,
+        "maxLogBytes": 131072,
+        "maxArtifactBytes": 5242880
+      },
+      "inputs": {
+        "source": "site_spec",
+        "payload": {
+          "designTone": ["деловой", "каталог", "SEO-ready"],
+          "requiredBlocks": ["hero", "category grid", "product cards", "lead form", "regional trust block"]
+        }
+      },
+      "expectedOutputs": [
+        {
+          "kind": "file",
+          "path": "design-prototypes/reference-001/index.html",
+          "description": "Static HTML prototype."
+        },
+        {
+          "kind": "file",
+          "path": "design-prototypes/reference-001/styles.css",
+          "description": "Prototype stylesheet."
+        },
+        {
+          "kind": "screenshot",
+          "path": "design-prototypes/reference-001/screenshot.png",
+          "description": "Visual proof of the prototype when screenshot tooling is available."
+        }
+      ],
+      "allowedPaths": ["design-prototypes/reference-001/**"],
+      "forbiddenActions": ["delete", "production_deploy", "wordpress_publish", "dns_change", "repository_visibility", "credential_rotation", "package_install", "external_network_write", "merge_to_main", "direct_shell_from_user_text"],
+      "modelProfile": "standard",
+      "reasoningEffort": "medium",
+      "requiresApproval": false,
+      "timeoutSeconds": 1800,
+      "idempotencyKey": "design-reference-prototype-001",
+      "dependsOn": [],
+      "validationCommands": [
+        {
+          "name": "Check prototype files",
+          "source": "system_defined",
+          "workingDirectory": "C:\\Users\\Public\\B2B Site Studio\\workspaces\\demo-regional-wholesale-network",
+          "command": ["powershell", "-NoProfile", "-Command", "Test-Path .\\design-prototypes\\reference-001\\index.html; Test-Path .\\design-prototypes\\reference-001\\styles.css"],
+          "timeoutSeconds": 30
+        }
+      ]
+    }
+  ]
+}
