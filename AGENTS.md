@@ -24,6 +24,7 @@
 - Work through a separate feature branch for every non-trivial task. Do not commit directly to `main` unless the user explicitly requests it.
 - Before committing, check `git status`, review the changed files, run required validation for the touched area, and make sure unrelated user changes are not overwritten.
 - Contract changes must pass the committed validation gate: `npm ci`, `npm run contracts:validate`, `npm run test:contracts`, `npm run lint`, `npm run build`, and `npm run ci`.
+- Database, migration, persistence, or API changes must additionally pass `npm run db:migrate`, `npm run db:status`, `npm run test:persistence`, `npm run test:persistence:http`, and `npm run ci:full` against an explicitly local/test PostgreSQL database.
 - Every implementation pull request to `main` requires a successful GitHub Actions CI run for the current PR head SHA or the current GitHub-generated merge commit. A successful run from an older commit does not count, and every new commit requires a new CI run.
 - Missing CI and `cancelled`, `skipped`, `neutral`, or `failed` checks block `accepted` and merge. A local Codex report or local command output never replaces GitHub Actions evidence.
 - A documentation-only pull request may receive an explicit, recorded CI exception only from the independent reviewer. No implicit exception is allowed.
@@ -36,6 +37,17 @@
 - Run the server deployment in a dedicated Docker container.
 - Configure autodeploy so a push to GitHub can update the Timeweb server without manually copying files.
 - Do not run a production deploy, publish to WordPress, change DNS, delete remote data, rotate secrets, or change repository visibility without explicit user confirmation for that action.
+
+## Database Migration Safety
+
+- Store schema changes as ordered, immutable SQL migration files. Never edit an applied migration; add a new migration instead.
+- Apply migrations through the committed runner with advisory locking, per-migration transactions, and checksum verification.
+- Never log `DATABASE_URL`, credentials, or secret-bearing connection errors.
+- `db:test:reset` is destructive and may run only against an explicitly named local test database. It must reject remote and production-like URLs.
+- Do not automate rollback or destructive repair against production data. Prepare a reviewed forward migration or an explicitly approved recovery procedure.
+- Canonical SiteSpec JSONB is the persistence source of truth. Derived readiness rows and metadata must not become a competing editable model.
+- SiteSpec revision, readiness, and event rows are immutable/append-only. New edits create a new revision under optimistic locking.
+- Keep every application query scoped to the active workspace and parameterize all user-controlled values.
 
 ## Security And Data Rules
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Building2,
@@ -10,9 +10,12 @@ import {
   Layers3,
   LayoutDashboard,
   ListChecks,
+  LoaderCircle,
   Network,
   Palette,
+  RefreshCw,
   Rocket,
+  Save,
   Search,
   ShoppingCart,
   Sparkles,
@@ -129,10 +132,191 @@ const followUpBlocks = [
   ['Публикация', 'домен, формы заявок, аналитика, интеграции и правила деплоя'],
 ] as const;
 
+type EditableDraft = {
+  companyName: string;
+  niche: string;
+  salesRegion: string;
+  businessType: string;
+  siteType: string;
+  networkType: string;
+};
+
+type ProjectSnapshot = {
+  project: {
+    id: string;
+  };
+  siteSpec: {
+    editableDraft: EditableDraft;
+    noOp: boolean;
+    revision: number;
+  };
+};
+
+type SaveState = 'unsaved' | 'saving' | 'saved' | 'conflict' | 'unavailable' | 'error';
+
+class ApiRequestError extends Error {
+  code: string;
+  details: Record<string, unknown>;
+
+  constructor(code: string, message: string, details: Record<string, unknown> = {}) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+async function projectRequest(url: string, init?: RequestInit): Promise<ProjectSnapshot> {
+  const response = await fetch(url, init);
+  const body = (await response.json()) as ProjectSnapshot & {
+    error?: { code?: string; details?: Record<string, unknown>; message?: string };
+  };
+  if (!response.ok || body.error) {
+    throw new ApiRequestError(
+      body.error?.code ?? 'REQUEST_FAILED',
+      body.error?.message ?? 'Не удалось выполнить запрос.',
+      body.error?.details,
+    );
+  }
+  return body;
+}
+
+function createIdempotencyKey() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export default function Home() {
   const [business, setBusiness] = useState<string>(businessOptions[0].value);
   const [siteType, setSiteType] = useState<string>(siteTypeOptions[0].value);
   const [network, setNetwork] = useState<string>(networkOptions[0].value);
+  const [companyName, setCompanyName] = useState('');
+  const [niche, setNiche] = useState('');
+  const [salesRegion, setSalesRegion] = useState('');
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [revision, setRevision] = useState<number | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>('unsaved');
+  const [saveMessage, setSaveMessage] = useState('Проект ещё не создан');
+
+  const applySnapshot = useCallback((snapshot: ProjectSnapshot) => {
+    const draft = snapshot.siteSpec.editableDraft;
+    setCompanyName(draft.companyName);
+    setNiche(draft.niche);
+    setSalesRegion(draft.salesRegion);
+    setBusiness(draft.businessType);
+    setSiteType(draft.siteType);
+    setNetwork(draft.networkType);
+    setProjectId(snapshot.project.id);
+    setRevision(snapshot.siteSpec.revision);
+    setSaveState('saved');
+    setSaveMessage(`Сохранено, revision ${snapshot.siteSpec.revision}`);
+  }, []);
+
+  const handleFailure = useCallback((error: unknown) => {
+    if (error instanceof ApiRequestError && error.code === 'REVISION_CONFLICT') {
+      const currentRevision = error.details.currentRevision;
+      setSaveState('conflict');
+      setSaveMessage(
+        typeof currentRevision === 'number'
+          ? `Конфликт: на сервере revision ${currentRevision}`
+          : 'Конфликт: на сервере есть более новая версия',
+      );
+      return;
+    }
+    if (error instanceof ApiRequestError && error.code === 'DATABASE_UNAVAILABLE') {
+      setSaveState('unavailable');
+      setSaveMessage('База данных недоступна');
+      return;
+    }
+    setSaveState('error');
+    setSaveMessage(error instanceof Error ? error.message : 'Не удалось сохранить проект');
+  }, []);
+
+  const loadProject = useCallback(
+    async (id: string) => {
+      setSaveState('saving');
+      setSaveMessage('Загрузка проекта...');
+      try {
+        const snapshot = await projectRequest(`/api/v1/projects/${id}/site-spec`);
+        applySnapshot(snapshot);
+      } catch (error) {
+        handleFailure(error);
+      }
+    },
+    [applySnapshot, handleFailure],
+  );
+
+  useEffect(() => {
+    const id = new URL(window.location.href).searchParams.get('project');
+    if (!id) return undefined;
+    const loadTimer = window.setTimeout(() => void loadProject(id), 0);
+    return () => window.clearTimeout(loadTimer);
+  }, [loadProject]);
+
+  const editableDraft = useMemo<EditableDraft>(
+    () => ({
+      companyName,
+      niche,
+      salesRegion,
+      businessType: business,
+      siteType,
+      networkType: network,
+    }),
+    [business, companyName, network, niche, salesRegion, siteType],
+  );
+
+  const markUnsaved = () => {
+    if (!projectId) return;
+    setSaveState('unsaved');
+    setSaveMessage('Есть несохранённые изменения');
+  };
+
+  const handleCreateProject = async () => {
+    if (!companyName.trim()) {
+      setSaveState('error');
+      setSaveMessage('Введите название проекта или компании');
+      return;
+    }
+    setSaveState('saving');
+    setSaveMessage('Создание проекта...');
+    try {
+      const snapshot = await projectRequest('/api/v1/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': createIdempotencyKey(),
+        },
+        body: JSON.stringify({ displayName: companyName, draft: editableDraft }),
+      });
+      applySnapshot(snapshot);
+      const url = new URL(window.location.href);
+      url.searchParams.set('project', snapshot.project.id);
+      window.history.replaceState(null, '', url);
+    } catch (error) {
+      handleFailure(error);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!projectId || revision === null) return;
+    setSaveState('saving');
+    setSaveMessage('Сохранение...');
+    try {
+      const snapshot = await projectRequest(`/api/v1/projects/${projectId}/site-spec`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': createIdempotencyKey(),
+        },
+        body: JSON.stringify({ expectedRevision: revision, draft: editableDraft }),
+      });
+      applySnapshot(snapshot);
+      if (snapshot.siteSpec.noOp) setSaveMessage(`Без изменений, revision ${snapshot.siteSpec.revision}`);
+    } catch (error) {
+      handleFailure(error);
+    }
+  };
 
   const selectedBusiness = businessOptions.find((item) => item.value === business) ?? businessOptions[0];
   const selectedSiteType = siteTypeOptions.find((item) => item.value === siteType) ?? siteTypeOptions[0];
@@ -187,9 +371,19 @@ export default function Home() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button className="bg-orange-500 text-white hover:bg-orange-400">
-                  <FileText className="size-4" />
-                  Создать бриф
+                <Button
+                  className="bg-orange-500 text-white hover:bg-orange-400"
+                  disabled={saveState === 'saving' || Boolean(projectId)}
+                  onClick={() => void handleCreateProject()}
+                >
+                  {saveState === 'saving' && !projectId ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : projectId ? (
+                    <Check className="size-4" />
+                  ) : (
+                    <FileText className="size-4" />
+                  )}
+                  {projectId ? 'Бриф создан' : 'Создать бриф'}
                 </Button>
                 <Button className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10" variant="outline">
                   <Upload className="size-4" />
@@ -234,7 +428,10 @@ export default function Home() {
                   <ChoiceGrid
                     activeValue={business}
                     items={businessOptions}
-                    onSelect={setBusiness}
+                    onSelect={(value) => {
+                      setBusiness(value);
+                      markUnsaved();
+                    }}
                     title="Кто заказывает сайт"
                   />
                   <BriefFields
@@ -244,6 +441,13 @@ export default function Home() {
                       ['Регион продаж', ''],
                     ]}
                     note="Здесь фиксируем, кто клиент, кому он продает и чем отличается от конкурентов."
+                    onValueChange={(index, value) => {
+                      if (index === 0) setCompanyName(value);
+                      if (index === 1) setNiche(value);
+                      if (index === 2) setSalesRegion(value);
+                      markUnsaved();
+                    }}
+                    values={[companyName, niche, salesRegion]}
                   />
                 </TabsContent>
 
@@ -251,7 +455,10 @@ export default function Home() {
                   <ChoiceGrid
                     activeValue={siteType}
                     items={siteTypeOptions}
-                    onSelect={setSiteType}
+                    onSelect={(value) => {
+                      setSiteType(value);
+                      markUnsaved();
+                    }}
                     title="Какой сайт нужно создать"
                   />
                   <div className="mt-4 rounded-md border border-white/10 bg-black/25 p-4">
@@ -272,7 +479,10 @@ export default function Home() {
                   <ChoiceGrid
                     activeValue={network}
                     items={networkOptions}
-                    onSelect={setNetwork}
+                    onSelect={(value) => {
+                      setNetwork(value);
+                      markUnsaved();
+                    }}
                     title="Один сайт или сеть"
                   />
                   <div className="mt-4 grid gap-2 md:grid-cols-2">
@@ -316,6 +526,41 @@ export default function Home() {
                   <SummaryRow label="Сайт" value={selectedSiteType.title} />
                   <SummaryRow label="Сеть" value={selectedNetwork.title} />
                 </div>
+
+                <div className="mt-4 rounded-md border border-white/10 bg-black/25 px-3 py-3" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-slate-500">{projectId ? `Проект ${projectId.slice(0, 8)}` : 'Проект не создан'}</span>
+                    <span className={saveState === 'conflict' || saveState === 'error' ? 'text-rose-300' : saveState === 'unavailable' ? 'text-amber-300' : 'text-cyan-200'}>
+                      {revision === null ? 'draft' : `revision ${revision}`}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-300">{saveMessage}</p>
+                </div>
+
+                <Button
+                  className="mt-3 w-full border-white/10 bg-white/5 text-slate-100 hover:bg-white/10"
+                  disabled={!projectId || revision === null || saveState === 'saving'}
+                  onClick={() => void handleSaveDraft()}
+                  variant="outline"
+                >
+                  {saveState === 'saving' && projectId ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : (
+                    <Save className="size-4" />
+                  )}
+                  Сохранить черновик
+                </Button>
+
+                {saveState === 'conflict' && projectId ? (
+                  <Button
+                    className="mt-2 w-full text-slate-300 hover:bg-white/5"
+                    onClick={() => void loadProject(projectId)}
+                    variant="ghost"
+                  >
+                    <RefreshCw className="size-4" />
+                    Загрузить актуальную revision
+                  </Button>
+                ) : null}
 
                 <Button className="mt-5 w-full bg-orange-500 text-white hover:bg-orange-400">
                   Продолжить к товарам и SEO
@@ -394,9 +639,13 @@ function ChoiceGrid({
 function BriefFields({
   fields,
   note,
+  onValueChange,
+  values,
 }: {
   fields: readonly (readonly [string, string])[];
   note: string;
+  onValueChange?: (index: number, value: string) => void;
+  values?: readonly string[];
 }) {
   return (
     <div className="mt-4 rounded-md border border-white/10 bg-white/[0.025] p-4">
@@ -405,10 +654,15 @@ function BriefFields({
         <p className="text-sm leading-6 text-slate-400">{note}</p>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
-        {fields.map(([label, placeholder]) => (
+        {fields.map(([label, placeholder], index) => (
           <label className="block min-w-0" key={label}>
             <span className="mb-1 block text-xs text-slate-500">{label}</span>
-            <Input className="h-9 border-white/10 bg-black/25 text-slate-100" placeholder={placeholder} />
+            <Input
+              className="h-9 border-white/10 bg-black/25 text-slate-100"
+              onChange={onValueChange ? (event) => onValueChange(index, event.target.value) : undefined}
+              placeholder={placeholder}
+              value={values?.[index]}
+            />
           </label>
         ))}
       </div>
