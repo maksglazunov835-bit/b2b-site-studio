@@ -26,6 +26,7 @@ Definition of done:
 - GitHub Actions CI runs contract validation, lint, and build on pull requests and `main` pushes without deployment steps or production secrets.
 - Every implementation PR to `main` requires green GitHub Actions CI for its current head SHA or current merge commit plus an independent review result of `accepted`; stale runs and missing, cancelled, skipped, neutral, or failed checks block acceptance and merge.
 - Every new PR commit requires a new CI run. Local Codex reports do not replace GitHub Actions; only an independent reviewer may record an explicit exception for a documentation-only PR.
+- Ordinary in-scope repository PRs use the owner's standing [delegated merge permission](../../AGENTS.md#delegated-repository-merge): independent accepted review for the exact head/base plus current CI, guarded squash and post-merge main CI verification. This does not permit executor self-merge or production actions.
 
 ## 2. PostgreSQL And Project/SiteSpec Persistence
 
@@ -45,6 +46,8 @@ Definition of done:
 Milestone status: implementation remains pending until its pull request has current green CI and independent review acceptance. This roadmap entry does not itself mark the stage complete.
 
 ## 3. Server Queue And Event Journal
+
+MVP-03A is the narrow [revision-pinned queue request](../jobs/README.md) slice: only `site_spec_validation`, `queued`/`cancelled`, transactional idempotency and append-only events, bounded API/UI, upgrade/concurrency/retry/access tests and CI screenshot evidence. Requests remain non-dispatchable until a real executor and validated full JobSpec exist. Acceptance remains pending independent review; the broader execution lifecycle below is future work, not implemented behavior.
 
 Definition of done:
 

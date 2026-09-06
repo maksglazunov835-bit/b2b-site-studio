@@ -25,6 +25,7 @@
 - Before committing, check `git status`, review the changed files, run required validation for the touched area, and make sure unrelated user changes are not overwritten.
 - Contract changes must pass the committed validation gate: `npm ci`, `npm run contracts:validate`, `npm run test:contracts`, `npm run lint`, `npm run build`, and `npm run ci`.
 - Database, migration, persistence, or API changes must additionally pass `npm run db:test:migrate`, `npm run db:test:status`, `npm run test:persistence`, `npm run test:persistence:http`, `npm run test:persistence:ui`, and `npm run ci:full` against the separate `TEST_DATABASE_URL` PostgreSQL database.
+- Queue changes must also pass `npm run test:jobs`, `npm run test:jobs:http`, and `npm run test:jobs:ui`; these remain required parts of `ci:full`, including bounded desktop/mobile screenshot evidence.
 - Every implementation pull request to `main` requires a successful GitHub Actions CI run for the current PR head SHA or the current GitHub-generated merge commit. A successful run from an older commit does not count, and every new commit requires a new CI run.
 - Missing CI and `cancelled`, `skipped`, `neutral`, or `failed` checks block `accepted` and merge. A local Codex report or local command output never replaces GitHub Actions evidence.
 - A documentation-only pull request may receive an explicit, recorded CI exception only from the independent reviewer. No implicit exception is allowed.
@@ -37,6 +38,14 @@
 - Run the server deployment in a dedicated Docker container.
 - Configure autodeploy so a push to GitHub can update the Timeweb server without manually copying files.
 - Do not run a production deploy, publish to WordPress, change DNS, delete remote data, rotate secrets, or change repository visibility without explicit user confirmation for that action.
+
+## Delegated Repository Merge
+
+- On 2026-09-06 the owner authorized an independent reviewer/coordinator to merge ordinary, in-scope PRs in `maksglazunov835-bit/b2b-site-studio` without asking again for each merge. The decision is recorded in PR #7 and Issue #8 and remains valid until revoked.
+- Only the independent reviewer/coordinator may exercise this permission after checking the actual diff, affected scenarios, current successful CI, and recording `accepted` for the exact reviewed head SHA and base. The Codex executor must never accept or merge its own work; green CI alone does not authorize auto-merge.
+- Immediately before merge verify head/base, conflict status, evidence freshness and required approvals. If head or base changed, rerun the necessary checks and review; stale acceptance is not valid. `changes_required`, `blocked`, or missing evidence prohibit merge.
+- Use squash merge with an expected-head-SHA guard, respecting rulesets and approvals without bypass. Afterwards verify the new push CI on `main` and report its actual conclusion. Do not configure auto-merge or a merge bot under this permission.
+- This permission does not authorize connecting to or migrating production databases, exposing public APIs, separate production deployments, DNS/WordPress/Timeweb/visibility/credential/protection changes, or data deletion. These require separate approval. Existing external autodeploy may react to a merge; green GitHub CI is not proof that deployment succeeded.
 
 ## Database Migration Safety
 
@@ -51,6 +60,7 @@
 - Canonical SiteSpec JSONB is the persistence source of truth. Derived readiness rows and metadata must not become a competing editable model.
 - SiteSpec revision, readiness, and event rows are immutable/append-only. New edits create a new revision under optimistic locking.
 - Keep every application query scoped to the active workspace and parameterize all user-controlled values.
+- Queue requests pin an immutable saved SiteSpec revision/hash; they are not executable agent JobSpecs. Until a real executor and validated full JobSpec exist, report `dispatchable: false` with `EXECUTOR_NOT_CONFIGURED`; do not invent repository IDs, SHAs, paths or credentials. Jobs and their append-only journal/idempotency records change transactionally.
 
 ## Security And Data Rules
 

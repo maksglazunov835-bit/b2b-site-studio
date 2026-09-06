@@ -68,3 +68,18 @@ jobs:
 
       - name: Run full contracts, persistence, UI, lifecycle, security, lint and build gate
         run: npm run ci:full
+
+      - name: Upload bounded test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-queue-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          include-hidden-files: true
+          path: |
+            .test-results/ci-summary.json
+            .test-results/jobs-desktop.png
+            .test-results/jobs-mobile.png
+            .test-results/persistence-desktop.png
+            .test-results/persistence-mobile.png

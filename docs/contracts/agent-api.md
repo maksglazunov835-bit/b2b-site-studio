@@ -62,7 +62,7 @@ Independent acceptance result is the review decision:
 - `changes_required`;
 - `blocked`.
 
-`succeeded` only means the executor finished and required execution checks passed. It is not proof that the task is ready to merge, deploy, or publish. Acceptance requires an independent reviewer, or a configured CI gate when available, that checks the actual diff, changed files, tests, architecture, migration/configuration/security impact, and alignment with the source Issue or JobSpec. The executor cannot accept its own work.
+`succeeded` only means the executor finished and required execution checks passed. It is not proof that the task is ready to merge, deploy, or publish. Acceptance requires an independent reviewer checking the actual diff, changed files, tests, architecture, migration/configuration/security impact, and alignment with the source Issue or JobSpec. Implementation PRs additionally require current successful GitHub Actions CI; CI never replaces independent acceptance. The executor cannot accept its own work.
 
 ## State Lifecycle
 
@@ -79,6 +79,8 @@ Review lifecycle:
 `succeeded -> review_pending -> accepted | changes_required | blocked`
 
 Merge, production deployment, WordPress publication, DNS changes, repository visibility changes, credential rotation, deletion, and other irreversible actions are forbidden until acceptance is `accepted` and the specific action has recorded human approval when required.
+
+For ordinary in-scope PRs in this repository, the owner's 2026-09-06 standing permission is documented in [AGENTS.md](../../AGENTS.md#delegated-repository-merge). Only the independent reviewer/coordinator may perform guarded squash after exact head/base acceptance and current CI, then verify main push CI. This is not an agent capability, executor self-approval, auto-merge setting, or production permission. MVP-03A [queue requests](../jobs/README.md) do not implement the executable lifecycle/endpoints described below.
 
 ## Agent Registration
 

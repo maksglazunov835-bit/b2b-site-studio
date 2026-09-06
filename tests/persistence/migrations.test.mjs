@@ -22,15 +22,15 @@ void test("clean migrations apply once and detect a changed checksum", async () 
   await resetTestDatabase({ databaseUrl });
 
   const first = await runMigrations({ databaseConfig });
-  assert.deepEqual(first.applied, ["001_initial_persistence.sql"]);
+  assert.deepEqual(first.applied, ["001_initial_persistence.sql", "002_job_queue.sql"]);
   assert.deepEqual(first.skipped, []);
 
   const second = await runMigrations({ databaseConfig });
   assert.deepEqual(second.applied, []);
-  assert.deepEqual(second.skipped, ["001_initial_persistence.sql"]);
+  assert.deepEqual(second.skipped, ["001_initial_persistence.sql", "002_job_queue.sql"]);
 
   const status = await getMigrationStatus({ databaseConfig });
-  assert.deepEqual(status.map((item) => item.state), ["applied"]);
+  assert.deepEqual(status.map((item) => item.state), ["applied", "applied"]);
 
   const client = new Client(databaseConfig);
   await client.connect();
