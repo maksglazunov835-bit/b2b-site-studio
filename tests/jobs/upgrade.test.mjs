@@ -34,13 +34,14 @@ void test("001 to 002 upgrade preserves every old table, snapshot and checksum o
     };
     const rows = await snapshot();
     const checksum = (await getDatabasePool().query("SELECT checksum FROM _schema_migrations WHERE name='001_initial_persistence.sql'")).rows;
-    const upgraded = await runMigrations({ databaseConfig: config });
+    await copyFile("db/migrations/002_job_queue.sql", path.join(temporary, "002_job_queue.sql"));
+    const upgraded = await runMigrations({ databaseConfig: config, migrationsDir: temporary });
     assert.deepEqual(upgraded.applied, ["002_job_queue.sql"]);
     assert.deepEqual(await snapshot(), rows);
     assert.deepEqual(await getProject(id), before);
     assert.deepEqual(await getSiteSpecRevision(id, 1), old);
     assert.deepEqual((await getDatabasePool().query("SELECT checksum FROM _schema_migrations WHERE name='001_initial_persistence.sql'")).rows, checksum);
-    assert.deepEqual((await runMigrations({ databaseConfig: config })).applied, []);
+    assert.deepEqual((await runMigrations({ databaseConfig: config, migrationsDir: temporary })).applied, []);
   } finally {
     await closeDatabasePool();
     assert.ok(temporary.startsWith(prefix));

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { JobsPanel } from '@/components/jobs-panel';
+import { RunnerPanel } from '@/components/runner-panel';
 import {
   ArrowRight,
   Building2,
@@ -628,6 +629,7 @@ export default function Home() {
                 </Button>
               </section>
 
+              <RunnerPanel />
               {projectId && <JobsPanel key={projectId} projectId={projectId} revision={revision} canCreate={!pending && saveState === 'saved'} />}
 
               <section className="rounded-lg border border-white/10 bg-[#0b1118]/90 p-4">

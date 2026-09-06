@@ -26,6 +26,7 @@
 - Contract changes must pass the committed validation gate: `npm ci`, `npm run contracts:validate`, `npm run test:contracts`, `npm run lint`, `npm run build`, and `npm run ci`.
 - Database, migration, persistence, or API changes must additionally pass `npm run db:test:migrate`, `npm run db:test:status`, `npm run test:persistence`, `npm run test:persistence:http`, `npm run test:persistence:ui`, and `npm run ci:full` against the separate `TEST_DATABASE_URL` PostgreSQL database.
 - Queue changes must also pass `npm run test:jobs`, `npm run test:jobs:http`, and `npm run test:jobs:ui`; these remain required parts of `ci:full`, including bounded desktop/mobile screenshot evidence.
+- Presence/Runner changes additionally pass `test:agents`, `test:agents:http`, `test:agents:process` and `test:agents:ui` through the protected runner and `ci:full`. Preserve real child-process HTTP, signal/revoke, no-secret evidence and DEV_DATABASE_UNCHANGED checks.
 - Every implementation pull request to `main` requires a successful GitHub Actions CI run for the current PR head SHA or the current GitHub-generated merge commit. A successful run from an older commit does not count, and every new commit requires a new CI run.
 - Missing CI and `cancelled`, `skipped`, `neutral`, or `failed` checks block `accepted` and merge. A local Codex report or local command output never replaces GitHub Actions evidence.
 - A documentation-only pull request may receive an explicit, recorded CI exception only from the independent reviewer. No implicit exception is allowed.
@@ -76,6 +77,10 @@
 - Mask secrets in logs and reports. Keep logs and artifacts bounded in size.
 
 ## Local Agent Safety Rules
+
+- The implemented MVP-03B Runner is presence-only: no claim, lease, Codex/Git/shell execution, folder scanning or background installation. Report `executionEnabled: false`, zero slots and no execution capabilities; online must not make queued requests dispatchable.
+- Pairing and agent credentials are separate, purpose-bound, random and stored only as hashes server-side. Pairing plaintext is transient UI/stdin state; Runner credentials stay in process memory. Never include either in URLs, command arguments, browser storage, saved responses, logs or screenshots.
+- Start the foreground Runner through its environment-filtering launcher, never with platform `.env` or production credentials. Only fixed loopback endpoints are allowed, redirects are refused, and shutdown/revocation cancels the presence loop. Trusted-local operator access is not public authentication or isolation from malicious same-user processes.
 
 - Run Codex jobs only inside allowlisted folders and preferably in a dedicated branch or worktree.
 - A local agent must accept jobs only from the configured API, use a token from an environment variable or protected local storage, and report heartbeat/lease status while running.

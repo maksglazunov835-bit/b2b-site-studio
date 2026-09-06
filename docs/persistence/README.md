@@ -42,6 +42,7 @@ Ordinary `npm start` denies persistence by default, even with a working database
 | `npm run test:persistence:http` | Smoke-test the built production server and route handlers. |
 | `npm run test:persistence:ui` | Built-server Chromium races, retry, conflict, desktop/mobile and console tests. |
 | `npm run test:jobs` / `test:jobs:http` / `test:jobs:ui` | Queue database/001-upgrade, built-server HTTP and Playwright scenarios through the same protected runner. |
+| `npm run test:agents` / `test:agents:http` / `test:agents:process` / `test:agents:ui` | Presence-only pairing, upgrade, transport, real foreground process and UI checks on TEST. See [Runner setup](../agents/README.md). |
 | `npm run ci:full` | Preflight, test migrations/status, persistence and jobs, contracts, lint/build, HTTP/security/shutdown and both UI suites. |
 
 ## API v1

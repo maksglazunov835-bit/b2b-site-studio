@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import { assertSafeTestDatabaseUrl } from "../../scripts/db/test-config.mjs";
 
-export async function startProductionServer({ databaseUrl = process.env.TEST_DATABASE_URL, mode = "local", host = "127.0.0.1" } = {}) {
+export async function startProductionServer({ databaseUrl = process.env.TEST_DATABASE_URL, mode = "local", host = "127.0.0.1", agentIntervalSeconds } = {}) {
   assertSafeTestDatabaseUrl();
   if (databaseUrl) assertSafeTestDatabaseUrl(databaseUrl);
   const probe = net.createServer();
@@ -20,6 +20,10 @@ export async function startProductionServer({ databaseUrl = process.env.TEST_DAT
   Object.assign(env, { HOST: host, PORT: String(port), NODE_ENV: "production" });
   if (mode) env.PERSISTENCE_MODE = mode;
   if (databaseUrl) env.DATABASE_URL = databaseUrl;
+  if (agentIntervalSeconds !== undefined) {
+    assert.ok(Number.isInteger(agentIntervalSeconds) && agentIntervalSeconds >= 1 && agentIntervalSeconds <= 30);
+    env.AGENT_HEARTBEAT_INTERVAL_SECONDS = String(agentIntervalSeconds);
+  }
   const windows = process.platform === "win32";
   const child = spawn(process.execPath, [windows ? "tests/persistence/windows-signal-server.mjs" : "server/production.mjs"], {
     env, stdio: windows ? ["ignore", "pipe", "pipe", "ipc"] : ["ignore", "pipe", "pipe"]
