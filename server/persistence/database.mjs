@@ -1,11 +1,9 @@
 import pg from "pg";
 
 import { PersistenceError } from "./errors.mjs";
+import { runtime } from "./runtime.mjs";
 
 const { Pool } = pg;
-
-let managedPool;
-let shutdownHandlersInstalled = false;
 
 export function requireDatabaseUrl(databaseUrl = process.env.DATABASE_URL) {
   if (typeof databaseUrl !== "string" || databaseUrl.trim() === "") {
@@ -18,20 +16,16 @@ export function requireDatabaseUrl(databaseUrl = process.env.DATABASE_URL) {
   return databaseUrl.trim();
 }
 
-function installShutdownHandlers() {
-  if (shutdownHandlersInstalled) return;
-  shutdownHandlersInstalled = true;
-  const close = () => {
-    void closeDatabasePool();
-  };
-  process.once("SIGINT", close);
-  process.once("SIGTERM", close);
+export function configureDatabase(config) {
+  if (runtime.pool || runtime.stopping) throw new Error("Database configuration is already in use.");
+  runtime.databaseConfig = config;
 }
 
 export function getDatabasePool() {
-  if (managedPool) return managedPool;
-  managedPool = new Pool({
-    connectionString: requireDatabaseUrl(),
+  if (runtime.stopping) throw new PersistenceError("DATABASE_UNAVAILABLE", "The server is shutting down.", { status: 503 });
+  if (runtime.pool) return runtime.pool;
+  runtime.pool = new Pool({
+    ...(runtime.databaseConfig ?? { connectionString: requireDatabaseUrl() }),
     application_name: "b2b-site-studio",
     max: 10,
     maxUses: process.env.NODE_ENV === "development" ? 1 : Infinity,
@@ -39,17 +33,16 @@ export function getDatabasePool() {
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000
   });
-  managedPool.on("error", (error) => {
+  runtime.pool.on("error", (error) => {
     const code = typeof error?.code === "string" ? error.code : "UNKNOWN";
     console.error(`[database] idle client error (${code})`);
   });
-  installShutdownHandlers();
-  return managedPool;
+  return runtime.pool;
 }
 
 export async function closeDatabasePool() {
-  const pool = managedPool;
-  managedPool = undefined;
+  const pool = runtime.pool;
+  runtime.pool = undefined;
   if (pool) await pool.end();
 }
 

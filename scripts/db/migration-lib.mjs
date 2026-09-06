@@ -57,9 +57,9 @@ export async function discoverMigrations(migrationsDir = DEFAULT_MIGRATIONS_DIR)
   return migrations;
 }
 
-async function connect(databaseUrl) {
+async function connect(databaseUrl, databaseConfig) {
   const client = new Client({
-    connectionString: requireDatabaseUrl(databaseUrl),
+    ...(databaseConfig ?? { connectionString: requireDatabaseUrl(databaseUrl) }),
     application_name: "b2b-site-studio-migrations"
   });
   await client.connect();
@@ -79,10 +79,11 @@ async function ensureMigrationTable(client) {
 
 export async function runMigrations({
   databaseUrl = process.env.DATABASE_URL,
+  databaseConfig,
   migrationsDir = DEFAULT_MIGRATIONS_DIR
 } = {}) {
   const migrations = await discoverMigrations(migrationsDir);
-  const client = await connect(databaseUrl);
+  const client = await connect(databaseUrl, databaseConfig);
   let lockHeld = false;
   const applied = [];
   const skipped = [];
@@ -139,10 +140,11 @@ export async function runMigrations({
 
 export async function getMigrationStatus({
   databaseUrl = process.env.DATABASE_URL,
+  databaseConfig,
   migrationsDir = DEFAULT_MIGRATIONS_DIR
 } = {}) {
   const migrations = await discoverMigrations(migrationsDir);
-  const client = await connect(databaseUrl);
+  const client = await connect(databaseUrl, databaseConfig);
 
   try {
     const tableResult = await client.query("SELECT to_regclass('public._schema_migrations') AS table_name");

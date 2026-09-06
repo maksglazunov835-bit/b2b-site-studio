@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Building2,
@@ -152,7 +152,8 @@ type ProjectSnapshot = {
   };
 };
 
-type SaveState = 'unsaved' | 'saving' | 'saved' | 'conflict' | 'unavailable' | 'error';
+type SaveState = 'unsaved' | 'saved' | 'conflict' | 'unavailable' | 'error';
+type WriteOperation = { url: string; method: 'POST' | 'PUT'; body: string; key: string };
 
 class ApiRequestError extends Error {
   code: string;
@@ -198,6 +199,11 @@ export default function Home() {
   const [revision, setRevision] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('unsaved');
   const [saveMessage, setSaveMessage] = useState('Проект ещё не создан');
+  const [pending, setPending] = useState(false);
+  const busy = useRef(false);
+  const sequence = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const retryOperation = useRef<WriteOperation | null>(null);
 
   const applySnapshot = useCallback((snapshot: ProjectSnapshot) => {
     const draft = snapshot.siteSpec.editableDraft;
@@ -214,6 +220,11 @@ export default function Home() {
   }, []);
 
   const handleFailure = useCallback((error: unknown) => {
+    if (error instanceof ApiRequestError && error.code === 'PERSISTENCE_DISABLED') {
+      setSaveState('unavailable');
+      setSaveMessage('Сохранение доступно только в локальном запуске');
+      return;
+    }
     if (error instanceof ApiRequestError && error.code === 'REVISION_CONFLICT') {
       const currentRevision = error.details.currentRevision;
       setSaveState('conflict');
@@ -235,23 +246,60 @@ export default function Home() {
 
   const loadProject = useCallback(
     async (id: string) => {
-      setSaveState('saving');
+      controller.current?.abort();
+      const requestController = new AbortController();
+      controller.current = requestController;
+      const requestSequence = ++sequence.current;
+      busy.current = true;
+      setPending(true);
+      setProjectId(id);
+      setRevision(null);
+      retryOperation.current = null;
       setSaveMessage('Загрузка проекта...');
       try {
-        const snapshot = await projectRequest(`/api/v1/projects/${id}/site-spec`);
+        const snapshot = await projectRequest(`/api/v1/projects/${id}/site-spec`, { signal: requestController.signal });
+        if (sequence.current !== requestSequence || requestController.signal.aborted) return;
+        if (snapshot.project.id !== id) throw new Error('Получен другой проект');
         applySnapshot(snapshot);
       } catch (error) {
-        handleFailure(error);
+        if (sequence.current === requestSequence && !requestController.signal.aborted) handleFailure(error);
+      } finally {
+        if (sequence.current === requestSequence) {
+          busy.current = false;
+          setPending(false);
+        }
       }
     },
     [applySnapshot, handleFailure],
   );
 
   useEffect(() => {
-    const id = new URL(window.location.href).searchParams.get('project');
-    if (!id) return undefined;
-    const loadTimer = window.setTimeout(() => void loadProject(id), 0);
-    return () => window.clearTimeout(loadTimer);
+    const cancelRequests = () => {
+      controller.current?.abort();
+      sequence.current++;
+      busy.current = false;
+    };
+    const syncUrl = () => {
+      const id = new URL(window.location.href).searchParams.get('project');
+      if (id) void loadProject(id);
+      else {
+        controller.current?.abort();
+        sequence.current++;
+        busy.current = false;
+        retryOperation.current = null;
+        setPending(false);
+        setProjectId(null);
+        setRevision(null);
+        setSaveState('unsaved');
+      }
+    };
+    const loadTimer = window.setTimeout(syncUrl, 0);
+    window.addEventListener('popstate', syncUrl);
+    return () => {
+      window.clearTimeout(loadTimer);
+      window.removeEventListener('popstate', syncUrl);
+      cancelRequests();
+    };
   }, [loadProject]);
 
   const editableDraft = useMemo<EditableDraft>(
@@ -267,55 +315,63 @@ export default function Home() {
   );
 
   const markUnsaved = () => {
-    if (!projectId) return;
+    if (busy.current) return;
     setSaveState('unsaved');
     setSaveMessage('Есть несохранённые изменения');
   };
 
+  const writeDraft = async (url: string, method: 'POST' | 'PUT', body: string) => {
+    if (busy.current) return;
+    busy.current = true;
+    setPending(true);
+    const requestSequence = ++sequence.current;
+    const requestController = new AbortController();
+    controller.current = requestController;
+    const previous = retryOperation.current;
+    const operation = previous?.url === url && previous.method === method && previous.body === body
+      ? previous : { url, method, body, key: createIdempotencyKey() };
+    retryOperation.current = operation;
+    setSaveMessage(method === 'POST' ? 'Создание проекта...' : 'Сохранение...');
+    try {
+      const snapshot = await projectRequest(operation.url, {
+        method: operation.method,
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': operation.key },
+        body: operation.body,
+        signal: requestController.signal,
+      });
+      if (sequence.current !== requestSequence || requestController.signal.aborted) return;
+      retryOperation.current = null;
+      applySnapshot(snapshot);
+      if (snapshot.siteSpec.noOp) setSaveMessage(`Без изменений, revision ${snapshot.siteSpec.revision}`);
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set('project', snapshot.project.id);
+      window.history.replaceState(null, '', nextUrl);
+    } catch (error) {
+      if (sequence.current !== requestSequence || requestController.signal.aborted) return;
+      if (error instanceof ApiRequestError && error.code !== 'INTERNAL_ERROR') retryOperation.current = null;
+      handleFailure(error);
+      if (!(error instanceof ApiRequestError)) setSaveMessage('Ответ не получен. Повторите сохранение для проверки результата.');
+    } finally {
+      if (sequence.current === requestSequence) {
+        busy.current = false;
+        setPending(false);
+      }
+    }
+  };
+
   const handleCreateProject = async () => {
+    if (busy.current || projectId) return;
     if (!companyName.trim()) {
       setSaveState('error');
       setSaveMessage('Введите название проекта или компании');
       return;
     }
-    setSaveState('saving');
-    setSaveMessage('Создание проекта...');
-    try {
-      const snapshot = await projectRequest('/api/v1/projects', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': createIdempotencyKey(),
-        },
-        body: JSON.stringify({ displayName: companyName, draft: editableDraft }),
-      });
-      applySnapshot(snapshot);
-      const url = new URL(window.location.href);
-      url.searchParams.set('project', snapshot.project.id);
-      window.history.replaceState(null, '', url);
-    } catch (error) {
-      handleFailure(error);
-    }
+    await writeDraft('/api/v1/projects', 'POST', JSON.stringify({ displayName: companyName, draft: editableDraft }));
   };
 
   const handleSaveDraft = async () => {
     if (!projectId || revision === null) return;
-    setSaveState('saving');
-    setSaveMessage('Сохранение...');
-    try {
-      const snapshot = await projectRequest(`/api/v1/projects/${projectId}/site-spec`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': createIdempotencyKey(),
-        },
-        body: JSON.stringify({ expectedRevision: revision, draft: editableDraft }),
-      });
-      applySnapshot(snapshot);
-      if (snapshot.siteSpec.noOp) setSaveMessage(`Без изменений, revision ${snapshot.siteSpec.revision}`);
-    } catch (error) {
-      handleFailure(error);
-    }
+    await writeDraft(`/api/v1/projects/${projectId}/site-spec`, 'PUT', JSON.stringify({ expectedRevision: revision, draft: editableDraft }));
   };
 
   const selectedBusiness = businessOptions.find((item) => item.value === business) ?? businessOptions[0];
@@ -373,10 +429,10 @@ export default function Home() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   className="bg-orange-500 text-white hover:bg-orange-400"
-                  disabled={saveState === 'saving' || Boolean(projectId)}
+                  disabled={pending || Boolean(projectId)}
                   onClick={() => void handleCreateProject()}
                 >
-                  {saveState === 'saving' && !projectId ? (
+                  {pending && !projectId ? (
                     <LoaderCircle className="size-4 animate-spin" />
                   ) : projectId ? (
                     <Check className="size-4" />
@@ -405,6 +461,7 @@ export default function Home() {
                 <span className="text-sm text-slate-500">3 обязательные вкладки</span>
               </div>
 
+              <fieldset disabled={pending} className="min-w-0">
               <Tabs defaultValue="business">
                 <TabsList
                   className="!grid !h-auto w-full grid-cols-1 overflow-hidden rounded-md border border-white/10 bg-black/25 p-1 sm:grid-cols-3"
@@ -503,6 +560,7 @@ export default function Home() {
                   />
                 </TabsContent>
               </Tabs>
+              </fieldset>
             </section>
 
             <aside className="min-w-0 space-y-4">
@@ -539,11 +597,11 @@ export default function Home() {
 
                 <Button
                   className="mt-3 w-full border-white/10 bg-white/5 text-slate-100 hover:bg-white/10"
-                  disabled={!projectId || revision === null || saveState === 'saving'}
+                  disabled={!projectId || revision === null || pending}
                   onClick={() => void handleSaveDraft()}
                   variant="outline"
                 >
-                  {saveState === 'saving' && projectId ? (
+                  {pending && projectId ? (
                     <LoaderCircle className="size-4 animate-spin" />
                   ) : (
                     <Save className="size-4" />
@@ -555,6 +613,7 @@ export default function Home() {
                   <Button
                     className="mt-2 w-full text-slate-300 hover:bg-white/5"
                     onClick={() => void loadProject(projectId)}
+                    disabled={pending}
                     variant="ghost"
                   >
                     <RefreshCw className="size-4" />
@@ -658,6 +717,7 @@ function BriefFields({
           <label className="block min-w-0" key={label}>
             <span className="mb-1 block text-xs text-slate-500">{label}</span>
             <Input
+              disabled={!onValueChange}
               className="h-9 border-white/10 bg-black/25 text-slate-100"
               onChange={onValueChange ? (event) => onValueChange(index, event.target.value) : undefined}
               placeholder={placeholder}
@@ -669,6 +729,7 @@ function BriefFields({
       <label className="mt-3 block" htmlFor="brief-notes">
         <span className="mb-1 block text-xs text-slate-500">Важные ограничения</span>
         <Textarea
+          disabled
           className="min-h-20 border-white/10 bg-black/25 text-sm text-slate-100"
           id="brief-notes"
           placeholder="Например: не выдумывать отзывы, сертификаты, сроки поставки, адреса и гарантии без подтверждения."

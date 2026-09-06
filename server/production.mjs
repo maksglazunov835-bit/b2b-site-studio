@@ -4,6 +4,8 @@ import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import app from '../dist/server/index.js';
+import { installLifecycle } from './lifecycle.mjs';
+import { runtime } from './persistence/runtime.mjs';
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '0.0.0.0';
@@ -167,6 +169,11 @@ function preventHtmlCache(response) {
 }
 
 const server = createServer(async (req, res) => {
+  if (runtime.stopping) {
+    res.writeHead(503, { Connection: 'close' });
+    res.end('Server shutting down');
+    return;
+  }
   try {
     const pathname = new URL(req.url, `http://localhost:${port}`).pathname;
     const assetResponse = await fetchAsset({
@@ -192,6 +199,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
+installLifecycle(server);
 server.listen(port, host, () => {
   console.log(`B2B Site Studio is running on http://${host}:${port}`);
 });

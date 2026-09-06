@@ -1,68 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import net from "node:net";
+import pg from "pg";
+import { startProductionServer, waitForHomepage, stopServer } from "../../tests/persistence/production-server.mjs";
+import { assertSafeTestDatabaseUrl } from "../db/test-config.mjs";
 
 import { runMigrations } from "../db/migration-lib.mjs";
 import { resetTestDatabase } from "../db/test-reset.mjs";
-
-async function availablePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : null;
-  await new Promise((resolve) => server.close(resolve));
-  if (!port) throw new Error("Unable to allocate an HTTP smoke-test port.");
-  return port;
-}
-
-function startProductionServer({ databaseUrl }) {
-  const env = { ...process.env };
-  if (databaseUrl) env.DATABASE_URL = databaseUrl;
-  else delete env.DATABASE_URL;
-  return availablePort().then((port) => {
-    const child = spawn(process.execPath, ["server/production.mjs"], {
-      env: { ...env, HOST: "127.0.0.1", PORT: String(port) },
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    let output = "";
-    const capture = (chunk) => {
-      output = `${output}${chunk}`.slice(-8_000);
-    };
-    child.stdout.on("data", capture);
-    child.stderr.on("data", capture);
-    return { child, origin: `http://127.0.0.1:${port}`, output: () => output };
-  });
-}
-
-async function waitForHomepage(server) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (server.child.exitCode !== null) {
-      throw new Error(`Production server exited early.\n${server.output()}`);
-    }
-    try {
-      const response = await fetch(server.origin);
-      if (response.status === 200) return response;
-    } catch {
-      // Startup polling is intentionally quiet.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`Production server did not become ready.\n${server.output()}`);
-}
-
-async function stopServer(server) {
-  if (server.child.exitCode !== null) return;
-  server.child.kill("SIGTERM");
-  await Promise.race([
-    new Promise((resolve) => server.child.once("exit", resolve)),
-    new Promise((resolve) => setTimeout(resolve, 5_000))
-  ]);
-  if (server.child.exitCode === null) server.child.kill("SIGKILL");
-}
 
 async function jsonRequest(origin, path, init) {
   const response = await fetch(`${origin}${path}`, init);
@@ -244,10 +186,38 @@ async function smokeWithoutDatabase() {
   }
 }
 
-const databaseUrl = process.env.DATABASE_URL;
-assert.ok(databaseUrl, "DATABASE_URL must be set for HTTP persistence smoke tests");
+async function smokeDisabled(databaseConfig) {
+  const client = new pg.Client(databaseConfig);
+  await client.connect();
+  try {
+    const before = await client.query("SELECT count(*)::int AS count FROM projects");
+    for (const launch of [{ mode: null }, { mode: "local", host: "0.0.0.0" }]) {
+      const server = await startProductionServer(launch);
+      try {
+        await waitForHomepage(server);
+        for (const headers of [{}, { Host: "localhost", "X-Forwarded-Host": "127.0.0.1", "X-Forwarded-For": "127.0.0.1", "X-Forwarded-Proto": "http" }]) {
+          const read = await jsonRequest(server.origin, "/api/v1/projects", { headers });
+          assert.equal(read.response.status, 403);
+          assert.equal(read.body.error.code, "PERSISTENCE_DISABLED");
+          const write = await jsonRequest(server.origin, "/api/v1/projects", {
+            method: "POST", headers: { ...headers, "Content-Type": "application/json", "Idempotency-Key": "blocked-create" },
+            body: JSON.stringify({ displayName: "Blocked", draft })
+          });
+          assert.equal(write.response.status, 403);
+        }
+      } finally { await stopServer(server); }
+    }
+    assert.deepEqual((await client.query("SELECT count(*)::int AS count FROM projects")).rows, before.rows);
+  } finally { await client.end(); }
+  console.log("PUBLIC_ACCESS_GATE passed (working DB, spoofed headers, no writes)");
+}
+
+const databaseUrl = process.env.TEST_DATABASE_URL;
+const databaseConfig = assertSafeTestDatabaseUrl(databaseUrl);
 await resetTestDatabase({ databaseUrl });
-await runMigrations({ databaseUrl });
+await runMigrations({ databaseConfig });
 await smokeWithDatabase(databaseUrl);
 await smokeWithoutDatabase();
+await smokeDisabled(databaseConfig);
+console.log("BUILT_SERVER_SHUTDOWN passed");
 console.log("PERSISTENCE_HTTP_SMOKE passed");

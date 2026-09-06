@@ -2,36 +2,15 @@ import { pathToFileURL } from "node:url";
 
 import pg from "pg";
 
-import { MigrationError, requireDatabaseUrl, safeDatabaseCommandError } from "./migration-lib.mjs";
+import { safeDatabaseCommandError } from "./migration-lib.mjs";
+import { assertSafeTestDatabaseUrl } from "./test-config.mjs";
+export { assertSafeTestDatabaseUrl } from "./test-config.mjs";
 
 const { Client } = pg;
-const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
-
-export function assertSafeTestDatabaseUrl(databaseUrl = process.env.DATABASE_URL) {
-  const value = requireDatabaseUrl(databaseUrl);
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new MigrationError("TEST_DATABASE_URL_INVALID", "DATABASE_URL is not a valid PostgreSQL URL.");
-  }
-
-  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  const isLocal = LOCAL_HOSTS.has(parsed.hostname);
-  const isExplicitTestDatabase = /(^|[_-])test(?:ing)?([_-]|$)/i.test(databaseName);
-  if (!isLocal || !isExplicitTestDatabase) {
-    throw new MigrationError(
-      "TEST_DATABASE_RESET_REFUSED",
-      "Refusing to reset a database that is not an explicitly named local test database."
-    );
-  }
-  return value;
-}
-
-export async function resetTestDatabase({ databaseUrl = process.env.DATABASE_URL } = {}) {
-  const safeUrl = assertSafeTestDatabaseUrl(databaseUrl);
+export async function resetTestDatabase({ databaseUrl = process.env.TEST_DATABASE_URL } = {}) {
+  const config = assertSafeTestDatabaseUrl(databaseUrl);
   const client = new Client({
-    connectionString: safeUrl,
+    ...config,
     application_name: "b2b-site-studio-test-reset"
   });
   await client.connect();

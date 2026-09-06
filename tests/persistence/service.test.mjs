@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   closeDatabasePool,
+  configureDatabase,
   getDatabasePool
 } from "../../server/persistence/database.mjs";
 import {
@@ -22,6 +23,8 @@ import {
   listProjectsForWorkspace
 } from "../../server/persistence/repository.mjs";
 import { validateCanonicalSiteSpec } from "../../server/persistence/site-spec.mjs";
+import { sha256Json } from "../../server/persistence/canonical-json.mjs";
+import { runtime } from "../../server/persistence/runtime.mjs";
 import { editableDraft, prepareTestDatabase } from "./helpers.mjs";
 
 let projectId;
@@ -189,13 +192,71 @@ void test("project metadata uses optimistic locking and archive is non-destructi
   );
 });
 
+void test("missing/null draft cannot clear data; explicit empty draft is an intentional clear", async () => {
+  const created = await createProject({ displayName: "Required draft", draft: editableDraft() }, randomUUID());
+  const id = created.response.project.id;
+  for (const body of [{ expectedRevision: 1 }, { expectedRevision: 1, draft: null }]) {
+    await assert.rejects(saveDraft(id, body, randomUUID()), { code: "VALIDATION_FAILED" });
+    assert.deepEqual((await getProject(id)).siteSpec, created.response.siteSpec);
+  }
+  const cleared = await saveDraft(id, { expectedRevision: 1, draft: {} }, randomUUID());
+  assert.equal(cleared.response.siteSpec.revision, 2);
+  assert.equal(cleared.response.siteSpec.editableDraft.companyName, "");
+});
+
+void test("concurrent POST replay creates one project, concurrent saves have exactly one winner", async () => {
+  const key = randomUUID();
+  const input = { displayName: "Concurrent project", draft: editableDraft() };
+  const created = await Promise.all(Array.from({ length: 4 }, () => createProject(input, key)));
+  assert.equal(new Set(created.map((result) => result.response.project.id)).size, 1);
+  assert.equal(created.filter((result) => !result.replayed).length, 1);
+  const id = created[0].response.project.id;
+  const results = await Promise.allSettled(["first", "second"].map((niche) =>
+    saveDraft(id, { expectedRevision: 1, draft: editableDraft({ niche }) }, randomUUID())
+  ));
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  const loser = results.find((result) => result.status === "rejected");
+  assert.equal(loser.reason.code, "REVISION_CONFLICT");
+  assert.equal(await countProjectRevisions(getDatabasePool(), DEFAULT_WORKSPACE_ID, id), 2);
+});
+
+void test("GET metadata, hash and body remain a single snapshot during real concurrent writes", async () => {
+  const created = await createProject({ displayName: "Concurrent reads", draft: editableDraft() }, randomUUID());
+  const id = created.response.project.id;
+  const writer = async () => {
+    for (let revision = 1; revision <= 20; revision++) {
+      await saveDraft(id, { expectedRevision: revision, draft: editableDraft({ niche: `write-${revision}` }) }, randomUUID());
+    }
+  };
+  const reader = async () => {
+    for (let i = 0; i < 60; i++) {
+      const snapshot = await getProject(id);
+      assert.equal(snapshot.project.currentRevision, snapshot.siteSpec.revision);
+      assert.equal(snapshot.project.currentSiteSpecSha256, snapshot.siteSpec.sha256);
+      assert.equal(snapshot.siteSpec.value.revision, snapshot.siteSpec.revision);
+      assert.equal(sha256Json(snapshot.siteSpec.value), snapshot.siteSpec.sha256);
+    }
+  };
+  await Promise.all([writer(), reader(), reader()]);
+});
+
 void test("missing DATABASE_URL produces a controlled error without eager connection", async () => {
   const originalDatabaseUrl = process.env.DATABASE_URL;
   await closeDatabasePool();
   delete process.env.DATABASE_URL;
+  configureDatabase(undefined);
   try {
     await assert.rejects(listProjects(), (error) => error?.code === "DATABASE_UNAVAILABLE");
   } finally {
-    process.env.DATABASE_URL = originalDatabaseUrl;
+    if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = originalDatabaseUrl;
   }
+});
+
+void test("shutdown prevents pool recreation and reconfiguration", async () => {
+  await closeDatabasePool();
+  runtime.stopping = true;
+  assert.throws(() => getDatabasePool(), { code: "DATABASE_UNAVAILABLE" });
+  assert.throws(() => configureDatabase({}), /already in use/);
+  assert.equal(runtime.pool, undefined);
 });

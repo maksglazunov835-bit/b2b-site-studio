@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 export const DEFAULT_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
 
 function iso(value) {
-  return value instanceof Date ? value.toISOString() : value ?? null;
+  return value === null || value === undefined ? null : new Date(value).toISOString();
 }
 
 export function mapProject(row) {
@@ -244,6 +244,18 @@ export async function getCurrentRevisionForWorkspace(queryable, workspaceId, pro
     [workspaceId, projectId]
   );
   return mapRevision(result.rows[0]);
+}
+
+export async function getProjectSnapshotForWorkspace(queryable, workspaceId, projectId) {
+  const result = await queryable.query(
+    `SELECT p.*, r.canonical_sha256 AS current_site_spec_sha256, to_jsonb(r) AS snapshot
+       FROM projects p
+       LEFT JOIN site_spec_revisions r ON r.project_id = p.id AND r.revision = p.current_revision
+      WHERE p.workspace_id = $1 AND p.id = $2`,
+    [workspaceId, projectId]
+  );
+  const row = result.rows[0];
+  return row ? { project: mapProject(row), revision: mapRevision(row.snapshot) } : null;
 }
 
 export async function getRevisionForWorkspace(queryable, workspaceId, projectId, revision) {

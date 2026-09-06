@@ -49,6 +49,14 @@ A stale revision returns `409 REVISION_CONFLICT` with the current revision and c
 
 ## Safety boundaries
 
-All application reads and writes are scoped to the bootstrap workspace, and user-controlled values use PostgreSQL parameters. The pool is created only on the first database operation and is closed by tests and process shutdown handlers. `db:test:reset` checks both loopback host and an explicit test database name before issuing its static destructive SQL.
+All application reads and writes are scoped to the bootstrap workspace, and user-controlled values use PostgreSQL parameters. One lifecycle shared with the built HTTP server stops intake, drains requests for at most four seconds, closes the lazy pool, and ends the process (eight-second failure deadline). After shutdown starts, a new pool cannot be created. The source launcher and bundled API share process-local runtime state.
+
+Current project reads join `projects.current_revision` to its immutable revision in one SQL statement. Its statement snapshot binds metadata, hash and body to the same committed state during concurrent saves. Two separate READ COMMITTED queries would not have this guarantee.
+
+Saving requires a non-null object `draft`. Missing/null/array drafts are rejected before writes. An explicit `{}` replaces all six editable fields with empty/null values: an intentional clear, not a patch or missing-input fallback. An already empty draft is a no-op. Project display name is not implicitly renamed.
+
+`DATABASE_URL` stores local projects; tests/reset only use the separately validated `TEST_DATABASE_URL`. Preflight rejects connection-string overrides and PG* environment variables before SQL. Test gates compare all persistence-table contents in the dev database before/after using read-only snapshots. Concurrent legitimate dev edits during tests deliberately fail this strict preservation check.
+
+The API denies access by default even with a valid database. Explicit local mode also requires the actual HTTP listener to bind a numeric loopback address; HTTP headers cannot enable it. Do not expose the local listener through a tunnel or reverse proxy. No account, multi-user or untrusted-local-user authorization is claimed.
 
 This model is intentionally single-workspace and unauthenticated. Authentication, tenant selection, job/review tables, normalized catalog data, assets, and publication targets belong to later milestones.

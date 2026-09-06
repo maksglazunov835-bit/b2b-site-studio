@@ -1,4 +1,5 @@
 import { asPersistenceError, PersistenceError } from "../persistence/errors.mjs";
+import { assertPersistenceAccess } from "./access.mjs";
 
 export const JSON_BODY_LIMIT_BYTES = 64 * 1024;
 
@@ -71,6 +72,7 @@ export function idempotencyKey(request) {
 
 export async function handleApi(action, defaultStatus = 200) {
   try {
+    assertPersistenceAccess();
     const result = await action();
     if (result && typeof result === "object" && Object.hasOwn(result, "responseStatus")) {
       const headers = result.replayed ? { "Idempotency-Replayed": "true" } : {};

@@ -9,6 +9,7 @@ import {
   findIdempotencyRecord,
   getCurrentRevisionForWorkspace,
   getProjectForWorkspace,
+  getProjectSnapshotForWorkspace,
   getRevisionForWorkspace,
   insertIdempotencyRecord,
   insertProject,
@@ -272,7 +273,7 @@ export async function saveDraft(projectIdValue, input, idempotencyKeyValue) {
       details: { field: "expectedRevision" }
     });
   }
-  const draft = normalizeEditableDraft(input.draft ?? {});
+  const draft = normalizeEditableDraft(input.draft);
   const idempotencyKey = assertIdempotencyKey(idempotencyKeyValue);
   const requestSha256 = sha256Json({ expectedRevision: input.expectedRevision, draft });
   const operation = `save_site_spec:${projectId}`;
@@ -408,17 +409,16 @@ export async function listProjects() {
 export async function getProject(projectIdValue) {
   const projectId = assertProjectId(projectIdValue);
   const pool = getDatabasePool();
-  const project = await getProjectForWorkspace(pool, DEFAULT_WORKSPACE_ID, projectId);
-  if (!project) {
+  const snapshot = await getProjectSnapshotForWorkspace(pool, DEFAULT_WORKSPACE_ID, projectId);
+  if (!snapshot) {
     throw new PersistenceError("PROJECT_NOT_FOUND", "The project does not exist.", {
       status: 404,
       details: { projectId }
     });
   }
-  const current = await getCurrentRevisionForWorkspace(pool, DEFAULT_WORKSPACE_ID, projectId);
   return {
-    project: projectResponse(project),
-    siteSpec: current ? revisionResponse(current) : null
+    project: projectResponse(snapshot.project),
+    siteSpec: snapshot.revision ? revisionResponse(snapshot.revision) : null
   };
 }
 

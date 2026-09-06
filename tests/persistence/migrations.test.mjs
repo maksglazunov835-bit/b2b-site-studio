@@ -18,20 +18,21 @@ const { Client } = pg;
 
 void test("clean migrations apply once and detect a changed checksum", async () => {
   const databaseUrl = requireTestDatabaseUrl();
+  const databaseConfig = assertSafeTestDatabaseUrl(databaseUrl);
   await resetTestDatabase({ databaseUrl });
 
-  const first = await runMigrations({ databaseUrl });
+  const first = await runMigrations({ databaseConfig });
   assert.deepEqual(first.applied, ["001_initial_persistence.sql"]);
   assert.deepEqual(first.skipped, []);
 
-  const second = await runMigrations({ databaseUrl });
+  const second = await runMigrations({ databaseConfig });
   assert.deepEqual(second.applied, []);
   assert.deepEqual(second.skipped, ["001_initial_persistence.sql"]);
 
-  const status = await getMigrationStatus({ databaseUrl });
+  const status = await getMigrationStatus({ databaseConfig });
   assert.deepEqual(status.map((item) => item.state), ["applied"]);
 
-  const client = new Client({ connectionString: databaseUrl });
+  const client = new Client(databaseConfig);
   await client.connect();
   try {
     const result = await client.query(
@@ -63,7 +64,7 @@ void test("clean migrations apply once and detect a changed checksum", async () 
       "utf8"
     );
     await assert.rejects(
-      runMigrations({ databaseUrl, migrationsDir: temporaryDirectory }),
+      runMigrations({ databaseConfig, migrationsDir: temporaryDirectory }),
       (error) => error?.code === "MIGRATION_CHECKSUM_MISMATCH"
     );
   } finally {
