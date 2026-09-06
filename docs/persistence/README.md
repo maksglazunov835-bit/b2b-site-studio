@@ -1,6 +1,6 @@
 # PostgreSQL Persistence
 
-This milestone persists the first brief screen as immutable draft SiteSpec revisions. It deliberately does not include authentication, jobs, Codex execution, catalog import, WordPress publication, DNS, or production deployment.
+This milestone persists the first brief screen as immutable draft SiteSpec revisions. The subsequent [MVP-03A queue](../jobs/README.md) adds revision-pinned requests and an append-only journal, without execution. Authentication, Codex execution, catalog import, WordPress publication, DNS, and production deployment remain outside this implementation.
 
 ## Local setup
 
@@ -41,7 +41,8 @@ Ordinary `npm start` denies persistence by default, even with a working database
 | `npm run test:persistence` | Run migration and repository/service tests against PostgreSQL. |
 | `npm run test:persistence:http` | Smoke-test the built production server and route handlers. |
 | `npm run test:persistence:ui` | Built-server Chromium races, retry, conflict, desktop/mobile and console tests. |
-| `npm run ci:full` | Preflight, test migrations/status, persistence, contracts, lint/build, HTTP/security/shutdown and UI. |
+| `npm run test:jobs` / `test:jobs:http` / `test:jobs:ui` | Queue database/001-upgrade, built-server HTTP and Playwright scenarios through the same protected runner. |
+| `npm run ci:full` | Preflight, test migrations/status, persistence and jobs, contracts, lint/build, HTTP/security/shutdown and both UI suites. |
 
 ## API v1
 

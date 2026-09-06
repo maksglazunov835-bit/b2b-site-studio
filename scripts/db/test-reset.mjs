@@ -18,6 +18,8 @@ export async function resetTestDatabase({ databaseUrl = process.env.TEST_DATABAS
     await client.query("BEGIN");
     await client.query(`
       DROP TABLE IF EXISTS
+        job_events,
+        jobs,
         api_idempotency_records,
         project_events,
         site_spec_readiness_checks,
@@ -28,6 +30,8 @@ export async function resetTestDatabase({ databaseUrl = process.env.TEST_DATABAS
       CASCADE
     `);
     await client.query("DROP FUNCTION IF EXISTS reject_immutable_row_mutation() CASCADE");
+    await client.query("DROP FUNCTION IF EXISTS protect_job_source_and_transition() CASCADE");
+    await client.query("DROP FUNCTION IF EXISTS check_job_journal() CASCADE");
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");

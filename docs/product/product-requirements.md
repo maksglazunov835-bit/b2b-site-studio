@@ -323,9 +323,10 @@ The product must support an independent review gate before merge, production dep
 
 Review requirements:
 
-- independent reviewer, or configured CI when available, checks the actual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment;
+- independent reviewer checks the actual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment; implementation PRs additionally require current successful GitHub Actions CI;
 - executor cannot accept its own work;
 - successful command output and a Codex final report are supporting evidence, not proof of readiness;
 - forbidden files, unrelated changes, secrets, dangerous commands, and invented facts must be checked independently;
 - after `changes_required`, fixes stay in the same feature branch or PR and the full verification pass runs again;
 - merge/deploy/publication remains blocked until independent acceptance is `accepted` and required human approval is recorded.
+- for ordinary in-scope repository PRs only, the owner recorded standing [delegated merge permission](../../AGENTS.md#delegated-repository-merge) for an independent reviewer/coordinator. It requires exact head/base acceptance, current CI, guarded squash and verification of main push CI; it never authorizes executor self-merge or production actions.

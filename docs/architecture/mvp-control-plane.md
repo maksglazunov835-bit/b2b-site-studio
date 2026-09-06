@@ -212,7 +212,8 @@ Entities:
 Rules:
 
 - Codex execution report and successful command output are supporting evidence only.
-- An independent reviewer, or configured CI when available, checks the factual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment.
+- An independent reviewer checks the factual diff, changed files, tests, architecture impact, migrations, configuration, security, and source Issue/JobSpec alignment. Implementation PRs additionally require current successful CI; it cannot replace the reviewer.
+- Ordinary in-scope repository PRs follow the owner's [delegated merge permission](../../AGENTS.md#delegated-repository-merge), restricted to an independent reviewer/coordinator, exact head/base acceptance, guarded squash and post-merge main CI verification. The executor cannot self-merge; production approval is separate.
 - The executor cannot accept its own work.
 - `accepted` is required before merge, production deploy, WordPress publication, DNS changes, and other irreversible actions.
 - `changes_required` keeps fixes in the same feature branch or PR and triggers a full recheck.
@@ -367,7 +368,7 @@ Boundary 4: Platform to WordPress.
 11. Agent creates artifact uploads, uploads bytes, and completes each artifact with size and sha256.
 12. Agent starts validation and runs registered validation checks.
 13. Server accepts execution success only after required validation passes and input versions still match.
-14. Independent reviewer, or configured CI when available, checks the diff, outputs, tests, and risks.
+14. Independent reviewer checks the diff, outputs, tests, and risks; implementation PRs also require current successful GitHub Actions CI.
 15. User reviews previews and approves irreversible actions if needed.
 16. WordPress publication jobs run only after readiness, approval, and independent acceptance.
 

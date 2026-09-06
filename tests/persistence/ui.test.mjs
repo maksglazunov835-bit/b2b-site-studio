@@ -87,6 +87,8 @@ try {
   await saved(page, 2);
   assert.equal(saveCount, 1);
   await page.unroute(`**/api/v1/projects/${id}/site-spec`);
+  // Finish the new revision-triggered jobs read before deliberately navigating.
+  await page.waitForLoadState("networkidle");
   await page.reload();
   await saved(page, 2);
   assert.equal(await niche.inputValue(), "Saved after delay");
@@ -151,6 +153,7 @@ try {
   assert.notEqual(changedWrites[0].body, changedWrites[1].body);
   await page.unroute(`**/api/v1/projects/${id}/site-spec`);
   console.log("UI_CHANGED_PAYLOAD_NEW_KEY passed");
+  await page.waitForLoadState("networkidle");
 
   // A delayed load for A must never overwrite the later navigation to B.
   const otherResponse = await fetch(`${server.origin}/api/v1/projects`, {
