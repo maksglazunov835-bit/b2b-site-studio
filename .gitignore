@@ -28,6 +28,8 @@ yarn-error.log*
 
 # local environment
 .env*
+!.env.example
+.test-results/
 
 # deployment and generated files
 .vercel

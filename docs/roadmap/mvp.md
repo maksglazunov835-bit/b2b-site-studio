@@ -31,16 +31,18 @@ Definition of done:
 
 Definition of done:
 
-- PostgreSQL schema stores workspaces, projects, SiteSpec versions, sites, regions, and audit timestamps.
-- PostgreSQL schema stores server-owned readiness check results and independent job/task review decisions.
-- SiteSpec revisions are immutable once a job references them.
+- A separate local PostgreSQL compose service uses a named volume, loopback-only port binding, and healthcheck without committed credentials.
+- Ordered SQL migrations run transactionally under an advisory lock, record checksums, and reject changed applied files.
+- PostgreSQL stores workspaces, projects, immutable canonical SiteSpec revisions, server-owned readiness checks, idempotency records, and append-only project events.
+- SiteSpec revisions are immutable immediately after creation; edits always create a monotonically numbered revision.
 - Draft SiteSpec can be saved and resumed without contacts, domains, regions, sites, catalog, products, variants, or verified facts.
-- Facts are stored as structured records with provenance, verification status, verification date, and publication permission.
-- Assets store metadata and checksums outside SiteSpec; SiteSpec stores asset/artifact references only.
-- API can create, update, fetch, and version SiteSpec.
-- Invalid SiteSpec writes are rejected.
-- Client-submitted readiness `passed` values are not trusted; readiness is derived by the server evaluator.
-- Tests cover valid and invalid SiteSpec payloads.
+- The single-workspace API can list/create/rename/archive projects and save, fetch, and list SiteSpec revisions without physical deletion.
+- `expectedRevision`, no-op hashes, and idempotency keys prevent silent overwrites and duplicate revisions.
+- Invalid draft input, client-owned server fields, and non-draft stage transitions are rejected before persistence.
+- The current first-screen brief can create, save, reload, and resolve a revision conflict without becoming dependent on database availability for rendering.
+- PostgreSQL migration, repository/service, production HTTP, no-database homepage, contract, lint, and build checks run in `ci:full`.
+
+Milestone status: implementation remains pending until its pull request has current green CI and independent review acceptance. This roadmap entry does not itself mark the stage complete.
 
 ## 3. Server Queue And Event Journal
 
