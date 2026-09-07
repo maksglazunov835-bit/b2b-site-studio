@@ -13,6 +13,7 @@ import { ok, write } from '../execution/http-helpers.mjs';
 import { until, stopRunner } from '../agents/process-helpers.mjs';
 import { startDesignRunner } from './helpers.mjs';
 import { brief } from './fixtures.mjs';
+import { assertProposal } from '../../server/design/contract.mjs';
 assertSafeTestDatabaseUrl();
 await prepareTestDatabase();
 await closeDatabasePool();
@@ -210,6 +211,30 @@ try {
       );
     }
   }
+  await dialog
+    .getByRole('button', { name: 'Закрыть предпросмотр', exact: true })
+    .click();
+  // Renderer boundary fixture only: valid maximum-length text, no stored result mutation.
+  await page.route(`**/api/v1${base}/${job.id}/execution`, async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    data.report.proposal.concepts.forEach((concept, index) => {
+      concept.name = String(index) + 'W'.repeat(59);
+      concept.rationale = 'R'.repeat(240);
+    });
+    assertProposal(data.report.proposal, brief);
+    await route.fulfill({ response, json: data });
+  });
+  await row.getByRole('button', { name: 'Журнал', exact: true }).click();
+  await panel
+    .getByRole('button', { name: 'Открыть три концепции', exact: true })
+    .click();
+  await dialog
+    .getByRole('tab', { name: '0' + 'W'.repeat(59), exact: true })
+    .waitFor();
+  assert.ok(await dialog.evaluate((d) => d.scrollWidth <= d.clientWidth + 1));
+  await page.unroute(`**/api/v1${base}/${job.id}/execution`);
+  console.log('DESIGN_UI_MAXIMUM_LENGTH_TEXT_MOBILE_BOUNDARY passed');
   assert.equal(runner.output().split('TEST_CLI_INVOCATION').length - 1, 1);
   assert.equal((await ok(server.origin, base)).jobs.length, 1);
   assert.deepEqual(errors, []);

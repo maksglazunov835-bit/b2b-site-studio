@@ -99,7 +99,7 @@ export function DesignPreview({ report }: { report: DesignReport }) {
             key={item.id}
             role="tab"
             aria-selected={index === i}
-            className={`min-h-9 border-b-2 px-3 text-sm ${index === i ? 'border-orange-500 text-white' : 'border-transparent text-gray-400'}`}
+            className={`min-h-9 min-w-0 max-w-full break-words border-b-2 px-3 text-sm ${index === i ? 'border-orange-500 text-white' : 'border-transparent text-gray-400'}`}
             onClick={() => {
               setIndex(i);
               setPage('home');
@@ -109,7 +109,9 @@ export function DesignPreview({ report }: { report: DesignReport }) {
           </button>
         ))}
       </div>
-      <p className="px-4 text-sm text-gray-300">{concept.rationale}</p>
+      <p className="break-words px-4 text-sm text-gray-300">
+        {concept.rationale}
+      </p>
       <div className="flex flex-wrap items-center justify-between gap-2 p-3">
         <div
           className="flex flex-wrap gap-2"
