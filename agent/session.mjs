@@ -4,17 +4,21 @@ import { pathToFileURL } from "node:url";
 import { localOrigin, post, RunnerError } from "./transport.mjs";
 import { reply } from "./protocol.mjs";
 import { runnerEnvironment } from "./environment.mjs";
+import { installedManifest } from "../scripts/contracts/execution-manifest.mjs";
+import { VALIDATOR } from "../server/execution/contract.mjs";
+import { dataSession } from "./data-session.mjs";
 
 export function options(args) {
   const values = {};
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i]; const value = args[i + 1];
-    if (!["--origin","--name"].includes(key) || !value || Object.hasOwn(values,key)) throw new RunnerError("INVALID_OPTIONS");
+    if (!["--origin","--name","--mode"].includes(key) || !value || Object.hasOwn(values,key)) throw new RunnerError("INVALID_OPTIONS");
     values[key] = value;
   }
   const name = values["--name"] ?? "Local Node Runner";
-  if (!/^[A-Za-z0-9 ._-]{1,64}$/.test(name) || !name.trim() || /(?:pair|agt)_[A-Za-z0-9_-]{43}/.test(name)) throw new RunnerError("INVALID_OPTIONS");
-  return { origin: localOrigin(values["--origin"]), name: name.trim() };
+  if (!/^[A-Za-z0-9 ._-]{1,64}$/.test(name) || !name.trim() || /(?:pair|agt|lease)_[A-Za-z0-9_-]{43}/.test(name)) throw new RunnerError("INVALID_OPTIONS");
+  if (values["--mode"] !== undefined && !["presence-only","data-validation"].includes(values["--mode"])) throw new RunnerError("INVALID_OPTIONS");
+  return { origin: localOrigin(values["--origin"]), name: name.trim(), mode: values["--mode"] === "data-validation" ? "data_validation" : "presence_only" };
 }
 
 export function readSecret(signal, input = process.stdin, output = process.stdout) {
@@ -53,18 +57,20 @@ export function readSecret(signal, input = process.stdin, output = process.stdou
   });
 }
 
-export async function runSession({ origin, name, pairingSecret, signal, log = console.log }) {
+export async function runSession({ origin, name, pairingSecret, signal, mode = "presence_only", log = console.log }) {
+  if (mode === "data_validation" && (await installedManifest()).sha256 !== VALIDATOR.sha256) throw new RunnerError("VALIDATOR_MISMATCH");
   const agentSecret = `agt_${randomBytes(32).toString("base64url")}`;
   const os = { win32: "windows", linux: "linux", darwin: "macos" }[process.platform];
   if (!os) throw new RunnerError("UNSUPPORTED_OS");
-  const body = JSON.stringify({ mode: "presence_only", agentName: name, agentVersion: "0.3.0", os, supportedApiVersions: ["v1"], agentSecret });
+  const body = JSON.stringify({ mode, agentName: name, agentVersion: mode === "presence_only" ? "0.3.0" : "0.3.1", os, supportedApiVersions: ["v1"], agentSecret,
+    ...(mode === "data_validation" ? { validator: VALIDATOR } : {}) });
   const key = randomUUID();
   const deadline = Date.now() + 300000;
   let registered;
   for (let attempt = 0; attempt < 5; attempt++) {
     signal.throwIfAborted();
     if (Date.now() >= deadline) throw new RunnerError("PAIRING_EXPIRED");
-    try { registered = reply(await post(origin, "/api/v1/agents/register", pairingSecret, body, { key, signal }), "register"); break; }
+    try { registered = reply(await post(origin, "/api/v1/agents/register", pairingSecret, body, { key, signal }), "register", undefined, mode); break; }
     catch (error) {
       if (!error.retryable || attempt === 4) throw error;
       log("RUNNER_REGISTRATION_RETRY");
@@ -72,7 +78,8 @@ export async function runSession({ origin, name, pairingSecret, signal, log = co
     }
   }
   pairingSecret = undefined;
-  log(`RUNNER_REGISTERED ${registered.agentId} presence_only execution_disabled`);
+  log(`RUNNER_REGISTERED ${registered.agentId} ${mode}`);
+  if (mode === "data_validation") return dataSession({ origin, registration: registered, credential: agentSecret, signal, log });
   let interval = registered.heartbeatIntervalSeconds;
   let failures = 0;
   while (!signal.aborted) {

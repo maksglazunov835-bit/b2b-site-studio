@@ -1,0 +1,341 @@
+{
+  "baselineCommit": "a84465e014445b6145bc23786ea5db190cc8407f",
+  "fixtures": [
+    {
+      "file": "site-spec.schema.json",
+      "group": "examples",
+      "index": 0,
+      "sha256": "3be6787370f87e2dca2fbfe50fcb671f789859c8965d25be14d4c86fd236c3af"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "examples",
+      "index": 1,
+      "sha256": "88fabfa82836f53fc0aca3877b0ad940c74457c08a3f36a014b901cef66299cb"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "examples",
+      "index": 2,
+      "sha256": "428996061f8b93c9ed81746ee52056155150dfbf970551335d619524e899c989"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "examples",
+      "index": 3,
+      "sha256": "6a735d60a5d1fefbfed2b230e9fb00837b872daa7891ea1f0f634e5d6bfdab03"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticPositiveExamples",
+      "index": 0,
+      "sha256": "e757072e10c383914db0292a500766d988f74d6868c85cefa7a663ebbbbc70a8"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 0,
+      "sha256": "a64c00409eb9eeb3dd16a9ca81316274178e474cee0d7925912a17dd09744bd1"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 1,
+      "sha256": "90980b577ceda97d32b9949f04367b575b3d59c78147207154242037f0fec9be"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 2,
+      "sha256": "9b4bdacad61421b21b3da316cf8bd032be2eb47b4d901b3048bbed0e9a810bc6"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 3,
+      "sha256": "f3ff298626bb961bdac80cd881f57980851a2e569d7d1e8f727dae351e7f12af"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 4,
+      "sha256": "5fff599e391306ae8f3888a0146678622a13e6cb5959b6ef2716d1e79a3a292e"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 5,
+      "sha256": "e052f226f3107dfa30bfd0859b5c84e6039be5b55c4ba5435865fc9a3139782f"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 6,
+      "sha256": "5f6e19197eddb032a085ac93ea24b3276bae9ffb4fc7f51f5f4f617e3c9bb39b"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 7,
+      "sha256": "67657edd7f8323d6cac546c8263775d7a99cf5c8927262dad5341415625dbff2"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-negativeExamples",
+      "index": 8,
+      "sha256": "9937d133c5427c978d9a70b921b2e7719445ad2bb6d0b30216970f4af1145145"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 0,
+      "sha256": "7c14b32909cf948ef75f9d1fbdb3d71a98eea0248d8ae740975d492e5c203a44"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 1,
+      "sha256": "7ef41acb9cc9b0185ee11f30954d800412f4a384da58ae190e0df2fb57436efc"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 2,
+      "sha256": "811111aae3d02e490c264becb38c61262bd10084b1dda5be016801790e1ab60c"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 3,
+      "sha256": "6dd1780c9f9c6b0b79897a57066e84dab1bb9e84ca0cee6969de0ee6e022fc8b"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 4,
+      "sha256": "852784183ab3d89cfc1847c272469a1ae586768c3e547862afee34f263bdc4f0"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 5,
+      "sha256": "5d910120a8b2bd756532714e0a7b97863ac6afe2d573a786d11bf7dfbf03ab09"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 6,
+      "sha256": "79d36f4261d677f8164f3c51f09918e5e0241969674dbfd16050d357890b51c6"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 7,
+      "sha256": "b19b6b3c5c9b8ed71e05147b144507e8cf7001393f1f6aa1cabd7cb42b02d286"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 8,
+      "sha256": "cee144beaf85308363da86ad6753826ebe8eb1a0235973de3dd8b54914459018"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 9,
+      "sha256": "c48978d4fd475e59d274fd09ba9ecfb59778b0bc0916687a47dec5748a7f8f58"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 10,
+      "sha256": "1e1cd639e534a381293e3d8b117ee3f93cf89a7aa93677775b975c97034e03e3"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 11,
+      "sha256": "be3265d4373e4d01f311c3c398aa92bde879331bbd163e0ec033f17d4dfe73b4"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 12,
+      "sha256": "98abf852faf548fa9f56e5dfe557cd3f15afff46af6c410557be246fc1cf45b2"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 13,
+      "sha256": "a5a7cd8b1613906ba1d7e9682be8c06407ca66be194782c5c1e4b730fcfd5a71"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 14,
+      "sha256": "ac2e0731e28d82081f72dedb9a03cf78124f868c57c9e9ce6173c304f9834aeb"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 15,
+      "sha256": "8afd9ba6ad448dbd9e3a83d3d3fca862382bc5263806b3c0c78ddba3979cab69"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 16,
+      "sha256": "4f1aacb0bde9cd2e22258fc3ac20d94941ceed658bf7cf0046b328641bfcfeac"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 17,
+      "sha256": "4c9b7a7fe65657f5ff238cac221089a45c49aacd7e8f3e4ec2d21020a55ff648"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 18,
+      "sha256": "9daa374ea922742794fa43deafcc1324c9e4423ff943e7f3c61f6c143730c210"
+    },
+    {
+      "file": "site-spec.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 19,
+      "sha256": "6f5207fd2e993fee8f7ea5cbd1ed99849b17b2e933e9cfb8aa93df963142ad88"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "examples",
+      "index": 0,
+      "sha256": "30367a6b30a2d2ef534809c61e870f783ea6bb0c7b37b73a0cb07494c186ece3"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "examples",
+      "index": 1,
+      "sha256": "47833f88dd50c78506117cee35fb5b15f3fde4675573d3d83cf9e565ecb32a0f"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 0,
+      "sha256": "99325382fb5c89be11ae301f5385b7163d2bfbc4ba01d6a248e8a9579c427007"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 1,
+      "sha256": "cb1d75f1b7bbd04818a7b46ea285fc780948cc03c364cc93fcf13db9e4e661d5"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 2,
+      "sha256": "deada9fed286242d9a733f0e0abfff4cc4478f276f1aebac864cf28f73bef91b"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 3,
+      "sha256": "1d3407481023a75ec29e070577c78704c509010f69f22f7f99a38fde30fb663a"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 4,
+      "sha256": "f5197415cd27f01f754ba5cf96321d496b209343f92883e1f36c55759add6407"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 5,
+      "sha256": "1461601bb16d99c429da2467fbe362aa464100f4b1c476780721e89486c82106"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 6,
+      "sha256": "6e78ca51eacd6dd42a8a5db0e910fe73ca38ab20af25e2364b5d1a983a2a174c"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-negativeExamples",
+      "index": 7,
+      "sha256": "5839f1b2b7766392cecc63029fc940811d8ae8ff7ef6d554ec8cca716378167d"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 0,
+      "sha256": "b74814ba856f27ad8dbb3c1aff9b25c4a545d73767eb81df4e17f007581971eb"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 1,
+      "sha256": "6e65bc0a6eadef3d6ba3a0a62b7169057677bb139b9811542d48568f94665432"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 2,
+      "sha256": "413eacc4a907e7cb0c85ed23056b758f94567c3e46d475ab21539650a9672e3d"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 3,
+      "sha256": "7be06689467f1aa124ff3d6e6c8ff701a98935de330f78aa8e6a4404559224a0"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 4,
+      "sha256": "5809de21f51826eeb763c19a96ad5e021b62ceadc563c8dd8c0e94bc593d75be"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 5,
+      "sha256": "240c56e56fd850595b98443d39a5b70f4240c3d3ea53537b0ec576fe7cbc8635"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 6,
+      "sha256": "6b688f53dbe048097daa6035c64a40f5874b1fb8c8e18439835234174e4c72a8"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 7,
+      "sha256": "d6340d72cffcb49a31914016a6d74ee35fabd2e94362dca0c542d1d8d2ed9ccc"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 8,
+      "sha256": "1eb9841a48b84865d117a24e3235e8b854aaca2f696021173803e79c495c442a"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 9,
+      "sha256": "f1390b9b6ae42701faf84113f8a2eae9e9cd2cc0dac05fcc53be37504148aa42"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 10,
+      "sha256": "4c062767f43a309aeb3116cdfbde38f11c3f2af464096fdf9eee0544a8e1cf24"
+    },
+    {
+      "file": "job.schema.json",
+      "group": "x-semanticNegativeExamples",
+      "index": 11,
+      "sha256": "a124e461309f4b765e36f30a7f0bec6ba17a012c2476b6084a31163fa886b293"
+    }
+  ]
+}

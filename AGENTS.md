@@ -27,6 +27,7 @@
 - Database, migration, persistence, or API changes must additionally pass `npm run db:test:migrate`, `npm run db:test:status`, `npm run test:persistence`, `npm run test:persistence:http`, `npm run test:persistence:ui`, and `npm run ci:full` against the separate `TEST_DATABASE_URL` PostgreSQL database.
 - Queue changes must also pass `npm run test:jobs`, `npm run test:jobs:http`, and `npm run test:jobs:ui`; these remain required parts of `ci:full`, including bounded desktop/mobile screenshot evidence.
 - Presence/Runner changes additionally pass `test:agents`, `test:agents:http`, `test:agents:process` and `test:agents:ui` through the protected runner and `ci:full`. Preserve real child-process HTTP, signal/revoke, no-secret evidence and DEV_DATABASE_UNCHANGED checks.
+- Data-execution changes additionally pass `contracts:execution`, `test:execution`, `test:execution:http`, `test:execution:process` and `test:execution:ui`, all included in `ci:full`. Preserve the 1.2 contract gate, actual validator-manifest checks, pinned snapshots, lease/fencing/retry/cancel/tamper tests and safe completed-report screenshots.
 - Every implementation pull request to `main` requires a successful GitHub Actions CI run for the current PR head SHA or the current GitHub-generated merge commit. A successful run from an older commit does not count, and every new commit requires a new CI run.
 - Missing CI and `cancelled`, `skipped`, `neutral`, or `failed` checks block `accepted` and merge. A local Codex report or local command output never replaces GitHub Actions evidence.
 - A documentation-only pull request may receive an explicit, recorded CI exception only from the independent reviewer. No implicit exception is allowed.
@@ -61,7 +62,7 @@
 - Canonical SiteSpec JSONB is the persistence source of truth. Derived readiness rows and metadata must not become a competing editable model.
 - SiteSpec revision, readiness, and event rows are immutable/append-only. New edits create a new revision under optimistic locking.
 - Keep every application query scoped to the active workspace and parameterize all user-controlled values.
-- Queue requests pin an immutable saved SiteSpec revision/hash; they are not executable agent JobSpecs. Until a real executor and validated full JobSpec exist, report `dispatchable: false` with `EXECUTOR_NOT_CONFIGURED`; do not invent repository IDs, SHAs, paths or credentials. Jobs and their append-only journal/idempotency records change transactionally.
+- Queue requests pin an immutable saved SiteSpec revision/hash; they are not executable agent JobSpecs. Without explicit scoped operator dispatch report `dispatchable: false` with `EXECUTOR_NOT_CONFIGURED`. MVP-03C may materialize the separate complete 1.3 `data_validation` profile for fixed SiteSpec JSON validation only. Never invent repository IDs, SHAs, paths or credentials to satisfy the legacy 1.2 contract. Job/attempt/result/journal/idempotency mutations commit transactionally.
 
 ## Security And Data Rules
 
@@ -78,7 +79,8 @@
 
 ## Local Agent Safety Rules
 
-- The implemented MVP-03B Runner is presence-only: no claim, lease, Codex/Git/shell execution, folder scanning or background installation. Report `executionEnabled: false`, zero slots and no execution capabilities; online must not make queued requests dispatchable.
+- The default MVP-03B Runner remains presence-only: zero slots, no claim or execution grants. Existing credentials are never elevated. MVP-03C requires a new project-scoped pairing, `--mode data-validation`, matching actual validator manifest and explicit per-job operator assignment; one slot permits only fixed schema/semantic validation in memory. No Codex/Git/shell, user-module execution, website-file access, folder scanning or background installation in either mode. Online alone never dispatches backlog.
+- Data validation uses immutable exact snapshots, full profile 1.3, bounded reports independently reproduced server-side, three attempts maximum, 10-second leases and a hard 30-second deadline. Store only lease hashes. Every write checks current agent/grant/attempt/hash/expiry; no stale or revoked completion. Exact committed result/fail/cancel-ack acknowledgements alone may replay read-only for five minutes after terminal finish, with current unrevoked credentials and unchanged scope/key/request hash, never mutations or lease renewal. Unconfirmed terminal recovery stops the Runner without a new execution or invented outcome. Active cancellation needs actual stop acknowledgement, otherwise fail with STOP_UNCONFIRMED after expiry. Validation never changes readiness/facts/acceptance. Fixed worker threads are not a sandbox for arbitrary code.
 - Pairing and agent credentials are separate, purpose-bound, random and stored only as hashes server-side. Pairing plaintext is transient UI/stdin state; Runner credentials stay in process memory. Never include either in URLs, command arguments, browser storage, saved responses, logs or screenshots.
 - Start the foreground Runner through its environment-filtering launcher, never with platform `.env` or production credentials. Only fixed loopback endpoints are allowed, redirects are refused, and shutdown/revocation cancels the presence loop. Trusted-local operator access is not public authentication or isolation from malicious same-user processes.
 

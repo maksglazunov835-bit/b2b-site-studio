@@ -73,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: runner-presence-${{ github.event.pull_request.head.sha || github.sha }}
+          name: runner-validation-${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 7
           if-no-files-found: error
           include-hidden-files: true
@@ -85,3 +85,5 @@ jobs:
             .test-results/persistence-mobile.png
             .test-results/runner-desktop.png
             .test-results/runner-mobile.png
+            .test-results/execution-desktop.png
+            .test-results/execution-mobile.png

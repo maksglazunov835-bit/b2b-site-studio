@@ -16,6 +16,7 @@ Versioned inputs:
 
 - Agent API version: `v1`.
 - JobSpec version: `1.2.0`.
+- Implemented data-only JobSpec: `1.3.0` / `data_validation` (separate schema, no fallback).
 - SiteSpec schema version: `1.2.0`.
 - Validation registry version: date-based registry ID, for example `2026-09-02`.
 
@@ -25,7 +26,7 @@ The agent reports supported versions during registration and claim. The server o
 
 ### Implemented Presence-Only Profile (MVP-03B)
 
-Only the following **local presence** subset is implemented today. The execution registration/health examples and lease/job endpoints later in this document describe the future executable profile, not available routes or granted capabilities. MVP-03B does not relax the full JobSpec schema or its semantic checks.
+The following **local presence** subset remains unchanged and is the default. MVP-03C adds the explicitly scoped data-only profile below; the later repository/Codex examples still describe future capabilities, not available routes. Neither profile relaxes schema 1.2 or its semantic checks.
 
 The platform and Runner must be on the same trusted computer. All routes first pass the existing explicit-local, actual-loopback-listener gate. An ordinary public launch rejects even valid credentials. Host/forwarded headers never grant local access. This is not production authentication or protection from malicious processes in the same OS user session.
 
@@ -67,7 +68,44 @@ The existing API envelope/no-store/body limit remains in force. Presence-specifi
 
 See [local Runner setup and limits](../agents/README.md). Restart requires a new explicit pairing: OS credential storage, unattended reconnect, remote Timeweb transport, public login, execution, claim and lease remain outside this profile.
 
-### Future Executable Profile
+### Implemented Data Validation Profile (MVP-03C)
+
+The independent [complete 1.3 schema](job-data-validation.schema.json) permits only `site_spec_validation` / `data_validation`. It binds jobId, projectId, server workspaceId, template version, validator identity, immutable revision ID/number/schema version/SHA-256 and exact JSON snapshot, fixed policy and structured result version. Workspace is an identity, not a folder. No repository IDs, commit SHAs, paths, arbitrary URLs, commands, modules or file writes are present. Unknown version/profile/fields fail closed; snapshot validity is the task's output, not an envelope prerequisite.
+
+Operator pairing accepts `{ "mode": "data_validation", "projectId": "<saved project UUID>" }`. The empty `{}` request remains presence-only. Migration 004 adds a separate immutable `agent_execution_grants` record; the old immutable `agents.mode` is not updated. Only a new credential can bind that grant, once, to one active project and one operation. Registration in data mode includes the installed `validator` identity and must match the permission. Old credentials cannot claim; registration replay remains bounded by pairing expiry and revocation.
+
+`validator: { id: site_spec_builtin, version: 1.0.0, sha256 }` is backed by the committed normalized-LF source manifest of schema, generated schema validator, semantic module, canonicalization/bounds/report/contract code and runtime validator helpers. The server build embeds it; the opted-in Runner hashes its actual installed files before registration. CI checks freshness, rather than trusting a client-supplied version promise. After intentionally changing a listed source, run `node scripts/contracts/generate-execution-manifest.mjs` and rerun all gates. An old grant/assignment cannot silently switch to a different validator.
+
+Canonical JSON preserves every own JSON key, including `__proto__`, `constructor` and `prototype`, at every object/array depth. Key ordering is deterministic; special keys are not removed or interpreted as setters. The 56 ordinary legacy contract fixture hashes are pinned to reviewed commit `a84465e014445b6145bc23786ea5db190cc8407f` in `tests/execution/canonical-legacy-hashes.json`. An old document whose recorded digest omitted a special key is incompatible: new queue creation refuses it with `SITE_SPEC_INTEGRITY_ERROR`, and materialization refuses an inconsistent pinned input with `INPUT_HASH_MISMATCH`. Existing assignments also pass validator/input/spec-hash checks before use. Never rehash or rewrite historical revisions/jobs to hide this inconsistency. Operator review and a new explicitly saved valid revision/request are required; old history remains unchanged. The updated manifest intentionally requires new compatible grants/pairing; it does not upgrade existing grants.
+
+| Method | `/api/v1` path | Authority and strict DTO |
+| --- | --- | --- |
+| POST | `/projects/{projectId}/jobs/{jobId}/dispatch` | Operator, `{agentId,expectedVersion}`, Idempotency-Key. Materialize only this request's pinned revision and assign only this device; never scan/start backlog. |
+| GET | `/projects/{projectId}/jobs/{jobId}/execution` | Operator; nonsecret assignment identity, at most three attempts, bounded report/digest, `acceptanceResult:null`. |
+| POST | `/agents/{agentId}/claim` | Scoped agent bearer, `{}`, Idempotency-Key. One assigned job/slot, full JobSpec/hash and transient random lease; otherwise bounded no-work response. |
+| POST | `/agents/{agentId}/jobs/{jobId}/start` | Scoped bearer, `{attempt,leaseToken}`, Idempotency-Key. |
+| POST | `/agents/{agentId}/jobs/{jobId}/heartbeat` | Scoped bearer, `{attempt,leaseToken,phase:"validating"}`. Separate from presence. |
+| POST | `/agents/{agentId}/jobs/{jobId}/result` | Scoped bearer, `{attempt,leaseToken,report,resultDigest}`, Idempotency-Key. |
+| POST | `/agents/{agentId}/jobs/{jobId}/fail` | Scoped bearer, `{attempt,leaseToken,code}`, Idempotency-Key; fixed failure-code enum only. |
+| POST | `/agents/{agentId}/jobs/{jobId}/cancel-ack` | Scoped bearer, `{attempt,leaseToken}`, Idempotency-Key; only after real local stop. |
+
+All eight routes retain the actual loopback/default-deny/no-store boundary, including a built production bundle. Agent and pairing bearers never authorize operator APIs. Every action locks the agent and current job/attempt, checking grant, workspace/project/device, active project, current validator, lease hash, latest attempt and server time. Assignment/event/idempotency and completion/result/event/ack each commit atomically. Claim serializes one slot; row locks and unique active-attempt indexes prevent concurrent assignment.
+
+The lease contains 32 random bytes and exists in plaintext only in its claim reply and Runner memory. DB rows hold only a hash; claim has no saved plaintext replay. A repeated consumed claim key returns `CLAIM_REPLY_UNAVAILABLE`; the Runner waits for expiry, then a new claim can create attempt 2 or 3. No work starts before start acknowledgement. Start/result/fail/cancel-ack reuse identical payload/key on transport loss; same-key changed payload conflicts. All new writes and start replay require an unexpired lease and hard deadline. An expired unfinished attempt gains no write authority from a retry.
+
+**Read-only terminal acknowledgement recovery.** The same result/fail/cancel-ack POST may replay an already committed immutable `execution_operations.response`, with the existing transport-only `replayed:true` marker, after lease/deadline expiry. Its window is server time `[attempt.finished_at, attempt.finished_at + 300000 ms)`, never extended by reads. It requires a currently valid unrevoked agent credential, active project and compatible project grant, exact workspace/project/job/device/latest-attempt/lease-token binding, matching terminal job/attempt state, operation kind, exact key hash and canonical full request hash (including result digest/body; lease plaintext is hashed before hashing the request). It performs no INSERT/UPDATE, sweep, revalidation, state transition or lease renewal. Missing receipt returns `TERMINAL_ACK_NOT_FOUND`, changed payload `IDEMPOTENCY_CONFLICT`, closed window `TERMINAL_ACK_EXPIRED`; revoked or foreign credentials/scope remain denied. Revoke shares the agent row lock, so no replay linearized after revoke succeeds. There is no public or operator bypass, new endpoint, historical repair or saved plaintext token.
+
+Only after an uncertain terminal response does the Runner use this recovery path beyond its write lease, retaining the exact tuple in memory. At most ten total terminal requests fit within a 45-second client budget, each bounded by five seconds and remaining budget. This is shorter than the five-minute server receipt window. A recovered response must acknowledge the requested terminal state. If recovery cannot be confirmed, the Runner exits with `TERMINAL_ACK_UNCONFIRMED` (or the credential rejection); it does not invent success/failure, send a different terminal operation, or claim again. Operator result/history remains available after receipt expiry. Process restart loses the memory credential/token and cannot resume receipt recovery automatically.
+
+Lease is 10 seconds, hard attempt deadline 30 seconds, maximum three attempts, one slot. Job heartbeat is every two seconds while checking; presence cannot extend it. Claim and operator job reads run a workspace/project-scoped sweep of at most 25 expired attempts in a transaction. Expiry fences the old attempt and requeues this side-effect-free type only; exhaustion fails. Cancel of an active job becomes `cancel_requested`, not cancelled. Runner aborts/joins its fixed worker before cancel-ack. Revoke forbids even acknowledgement; absent a prior valid ack, expiry produces `failed` / `STOP_UNCONFIRMED`. This is not exactly-once external execution and is not a policy for future deployment jobs.
+
+Byte caps before transport parsing: snapshot 64 KiB, claim envelope 80 KiB, report 16 KiB, report POST including metadata/token 17 KiB; other execution requests 2 KiB. Iterative JSON depth 32 / 6000-node guards precede recursive schema/semantic work. Report includes report version, job/attempt, input revision/hash, JobSpec hash, validator identity, valid/invalid status, schema/semantic counts, at most 100 keyword/code/path details and truncation flag. Paths are limited and scrubbed; no source values, messages, raw stdout or whole brief are returned. HTTP size/JSON errors are sanitized `JSON_BYTES_LIMIT` (413), `INVALID_JSON_VALUE` (400); semantic/shape bounds use 422.
+
+The only executor is a fixed bundled worker-thread module, 128 MiB old-generation / 16 MiB young-generation memory limits and a cancellable deadline. It imports its own checked validator implementation, never user code or paths, and never reads/writes website files. This is not a sandbox for arbitrary code. Server result handling independently reproduces the deterministic bounded report against the same pinned snapshot and compares its canonical digest, rejecting `REPORT_MISMATCH`. A successful validation task may report `validationStatus:invalid`; neither result changes SiteSpec/readiness/company facts or grants independent acceptance.
+
+Stable execution codes include `EXECUTION_NOT_GRANTED`, `EXECUTION_SCOPE_MISMATCH`, `VALIDATOR_MISMATCH`, `ALREADY_DISPATCHED`, `UNSUPPORTED_EXECUTION_PROFILE`, `INVALID_EXECUTION_SPEC`, `INPUT_HASH_MISMATCH`, `SNAPSHOT_BINDING_MISMATCH`, `JSON_COMPLEXITY_LIMIT`, `CLAIM_REPLY_UNAVAILABLE`, `STALE_ATTEMPT`, `LEASE_EXPIRED`, `ATTEMPT_FINISHED`, `ATTEMPTS_EXHAUSTED`, `CANCEL_REQUESTED`, `REPORT_MISMATCH`, plus existing project/auth/version/idempotency errors. Stored failure reasons are an enum, never arbitrary exception text.
+
+### Future Repository/Codex Executable Profile
 
 Agent endpoints and human/operator endpoints use separate authentication.
 

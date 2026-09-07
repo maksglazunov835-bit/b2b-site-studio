@@ -30,10 +30,11 @@ void test("all test entrypoints refuse missing TEST_DATABASE_URL before a connec
   const port = listener.address().port;
   try {
     for (const args of [
-      ...["full", "service", "http", "ui", "jobs", "jobs-http", "jobs-ui", "agents", "agents-http", "agents-process", "agents-ui", "migrate", "status"].map((mode) => ["scripts/persistence/run-tests.mjs", mode]),
+      ...["full", "service", "http", "ui", "jobs", "jobs-http", "jobs-ui", "agents", "agents-http", "agents-process", "agents-ui", "execution", "execution-http", "execution-process", "execution-ui", "migrate", "status"].map((mode) => ["scripts/persistence/run-tests.mjs", mode]),
       ["scripts/db/test-reset.mjs"], ["scripts/persistence/http-smoke.mjs"], ["tests/persistence/ui.test.mjs"],
       ...["service", "upgrade", "http", "ui"].map((name) => [`tests/jobs/${name}.test.mjs`]),
-      ...["service", "upgrade", "transport", "http", "process", "ui"].map((name) => [`tests/agents/${name}.test.mjs`])
+      ...["service", "upgrade", "transport", "http", "process", "ui"].map((name) => [`tests/agents/${name}.test.mjs`]),
+      ...["service", "upgrade", "worker", "http", "process", "ui"].map((name) => [`tests/execution/${name}.test.mjs`])
     ]) {
       const output = await new Promise((resolve, reject) => {
         const child = spawn(process.execPath, args, { env: {
