@@ -23,6 +23,52 @@ The agent reports supported versions during registration and claim. The server o
 
 ## Authentication
 
+### Implemented Presence-Only Profile (MVP-03B)
+
+Only the following **local presence** subset is implemented today. The execution registration/health examples and lease/job endpoints later in this document describe the future executable profile, not available routes or granted capabilities. MVP-03B does not relax the full JobSpec schema or its semantic checks.
+
+The platform and Runner must be on the same trusted computer. All routes first pass the existing explicit-local, actual-loopback-listener gate. An ordinary public launch rejects even valid credentials. Host/forwarded headers never grant local access. This is not production authentication or protection from malicious processes in the same OS user session.
+
+| Method | `/api/v1` path | Authority / purpose |
+| --- | --- | --- |
+| POST | `/agents/pairings` | Trusted local operator, empty JSON object; issue a 5-minute single-use pairing secret. |
+| GET | `/agents/pairings/{pairingId}` | Local operator; safe status/expiry, never the secret. |
+| POST | `/agents/pairings/{pairingId}/cancel` | Local operator, empty object; revoke an unused permission, repeated cancellation is a no-op. |
+| GET | `/agents` | Local operator; bounded list with `limit` (default 20, max 100) and workspace-bound keyset `cursor`. |
+| GET | `/agents/{agentId}` | Local operator; server-derived presence and nonsecret metadata. |
+| POST | `/agents/{agentId}/revoke` | Local operator, empty object; irrevocable credential revocation, repeated revoke is a no-op. |
+| POST | `/agents/register` | Pairing bearer plus Idempotency-Key; consume the permission and bind a separate Runner credential. |
+| POST | `/agents/{agentId}/health` | Separate agent bearer; record a presence signal, not a job lease heartbeat. |
+
+Current operator requests deliberately have **no Authorization bearer**: the existing trusted-local UI is not yet an authenticated human session. The operator wrapper rejects Authorization/Proxy-Authorization on both new operator routes and existing persistence/jobs routes, rather than treating agent tokens as operator authority. A malicious local process can omit headers; full human authentication/RBAC remains future work and this restriction must not be represented as such.
+
+Pairing and agent secrets are independently generated from 32 random bytes, represented as purpose-prefixed base64url tokens (`pair_` / `agt_`). The browser holds the pairing secret only in transient component state and displays it once; close/expiry/consumption removes it. No secret is put in a URL, browser storage, DB JSON, journal or idempotency response. PostgreSQL stores only SHA-256 fingerprints. A lost pairing-issuance response cannot recover its plaintext: the operator explicitly issues another permission, with at most ten live unused permissions per workspace.
+
+The foreground Runner receives the pairing secret through hidden stdin, generates its own agent secret in process memory, and sends the following strict registration fields (no paths, env, workspace, actor, logs or capability grants):
+
+```text
+mode: presence_only
+agentName: 1..64 ASCII letters/digits/spaces/dot/underscore/hyphen, nonblank
+agentVersion: bounded numeric semantic version
+os: windows | linux | macos
+supportedApiVersions: bounded unique array of protocol IDs including v1
+agentSecret: independently generated secret, sent only in this registration body
+```
+
+Registration locks the workspace-scoped pairing row, checks server-clock expiry/revocation, creates one agent, consumes the permission and appends `registered` in one transaction. The pairing records hashed idempotency key and normalized request fingerprint (including the agent credential hash). Same pairing/key/payload/credential replays return the same nonsecret registration response only before pairing expiry and while the agent remains unrevoked. Another key or payload under a consumed pairing is rejected; no new credential is minted on replay. No raw registration body or secret response is persisted.
+
+The 201 registration response contains `agentId`, `status: registered`, `mode: presence_only`, `selectedApiVersion: v1`, `heartbeatIntervalSeconds`, `executionEnabled: false`, `freeSlots: 0`, `currentJobId: null`, and `grantedCapabilities: []`. There is no executable lease or `maxLeaseSeconds`. A Runner validates the selected version and every response field before proceeding.
+
+Health accepts only `{ "selectedApiVersion": "v1" }`. It validates exact workspace/agent ID, credential hash and revocation while holding the agent row lock, then updates last_seen using server time. Its 200 response contains the same non-execution profile, agentId/interval, `accepted: true` (receipt of presence only) and serverTime. Client-provided status/time/grants are rejected. Revocation takes the same lock and appends one event transactionally: a heartbeat linearized before revoke may succeed, but no later heartbeat can reactivate the device. Registration replay locks pairing then agent; health/revoke lock only agent, avoiding inverse lock order.
+
+The server defaults to 20-second heartbeat intervals, configurable locally through `AGENT_HEARTBEAT_INTERVAL_SECONDS` within 1..30 seconds. A registered device starts offline until its first health signal. Online is derived from server time and last_seen younger than three intervals; at the boundary it is offline. Revoked always wins. There is no heartbeat-event stream, only bounded metadata events `paired`, `registered`, `pairing_revoked`, `agent_revoked` with empty payloads. No jobs or SiteSpecs change when a device connects.
+
+The existing API envelope/no-store/body limit remains in force. Presence-specific machine-readable codes use the implemented persistence API's uppercase convention: `UNAUTHORIZED_AGENT`, `UNAUTHORIZED_OPERATOR`, `PAIRING_NOT_FOUND`, `PAIRING_EXPIRED`, `PAIRING_REVOKED`, `PAIRING_CONSUMED`, `PAIRING_LIMIT_REACHED`, `AGENT_NOT_FOUND`, `AGENT_REVOKED`, `INCOMPATIBLE_PROTOCOL_VERSION`, and `INVALID_PRESENCE_CONFIG`, plus existing validation/access/database/cursor codes. Incorrect credential/ID/workspace combinations receive a generic unauthorized result; expiry/revocation reasons are returned only after identifying the matching permission/credential. No request Authorization/body is logged.
+
+See [local Runner setup and limits](../agents/README.md). Restart requires a new explicit pairing: OS credential storage, unattended reconnect, remote Timeweb transport, public login, execution, claim and lease remain outside this profile.
+
+### Future Executable Profile
+
 Agent endpoints and human/operator endpoints use separate authentication.
 
 Agent endpoints:

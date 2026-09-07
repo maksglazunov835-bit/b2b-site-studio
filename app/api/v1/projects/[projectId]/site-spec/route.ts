@@ -1,4 +1,5 @@
-import { handleApi, idempotencyKey, parseJsonBody } from '@/server/http/api.mjs';
+import { idempotencyKey, parseJsonBody } from '@/server/http/api.mjs';
+import { handleOperatorApi } from '@/server/http/operator.mjs';
 import { getCurrentSiteSpec, saveDraft } from '@/server/persistence/service.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -7,15 +8,15 @@ type SiteSpecRouteContext = {
   params: Promise<{ projectId: string }>;
 };
 
-export async function GET(_request: Request, context: SiteSpecRouteContext) {
-  return handleApi(async () => {
+export async function GET(request: Request, context: SiteSpecRouteContext) {
+  return handleOperatorApi(request, async () => {
     const { projectId } = await context.params;
     return getCurrentSiteSpec(projectId);
   });
 }
 
 export async function PUT(request: Request, context: SiteSpecRouteContext) {
-  return handleApi(async () => {
+  return handleOperatorApi(request, async () => {
     const { projectId } = await context.params;
     const body = await parseJsonBody(request);
     return saveDraft(projectId, body, idempotencyKey(request));
