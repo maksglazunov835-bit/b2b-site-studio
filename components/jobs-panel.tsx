@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { History, ListTodo, LoaderCircle, Play, Plus, RefreshCw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DesignPreview, type DesignReport } from './design-preview';
+import { designMessages } from './design-status';
 
 type Job = {
   id: string; type: string; state: string; version: number;
@@ -35,6 +37,7 @@ async function request<T>(url: string, signal: AbortSignal, operation?: Operatio
 
 function errorMessage(error: unknown) {
   if (!(error instanceof JobApiError)) return 'Ответ не получен. Повторите тот же запрос.';
+  if (designMessages[error.code]) return designMessages[error.code];
   if (error.code === 'PERSISTENCE_DISABLED') return 'Задания доступны только в локальном запуске';
   if (error.code === 'DATABASE_UNAVAILABLE') return 'База данных недоступна';
   if (error.code === 'REVISION_CONFLICT') return 'Бриф изменился на сервере. Загрузите актуальную версию брифа.';
@@ -43,7 +46,10 @@ function errorMessage(error: unknown) {
   return 'Не удалось выполнить запрос задания';
 }
 
-export function JobsPanel({ projectId, revision, canCreate }: { projectId: string; revision: number | null; canCreate: boolean }) {
+export function JobsPanel({ projectId, revision, canCreate, design = false }: { projectId: string; revision: number | null; canCreate: boolean; design?: boolean }) {
+  const jobType = design ? 'design_proposal' : 'site_spec_validation';
+  const runnerMode = design ? 'codex_design' : 'data_validation';
+  const [consent, setConsent] = useState(false);
   const base = `/api/v1/projects/${projectId}/jobs`;
   const [items, setItems] = useState<Job[]>([]);
   const [next, setNext] = useState<string | null>(null);
@@ -161,22 +167,23 @@ export function JobsPanel({ projectId, revision, canCreate }: { projectId: strin
   };
   const create = () => {
     if (!canCreate || revision === null || retry || busy.current) return;
-    void write({ url: base, body: JSON.stringify({ type: 'site_spec_validation', expectedRevision: revision }), key: crypto.randomUUID() });
+    void write({ url: base, body: JSON.stringify({ type: jobType, expectedRevision: revision }), key: crypto.randomUUID() });
   };
   const cancel = (job: Job) => {
     if (retry || busy.current) return;
     void write({ url: `${base}/${job.id}/cancel`, body: JSON.stringify({ expectedVersion: job.version }), key: crypto.randomUUID() });
   };
-  const eligible = runners.filter((runner) => runner.mode === 'data_validation' && runner.projectId === projectId && runner.executionEnabled && runner.status === 'online');
+  const eligible = runners.filter((runner) => runner.mode === runnerMode && runner.projectId === projectId && runner.executionEnabled && runner.status === 'online');
   const dispatch = (job: Job) => {
-    if (!canCreate || retry || busy.current || !eligible.some((runner) => runner.agentId === runnerId)) return;
+    if (!canCreate || retry || busy.current || (design && !consent) || !eligible.some((runner) => runner.agentId === runnerId)) return;
     void write({ url: `${base}/${job.id}/dispatch`, body: JSON.stringify({ agentId: runnerId, expectedVersion: job.version }), key: crypto.randomUUID() });
+    if (design) setConsent(false);
   };
 
   return (
-    <section aria-label="Задания" className="min-w-0 rounded-lg border border-white/10 bg-[#0b1118]/90 p-4">
+    <section aria-label={design ? 'Дизайн-концепции' : 'Задания'} className="min-w-0 rounded-lg border border-white/10 bg-[#0b1118]/90 p-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo className="size-4" />Задания</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold"><ListTodo className="size-4" />{design ? 'Дизайн-концепции' : 'Задания'}</h2>
         <Button size="icon" variant="ghost" disabled={pending} aria-label="Обновить задания" title="Обновить задания" onClick={() => void read()}>
           <RefreshCw className="size-4" />
         </Button>
@@ -184,8 +191,10 @@ export function JobsPanel({ projectId, revision, canCreate }: { projectId: strin
       <p className="mt-2 text-xs text-slate-400">{revision === null ? 'Загрузка сохранённой версии' : `Сохранённая версия брифа: ${revision}`}</p>
       {!canCreate && <p className="mt-2 text-xs text-amber-300">Сначала сохраните бриф</p>}
       <Button className="mt-3 h-auto min-h-8 w-full whitespace-normal border-white/10 bg-white/5 text-slate-100" variant="outline" disabled={!canCreate || revision === null || pending || !!retry} onClick={create}>
-        {pending ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}Создать тестовое задание
+        {pending ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}{design ? 'Создать заявку на дизайн' : 'Создать тестовое задание'}
       </Button>
+      {design && <label className="mt-3 flex gap-2 text-xs text-slate-300"><input type="checkbox" checked={consent} disabled={pending || !!retry} onChange={(event) => setConsent(event.target.checked)} />
+        Разрешаю один вызов Codex через выбранный Runner для выбранной заявки. В OpenAI уйдут название, ниша, регион, тип бизнеса, сайта и сети из указанной версии брифа. Используется локальная авторизация и её квота. Повторная генерация требует новой заявки.</label>}
       <div aria-live="polite">
         {message && <p className="mt-2 text-xs text-amber-300">{message}</p>}
         {retry && <Button className="mt-2" variant="outline" disabled={pending} onClick={() => void write(retry)}><RefreshCw className="size-4" />Повторить запрос задания</Button>}
@@ -194,24 +203,24 @@ export function JobsPanel({ projectId, revision, canCreate }: { projectId: strin
       {!!items.length && <label className="mt-3 block text-xs text-slate-400">Runner для проверки
         <select aria-label="Runner для проверки" className="mt-1 w-full min-w-0 rounded border border-white/10 bg-[#121820] p-2 text-xs text-slate-100" value={runnerId} disabled={pending || !!retry} onChange={(event) => setRunnerId(event.target.value)}>
           <option value="">Выберите устройство</option>
-          {runners.map((runner) => <option key={runner.agentId} value={runner.agentId} disabled={!eligible.some((item) => item.agentId === runner.agentId)}>{runner.agentName}{runner.mode !== 'data_validation' ? ' · только связь' : runner.projectId !== projectId ? ' · другой проект' : runner.status !== 'online' ? ' · не в сети' : !runner.executionEnabled ? ' · нет совместимого разрешения' : ''}</option>)}
+          {runners.map((runner) => <option key={runner.agentId} value={runner.agentId} disabled={!eligible.some((item) => item.agentId === runner.agentId)}>{runner.agentName}{runner.mode !== runnerMode ? ' · другой режим' : runner.projectId !== projectId ? ' · другой проект' : runner.status !== 'online' ? ' · не в сети' : !runner.executionEnabled ? ' · нет совместимого разрешения' : ''}</option>)}
         </select>
         {!eligible.length && <span className="mt-1 block">Нет совместимого Runner с разрешением на этот проект</span>}
       </label>}
       <ul className="mt-3 divide-y divide-white/10">
-        {items.map((job) => (
+        {items.filter((job) => job.type === jobType).map((job) => (
           <li key={job.id} data-job-id={job.id} className="min-w-0 py-3">
             <p className="break-all font-mono text-xs text-slate-400">{job.id}</p>
-            <p className="mt-1 text-sm">Проверка SiteSpec · версия {job.siteSpec.revision}</p>
+            <p className="mt-1 text-sm">{design ? 'Три дизайн-концепции' : 'Проверка SiteSpec'} · версия {job.siteSpec.revision}</p>
             <p className="mt-1 text-xs text-slate-400">{new Date(job.createdAt).toLocaleString('ru-RU')}</p>
-            <p className="mt-2 text-xs text-cyan-200">{!job.assignment ? job.state === 'queued' ? 'В очереди — исполнитель ещё не подключён' : 'Отменено до запуска' : states[job.state]}</p>
+            <p className="mt-2 text-xs text-cyan-200">{!job.assignment ? job.state === 'queued' ? 'В очереди — исполнитель ещё не подключён' : 'Отменено до запуска' : design && job.state === 'succeeded' ? 'Концепции сохранены' : design && job.state === 'validating' ? 'Ожидается результат процесса' : states[job.state]}</p>
             {job.reason === 'AGENT_REVOKED' && <p className="mt-1 text-xs text-amber-300">Доступ назначенного Runner отозван</p>}
             {job.reason === 'VALIDATOR_MISMATCH' && <p className="mt-1 text-xs text-amber-300">Версия валидатора несовместима: требуется новое разрешение</p>}
             {job.assignment && job.state === 'queued' && runners.find((runner) => runner.agentId === job.assignment?.agentId)?.status === 'offline' && <p className="mt-1 text-xs text-amber-300">Назначенный Runner не в сети</p>}
             {(job.isInputStale || (revision !== null && job.siteSpec.revision !== revision)) && <p className="mt-1 text-xs text-amber-300">Бриф обновлён: задание относится к версии {job.siteSpec.revision}</p>}
             <div className="mt-2 flex flex-wrap gap-2">
               <Button variant="ghost" size="sm" disabled={pending} onClick={() => void read(job.id)}><History className="size-4" />Журнал</Button>
-              {job.state === 'queued' && !job.assignment && <Button variant="ghost" size="sm" disabled={!canCreate || pending || !!retry || !eligible.some((runner) => runner.agentId === runnerId)} onClick={() => dispatch(job)}><Play className="size-4" />Выполнить проверку</Button>}
+              {job.state === 'queued' && !job.assignment && <Button variant="ghost" size="sm" disabled={!canCreate || pending || !!retry || (design && !consent) || !eligible.some((runner) => runner.agentId === runnerId)} onClick={() => dispatch(job)}><Play className="size-4" />{design ? 'Получить три концепции' : 'Выполнить проверку'}</Button>}
               {['queued', 'claimed', 'running', 'validating'].includes(job.state) && <Button variant="ghost" size="sm" disabled={pending || !!retry} onClick={() => cancel(job)}><X className="size-4" />Отменить задание</Button>}
             </div>
           </li>
@@ -229,9 +238,10 @@ export function JobsPanel({ projectId, revision, canCreate }: { projectId: strin
           </ol>
           {eventsNext && <Button variant="ghost" disabled={pending} onClick={() => void read(selected.id, eventsNext)}>Ещё события</Button>}
           {!!execution?.attempts.length && <ol aria-label="Попытки проверки" className="mt-3 space-y-1 text-xs text-slate-400">
-            {execution.attempts.map((attempt) => <li key={attempt.attempt}>Попытка {attempt.attempt}: {states[attempt.state] ?? 'Срок попытки истёк'}{attempt.failure_code === 'STOP_UNCONFIRMED' ? ' · остановка не подтверждена' : attempt.failure_code ? ` · ${attempt.failure_code}` : ''}</li>)}
+            {execution.attempts.map((attempt) => <li key={attempt.attempt}>Попытка {attempt.attempt}: {states[attempt.state] ?? 'Срок попытки истёк'}{attempt.failure_code === 'STOP_UNCONFIRMED' ? ' · остановка не подтверждена' : attempt.failure_code ? ` · ${designMessages[attempt.failure_code] ?? attempt.failure_code}` : ''}</li>)}
           </ol>}
-          {execution?.report && <div aria-label="Результат проверки" className="mt-3 border-t border-white/10 pt-3 text-xs">
+          {design && execution?.report && <DesignPreview key={selected.id} report={execution.report as unknown as DesignReport} />}
+          {!design && execution?.report && <div aria-label="Результат проверки" className="mt-3 border-t border-white/10 pt-3 text-xs">
             <p className={execution.report.validationStatus === 'valid' ? 'text-emerald-300' : 'text-amber-300'}>{execution.report.validationStatus === 'valid' ? 'Ошибок структуры не найдено' : 'В данных найдены ошибки'}</p>
             <p className="mt-1 text-slate-400">Schema: {execution.report.counts.schema} · Семантика: {execution.report.counts.semantic}</p>
             <p className="mt-1 text-slate-400">Факты компании и готовность к публикации не подтверждены</p>

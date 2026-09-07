@@ -1,0 +1,47 @@
+{
+  "id": "codex_design_exec",
+  "version": "1.0.0",
+  "sha256": "1adb5a0ede9457d39cb326e151b7ebefb41cf9dd20f805456a0d8dd4e166ce32",
+  "files": [
+    {
+      "path": "docs/contracts/design-job.schema.json",
+      "sha256": "e3a7ef9d4f6c529224be749a89aaad84676dc1689da00c0fd203cab4b2d7e8f7"
+    },
+    {
+      "path": "docs/contracts/design-proposal.schema.json",
+      "sha256": "e2dd09bde07cfb67e1a860d4144856f76f2b1f5f021dfd11516c3226bfddbbdb"
+    },
+    {
+      "path": "server/design/contract.mjs",
+      "sha256": "e75fa40d0ed8a63517993fa798e9b66ad299e7f376fbb75131017b0fdca9b1be"
+    },
+    {
+      "path": "agent/codex/adapter.mjs",
+      "sha256": "54dffcea7d30c29c2f9a756bc9c64ea2a7ef9cd22dab19c948279f376a060ea7"
+    },
+    {
+      "path": "agent/design-connect.mjs",
+      "sha256": "2cc907d857bb54899f04866fe51ab66bb8c6f6a84c4b4c04d12a338221747369"
+    },
+    {
+      "path": "agent/design-main.mjs",
+      "sha256": "2e1a5d7367fc6e3778b3b214772ee72575e63816df068f0e45272447a5842047"
+    },
+    {
+      "path": "agent/session.mjs",
+      "sha256": "ac1e4393bfa60e373dc05b3ce76b490f93bdfdb5d720ffc6bae43ef4169c5e0b"
+    },
+    {
+      "path": "agent/data-session.mjs",
+      "sha256": "9cd45aaba50e6abdf0693fbd7669411d6af6f115938a64d3fd34fc903c265ac8"
+    },
+    {
+      "path": "agent/protocol.mjs",
+      "sha256": "f96b84e09df9e641a3524d9e13de355145da8d8eaa6dfd4f68bad322c88b6340"
+    },
+    {
+      "path": "agent/transport.mjs",
+      "sha256": "cda2893ee7dcf06331705a81ff95a4fd4bcb78919b4240102db860b94bd81fd0"
+    }
+  ]
+}

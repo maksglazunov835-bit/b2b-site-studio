@@ -44,7 +44,7 @@ void test("001-003 upgrade preserves every historical row/checksum and presence-
       return data;
     };
     const before = await snapshot();
-    assert.deepEqual((await runMigrations({ databaseConfig: config })).applied, ["004_validation_execution.sql"]);
+    assert.deepEqual((await runMigrations({ databaseConfig: config })).applied, ["004_validation_execution.sql", "005_design_proposals.sql"]);
     assert.deepEqual(await snapshot(), before);
     assert.deepEqual((await runMigrations({ databaseConfig: config })).applied, []);
     assert.equal((await jobs.get(project.id,queued)).job.siteSpec.revision, 1);

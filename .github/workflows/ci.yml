@@ -87,3 +87,9 @@ jobs:
             .test-results/runner-mobile.png
             .test-results/execution-desktop.png
             .test-results/execution-mobile.png
+            .test-results/design-1-desktop.png
+            .test-results/design-2-desktop.png
+            .test-results/design-3-desktop.png
+            .test-results/design-1-mobile.png
+            .test-results/design-2-mobile.png
+            .test-results/design-3-mobile.png

@@ -1,0 +1,28 @@
+{
+  "checkedOn": "2026-09-07",
+  "kind": "official-local-smoke-preflight",
+  "provider": "codex",
+  "cliVersion": "0.153.4",
+  "binarySha256": "e5aa76d19c7c94e2e9ef9b707d590206a73ac0e97c8ddc8382181242494bef75",
+  "authenticode": "Valid: OpenAI OpCo, LLC",
+  "authStatus": "ChatGPT",
+  "model": "gpt-5.6-luna",
+  "effort": "medium",
+  "status": "blocked",
+  "reason": "CODEX_SAFE_PROFILE_UNVERIFIED",
+  "evidence": [
+    "exec help supports read-only, ephemeral, ignore-user-config, ignore-rules, strict-config, output-schema and stdin",
+    "bundled model catalog supports the selected model and medium effort",
+    "catalog still advertises freeform apply_patch; apply_patch_freeform feature is removed",
+    "no effective empty-tool profile was verified; ignore-user-config alone is insufficient"
+  ],
+  "realModelCall": false,
+  "modelInvocations": 0,
+  "inputHash": null,
+  "outputHash": null,
+  "execExitStatus": null,
+  "authFileReadOrCopied": false,
+  "userConfigModified": false,
+  "apiKeyFallback": false,
+  "independentAcceptance": null
+}

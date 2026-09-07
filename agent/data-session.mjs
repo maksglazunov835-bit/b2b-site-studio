@@ -6,6 +6,7 @@ import { assertSpec } from "../server/execution/contract.mjs";
 import { sha256Json } from "../server/persistence/canonical-json.mjs";
 import { boundedJson, LIMITS } from "../server/execution/bounds.mjs";
 import { validationTask } from "./validation-task.mjs";
+import { assertDesignSpec, assertDesignReport, DESIGN_CODES } from '../server/design/contract.mjs';
 
 const object = (value) => value && typeof value === "object" && !Array.isArray(value);
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
@@ -16,11 +17,12 @@ function successful(result) {
   const code = result.body?.error?.code;
   const known = ["AGENT_REVOKED","UNAUTHORIZED_AGENT","EXECUTION_NOT_GRANTED","VALIDATOR_MISMATCH","PROJECT_NOT_AVAILABLE",
     "CLAIM_REPLY_UNAVAILABLE","LEASE_EXPIRED","STALE_ATTEMPT","CANCEL_REQUESTED","REPORT_MISMATCH","IDEMPOTENCY_CONFLICT","PERSISTENCE_DISABLED",
-    "TERMINAL_ACK_EXPIRED","TERMINAL_ACK_NOT_FOUND","ATTEMPT_FINISHED"];
+    "TERMINAL_ACK_EXPIRED","TERMINAL_ACK_NOT_FOUND","ATTEMPT_FINISHED","INVOCATION_REPLY_UNAVAILABLE",...DESIGN_CODES];
   if (known.includes(code)) throw new RunnerError(code);
   throw new RunnerError("EXECUTION_REQUEST_REJECTED", [429,500,502,503,504].includes(result.status));
 }
 export function assignmentReply(value, registration) {
+  const design = registration.mode === 'codex_design';
   boundedJson(value);
   if (value?.assignment === null) {
     if (!exact(value, ["assignment","reason","retryAfterMs"]) || !["AGENT_BUSY","NO_ASSIGNED_JOB"].includes(value.reason) || value.retryAfterMs !== 1000) throw new RunnerError("INVALID_ASSIGNMENT");
@@ -30,8 +32,9 @@ export function assignmentReply(value, registration) {
   if (!exact(value, ["assignment"]) || !exact(item, ["jobSpec","jobSpecSha256","attempt","leaseToken","leaseExpiresAt","deadlineAt"]) ||
     !Number.isInteger(item.attempt) || item.attempt < 1 || item.attempt > 3 || !/^lease_[A-Za-z0-9_-]{43}$/.test(item.leaseToken) ||
     !iso(item.leaseExpiresAt) || !iso(item.deadlineAt) || Date.parse(item.leaseExpiresAt) <= Date.now() ||
-    Date.parse(item.deadlineAt) < Date.parse(item.leaseExpiresAt) || Date.parse(item.deadlineAt) > Date.now() + 30000) throw new RunnerError("INVALID_ASSIGNMENT");
-  assertSpec(item.jobSpec, item.jobSpecSha256);
+    Date.parse(item.deadlineAt) < Date.parse(item.leaseExpiresAt) || Date.parse(item.deadlineAt) > Date.now() + (design ? 180000 : 30000)) throw new RunnerError("INVALID_ASSIGNMENT");
+  (design ? assertDesignSpec : assertSpec)(item.jobSpec, item.jobSpecSha256);
+  if (design && (item.attempt !== 1 || sha256Json(item.jobSpec.runtime) !== sha256Json(registration.runtime))) throw new RunnerError('INVALID_ASSIGNMENT');
   if (item.jobSpec.projectId !== registration.projectId) throw new RunnerError("ASSIGNMENT_SCOPE_MISMATCH");
   return item;
 }
@@ -44,14 +47,14 @@ function actionReply(value, assignment) {
   assignment.leaseExpiresAt = value.leaseExpiresAt;
   return value;
 }
-async function execute({ origin, registration, credential, assignment, signal, log }) {
+async function execute({ origin, registration, credential, assignment, signal, log, designAdapter }) {
   const jobId = assignment.jobSpec.jobId;
   let terminalUncertain = false;
   const operation = async (kind, extra = {}) => {
     const key = randomUUID();
     const body = JSON.stringify({ attempt: assignment.attempt, leaseToken: assignment.leaseToken, ...extra });
     const terminalState = { result: "succeeded", "cancel-ack": "cancelled", fail: "failed" }[kind];
-    const requestLimit = terminalState ? 10 : 3;
+    const requestLimit = terminalState ? 10 : designAdapter && kind === 'start' ? 1 : 3;
     const recoveryDeadline = Date.now() + 45000;
     let recovering = false;
     for (let retry = 0; retry < requestLimit; retry++) {
@@ -90,8 +93,9 @@ async function execute({ origin, registration, credential, assignment, signal, l
     const started = await operation("heartbeat", { phase: "validating" });
     if (started.cancelRequested) { await cancelAck(); return; }
     log(`RUNNER_VALIDATION_STARTED ${jobId} attempt_${assignment.attempt}`);
-    work = validationTask(assignment.jobSpec, assignment.attempt, { signal: workerController.signal,
-      timeoutMs: Math.max(1, Math.min(30000, Date.parse(assignment.deadlineAt) - Date.now())) }).then((report) => ({ report }), (error) => ({ error }));
+    const task = designAdapter ? (spec, attempt, options) => designAdapter.execute(spec, attempt, options) : validationTask;
+    work = task(assignment.jobSpec, assignment.attempt, { signal: workerController.signal,
+      timeoutMs: Math.max(1, Math.min(designAdapter ? 175000 : 30000, Date.parse(assignment.deadlineAt) - Date.now())) }).then((report) => ({ report }), (error) => ({ error }));
     let outcome;
     while (!outcome) {
       let timer;
@@ -100,21 +104,35 @@ async function execute({ origin, registration, credential, assignment, signal, l
       signal.throwIfAborted();
       if (!outcome) {
         const health = await operation("heartbeat", { phase: "validating" });
-        if (health.cancelRequested) { workerController.abort(); await work; await cancelAck(); return; }
+        if (health.cancelRequested) {
+          workerController.abort(); const stopped = await work;
+          if (designAdapter && stopped.error?.code === 'STOP_UNCONFIRMED') throw stopped.error;
+          await cancelAck(); return;
+        }
       }
     }
     if (outcome.error) throw outcome.error;
     boundedJson(outcome.report, LIMITS.report);
+    if (designAdapter) assertDesignReport(outcome.report, assignment.jobSpec, assignment.attempt);
     await operation("result", { report: outcome.report, resultDigest: sha256Json(outcome.report) });
     log(`RUNNER_VALIDATION_RESULT_CONFIRMED ${jobId}`);
+    if (designAdapter) log('RUNNER_DESIGN_RESULT_CONFIRMED');
   } catch (error) {
-    workerController.abort(); if (work) await work;
+    workerController.abort(); const stopped = work ? await work : null;
+    if (designAdapter && stopped?.error?.code === 'STOP_UNCONFIRMED') {
+      if (!signal.aborted && !terminalUncertain) {
+        try { await operation('fail', { code: 'STOP_UNCONFIRMED' }); }
+        catch { /* Revoked or expired writes stay fenced; the server will sweep. */ }
+      }
+      throw stopped.error;
+    }
     if (signal.aborted) throw error;
     if (terminalUncertain || error.code === "TERMINAL_ACK_UNCONFIRMED") throw error;
+    if (designAdapter && (error.retryable || error.code === 'INVOCATION_REPLY_UNAVAILABLE')) throw new RunnerError('INVOCATION_UNCERTAIN');
     if (error.code === "CANCEL_REQUESTED") { await cancelAck(); return; }
     if (["AGENT_REVOKED","UNAUTHORIZED_AGENT","EXECUTION_NOT_GRANTED","VALIDATOR_MISMATCH","PERSISTENCE_DISABLED"].includes(error.code)) throw error;
     if (["LEASE_EXPIRED","STALE_ATTEMPT"].includes(error.code)) { log("RUNNER_VALIDATION_LEASE_LOST"); return; }
-    await operation("fail", { code: error.code === "REPORT_MISMATCH" ? "REPORT_REJECTED" : "VALIDATOR_FAILED" });
+    await operation("fail", { code: designAdapter ? DESIGN_CODES.includes(error.code) ? error.code : 'CODEX_PROCESS_FAILED' : error.code === "REPORT_MISMATCH" ? "REPORT_REJECTED" : "VALIDATOR_FAILED" });
     log("RUNNER_VALIDATION_FAILED");
   } finally {
     workerController.abort(); if (work) await work;
@@ -122,16 +140,16 @@ async function execute({ origin, registration, credential, assignment, signal, l
     assignment.leaseToken = undefined;
   }
 }
-export async function dataSession({ origin, registration, credential, signal, log }) {
+export async function dataSession({ origin, registration, credential, signal, log, designAdapter }) {
   let lastPresence = 0; let failures = 0;
   while (!signal.aborted) {
     try {
       if (Date.now() - lastPresence >= registration.heartbeatIntervalSeconds * 1000) {
-        reply(await post(origin, `/api/v1/agents/${registration.agentId}/health`, credential, '{"selectedApiVersion":"v1"}', { signal }), "health", registration.agentId, "data_validation");
+        reply(await post(origin, `/api/v1/agents/${registration.agentId}/health`, credential, '{"selectedApiVersion":"v1"}', { signal }), "health", registration.agentId, designAdapter ? 'codex_design' : "data_validation");
         lastPresence = Date.now(); log("RUNNER_HEARTBEAT_ACK");
       }
-      const assignment = assignmentReply(successful(await post(origin, `/api/v1/agents/${registration.agentId}/claim`, credential, "{}", { key: randomUUID(), signal })), registration);
-      if (assignment) await execute({ origin, registration, credential, assignment, signal, log });
+      const assignment = registration.executionEnabled ? assignmentReply(successful(await post(origin, `/api/v1/agents/${registration.agentId}/claim`, credential, "{}", { key: randomUUID(), signal })), registration) : null;
+      if (assignment) await execute({ origin, registration, credential, assignment, signal, log, designAdapter });
       failures = 0;
     } catch (error) {
       if (signal.aborted) throw error;

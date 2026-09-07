@@ -2,6 +2,7 @@ import Ajv from "ajv";
 import { boundedJson, LIMITS } from "./bounds.mjs";
 import { executionError } from "./transitions.mjs";
 import { SITE_SPEC_SEMANTIC_ERROR_CODES } from "../contracts/validate-site-spec-semantics.mjs";
+import { DESIGN_CODES } from '../design/contract.mjs';
 const ajv = new Ajv({ strict: true, allErrors: false });
 const object = (properties) => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
 const text = (pattern) => ({ type: "string", pattern });
@@ -25,9 +26,14 @@ const validators = {
   result: ajv.compile(object({ ...common, resultDigest: hash, report: reportSchema })),
   fail: ajv.compile(object({ ...common, code: { enum: ["VALIDATOR_FAILED","INPUT_REJECTED","REPORT_REJECTED","RUNNER_STOPPED"] } }))
 };
-export function executionRequest(kind, value) {
+const designValidators = {
+  result: ajv.compile(object({ ...common, resultDigest: hash, report: { type: 'object' } })),
+  fail: ajv.compile(object({ ...common, code: { enum: [...DESIGN_CODES,'INPUT_REJECTED','REPORT_REJECTED','RUNNER_STOPPED'] } }))
+};
+export function executionRequest(kind, value, design = false) {
   boundedJson(value, kind === "result" ? LIMITS.report + 1024 : 2048);
-  if (!validators[kind] || !validators[kind](value)) executionError("VALIDATION_FAILED", 422);
+  const check = design && designValidators[kind] ? designValidators[kind] : validators[kind];
+  if (!check || !check(value)) executionError("VALIDATION_FAILED", 422);
   if (kind === "result") boundedJson(value.report, LIMITS.report);
   return value;
 }
