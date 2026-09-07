@@ -1,8 +1,8 @@
-# Revision-Pinned Job Queue (MVP-03A)
+# Revision-Pinned Job Queue And Data Validation
 
-This milestone stores a **queue request**, not an executable local-agent JobSpec. The only type is `site_spec_validation`, using server template `site_spec_validation@1`: validate the pinned SiteSpec schema/semantics and report findings without changing inputs. No validation executor runs yet. Every job returns `dispatchable: false`, `reason: EXECUTOR_NOT_CONFIGURED`, and `acceptanceResult: null`. `executionResult` is null while queued and `cancelled` after cancellation, never success.
+Creation stores a **queue request**, not an executable JobSpec. The only type is `site_spec_validation`, using template `site_spec_validation@1`. Without explicit per-job operator dispatch it returns `dispatchable:false`, `reason:EXECUTOR_NOT_CONFIGURED`, `acceptanceResult:null`. Merely connecting an agent never runs the backlog.
 
-The full [agent JobSpec](../contracts/job.schema.json) and its schema/semantic gate remain unchanged. A later milestone must materialize and validate that full contract with actual repository identity, base commit SHA, runner workspace mapping, input hashes, capabilities and sandbox before allowing claim. Partial requests are never dispatched. There is no worker, claim, lease, heartbeat, shell, Codex, WordPress or GitHub execution endpoint here.
+MVP-03C adds a separate complete [1.3 data-only JobSpec](../contracts/job-data-validation.schema.json), described in the [implemented API profile](../contracts/agent-api.md#implemented-data-validation-profile-mvp-03c). The legacy repository [1.2 schema](../contracts/job.schema.json) and its gate are unchanged. The new profile has no fake repository/path values. Only fixed built-in JSON validation is executable; shell, Codex, WordPress, GitHub and site-file access remain unavailable.
 
 ## API And DTOs
 
@@ -15,6 +15,8 @@ All routes reuse the existing default-deny persistence boundary. They work only 
 | GET | `/jobs/{jobId}` | `{ job }` with pinned input, current revision and `isInputStale` from one joined SQL snapshot. |
 | GET | `/jobs/{jobId}/events` | Optional `limit`, `cursor`; `{ events, nextCursor }`, ascending sequence. |
 | POST | `/jobs/{jobId}/cancel` | `{ "expectedVersion": 1 }`, required `Idempotency-Key`; 200 `{ job, noOp }`. |
+| POST | `/jobs/{jobId}/dispatch` | `{ "agentId": "<scoped device>", "expectedVersion": 1 }`, Idempotency-Key; complete pinned data spec and assignment. |
+| GET | `/jobs/{jobId}/execution` | Bounded persisted report, assignment and at most three attempts, no lease or credential hashes. |
 
 Ajv validators in `server/jobs/requests.mjs` allow exactly those write fields, with positive PostgreSQL-range integers. Unknown fields, including workspace/actor/hash/state/result/acceptance/repository/path/shell, are rejected. Job IDs use `job_` plus 32 lowercase hexadecimal UUID characters, compatible with the future agent ID namespace. IDs are opaque, not authorization.
 
@@ -28,7 +30,9 @@ Migration `002_job_queue.sql` adds `jobs`, `job_events`, scoped list indexes, co
 
 Creation locks the idempotency scope first, then the project. A replay is returned before new-operation revision/archive preconditions. A new operation requires an active project and the exact locked current revision, and recalculates its canonical SHA-256. It never rebuilds an old SiteSpec with today's mapper. Job, initial `job_queued` event (sequence 1) and idempotency response commit together.
 
-Cancellation locks the idempotency scope, then the job (never the project). Only `queued` version 1 can transition to `cancelled` version 2, inserting `job_cancelled` sequence 2 and the response record in the same transaction. Cancellation remains allowed after project archival. A cancelled job with a **new** key and current expectedVersion 2 is a recorded no-op without another event. A stale version conflicts. Deferred constraints prevent a committed job/state without its corresponding journal.
+Cancellation locks the idempotency scope, then the job (never the project). An unassigned queued version 1 still cancels to version 2. Explicit dispatch adds a `job_dispatched` event/version while remaining queued; queued cancellation uses its current version. Active claimed/running/validating cancellation becomes `cancel_requested`; only a valid Runner stop acknowledgement makes it cancelled. Missing acknowledgement/revocation becomes failed `STOP_UNCONFIRMED` on expiry. Cancellation remains allowed after project archival. Repeated cancellation under current version is a recorded no-op; stale version conflicts. Deferred constraints prevent committed state without its journal.
+
+Migration `004_validation_execution.sql` adds grants, immutable execution specs/results/operation acknowledgements and fenced attempts without modifying migrations 001-003 or historical rows. Allowed execution path is queued -> claimed -> running -> validating -> succeeded/failed. Result success means the check ran, not that data is valid: inspect `report.validationStatus` and bounded findings. Server independently recomputes the report; `acceptanceResult` is always null and no readiness/revision/fact changes. Expired attempts retry at most three times only for this side-effect-free JSON task. Tokens never enter the journal, spec, report or saved replay.
 
 Keys are scoped to workspace/project/action (and target job for cancel). Identical concurrent requests create one job/event/response; another payload under that key conflicts. A fresh key deliberately represents another job. Replay responses are immutable, including old currentRevision metadata; clients GET current detail afterwards. These guarantees cover database record creation/cancellation, not exactly-once external execution. Transactions contain no network/UI waits.
 
@@ -47,9 +51,13 @@ npm run db:test:status
 npm run test:jobs
 npm run test:jobs:http
 npm run test:jobs:ui
+npm run test:execution
+npm run test:execution:http
+npm run test:execution:process
+npm run test:execution:ui
 npm run ci:full
 ```
 
 Build before standalone HTTP/UI tests (`npm run build`). The protected full runner includes the existing 12 persistence tests, unchanged contract fixtures/lint/build, old HTTP/access/shutdown/UI scenarios, and new database/upgrade/HTTP/Playwright job scenarios. The 001-to-002 fixture preserves old table rows, checksums and historical revisions; it uses only the disposable test target. CI seeds its separate disposable dev sentinel at 001, and a read-only full-table fingerprint proves `DEV_DATABASE_UNCHANGED`, including migration history and optional jobs tables. No test applies 002 to user dev data.
 
-CI uses real PostgreSQL service containers. Its read-only workflow uploads exactly five allowlisted evidence files for seven days: `ci-summary.json`, jobs desktop/mobile PNGs, and persistence desktop/mobile PNGs. The JSON contains command statuses/durations and the dev-preservation result, not database data, stdout, environment or connection strings. Job screenshots use synthetic fixture data and are each capped at 5 MiB. Screenshots stay ignored, never committed. The executor reports test execution only; independent acceptance and delegated merge follow [AGENTS.md](../../AGENTS.md#delegated-repository-merge).
+CI uses real PostgreSQL service containers and uploads nine allowlisted evidence files for seven days: `ci-summary.json`, persistence/jobs/presence Runner/completed execution desktop/mobile PNGs. No database data, stdout, environment or connection strings are included. Screenshots use synthetic data, clear transient pairing first and are each capped at 5 MiB. They remain ignored. Existing persistence/jobs/agents scenarios stay active beside execution upgrade, races, tamper, real-process loss injection and UI report/reload/cancel tests in `ci:full`. The executor reports execution only; independent acceptance and delegated merge follow [AGENTS.md](../../AGENTS.md#delegated-repository-merge).

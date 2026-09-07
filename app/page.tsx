@@ -629,7 +629,7 @@ export default function Home() {
                 </Button>
               </section>
 
-              <RunnerPanel />
+              <RunnerPanel key={projectId ?? 'unsaved'} projectId={projectId ?? undefined} />
               {projectId && <JobsPanel key={projectId} projectId={projectId} revision={revision} canCreate={!pending && saveState === 'saved'} />}
 
               <section className="rounded-lg border border-white/10 bg-[#0b1118]/90 p-4">

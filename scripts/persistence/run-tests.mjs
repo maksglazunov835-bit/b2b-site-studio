@@ -6,7 +6,7 @@ import pg from "pg";
 import { assertSafeTestDatabaseUrl, localConnectionConfig } from "../db/test-config.mjs";
 import { runMigrations, getMigrationStatus, safeDatabaseCommandError } from "../db/migration-lib.mjs";
 
-const modes = new Set(["full", "service", "http", "ui", "jobs", "jobs-http", "jobs-ui", "agents", "agents-http", "agents-process", "agents-ui", "migrate", "status"]);
+const modes = new Set(["full", "service", "http", "ui", "jobs", "jobs-http", "jobs-ui", "agents", "agents-http", "agents-process", "agents-ui", "execution", "execution-http", "execution-process", "execution-ui", "migrate", "status"]);
 const steps = [];
 
 async function devFingerprint() {
@@ -17,7 +17,7 @@ async function devFingerprint() {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const hash = createHash("sha256");
     // Fixed identifiers only. No test command writes to the dev connection.
-    for (const table of ["workspaces", "projects", "site_spec_revisions", "site_spec_readiness_checks", "project_events", "api_idempotency_records", "_schema_migrations", "jobs", "job_events", "agents", "agent_pairings", "agent_events"]) {
+    for (const table of ["workspaces", "projects", "site_spec_revisions", "site_spec_readiness_checks", "project_events", "api_idempotency_records", "_schema_migrations", "jobs", "job_events", "agents", "agent_pairings", "agent_events", "agent_execution_grants", "job_executions", "job_attempts", "job_results", "execution_operations"]) {
       const exists = await client.query("SELECT to_regclass($1) AS name", [`public.${table}`]);
       if (exists.rows[0].name) {
         const rows = await client.query(`SELECT to_jsonb(t)::text AS row FROM public.${table} t ORDER BY to_jsonb(t)::text`);
@@ -64,6 +64,7 @@ async function main() {
     if (["full", "service"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/persistence/config.test.mjs", "tests/persistence/migrations.test.mjs", "tests/persistence/service.test.mjs"]);
     if (["full", "jobs"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/jobs/upgrade.test.mjs", "tests/jobs/service.test.mjs"]);
     if (["full", "agents"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/agents/upgrade.test.mjs", "tests/agents/service.test.mjs", "tests/agents/transport.test.mjs"]);
+    if (["full", "execution"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/execution/service.test.mjs", "tests/execution/upgrade.test.mjs", "tests/execution/worker.test.mjs"]);
     if (mode === "full") {
       if (!process.env.npm_execpath) throw new Error("Run ci:full through npm.");
       await run([process.env.npm_execpath, "run", "ci"]);
@@ -75,6 +76,9 @@ async function main() {
     if (["full", "agents-http"].includes(mode)) await run(["tests/agents/http.test.mjs"]);
     if (["full", "agents-process"].includes(mode)) await run(["tests/agents/process.test.mjs"]);
     if (["full", "agents-ui"].includes(mode)) await run(["tests/agents/ui.test.mjs"]);
+    if (["full", "execution-http"].includes(mode)) await run(["tests/execution/http.test.mjs"]);
+    if (["full", "execution-process"].includes(mode)) await run(["tests/execution/process.test.mjs"]);
+    if (["full", "execution-ui"].includes(mode)) await run(["tests/execution/ui.test.mjs"]);
   } catch (error) { failure = error; }
   const after = await devFingerprint();
   if (mode === "full") {

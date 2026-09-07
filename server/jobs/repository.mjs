@@ -1,5 +1,10 @@
-const jobColumns = `j.*, p.current_revision,
+import validator from "../execution/validator-manifest.json" with { type: "json" };
+const jobColumns = `j.*, p.current_revision, p.status AS project_status,
+  e.agent_id AS assigned_agent_id,e.spec_sha256 AS execution_sha256,a.revoked_at AS assigned_revoked_at,g.validator_sha256,
   to_char(j.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_time`;
+const executionJoins = `LEFT JOIN job_executions e ON e.job_id=j.id
+  LEFT JOIN agents a ON a.id=e.agent_id AND a.workspace_id=j.workspace_id
+  LEFT JOIN agent_execution_grants g ON g.agent_id=a.id AND g.project_id=j.project_id AND g.workspace_id=j.workspace_id`;
 
 export function jobResponse(row) {
   return {
@@ -8,8 +13,10 @@ export function jobResponse(row) {
       schemaVersion: row.input_schema_version, sha256: row.input_sha256.trim() },
     requestSnapshot: row.request_snapshot, state: row.state, version: row.version,
     currentRevision: row.current_revision, isInputStale: row.input_revision !== row.current_revision,
-    dispatchable: false, reason: "EXECUTOR_NOT_CONFIGURED",
-    executionResult: row.state === "cancelled" ? "cancelled" : null, acceptanceResult: null,
+    dispatchable: !!row.assigned_agent_id && row.state === "queued" && !row.assigned_revoked_at && row.project_status === "active" && row.validator_sha256?.trim() === validator.sha256,
+    reason: !row.assigned_agent_id ? "EXECUTOR_NOT_CONFIGURED" : row.assigned_revoked_at ? "AGENT_REVOKED" : row.validator_sha256?.trim() !== validator.sha256 ? "VALIDATOR_MISMATCH" : null,
+    assignment: row.assigned_agent_id ? { agentId: row.assigned_agent_id, specSha256: row.execution_sha256.trim() } : null,
+    executionResult: ["succeeded","failed","cancelled"].includes(row.state) ? row.state : null, acceptanceResult: null,
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
     cancelledAt: row.cancelled_at?.toISOString() ?? null
   };
@@ -18,6 +25,7 @@ export function jobResponse(row) {
 export async function findJob(client, workspaceId, projectId, id, lock = false) {
   const result = await client.query(`SELECT ${jobColumns} FROM jobs j
     JOIN projects p ON p.id = j.project_id AND p.workspace_id = j.workspace_id
+    ${executionJoins}
     WHERE j.workspace_id=$1 AND j.project_id=$2 AND j.id=$3 ${lock ? "FOR UPDATE OF j" : ""}`,
   [workspaceId, projectId, id]);
   return result.rows[0] ?? null;
@@ -32,7 +40,7 @@ export async function insertJob(client, workspaceId, projectId, id, revision, re
 
 export async function insertEvent(client, workspaceId, projectId, id, cancelled = false) {
   await client.query(`INSERT INTO job_events (job_id,sequence,event_type,from_state,to_state,payload)
-    SELECT id,$4,$5,$6,$7,$8::jsonb FROM jobs WHERE workspace_id=$1 AND project_id=$2 AND id=$3`,
+    SELECT id,version,$5,$6,$7,$8::jsonb FROM jobs WHERE workspace_id=$1 AND project_id=$2 AND id=$3 AND version>=$4`,
   [workspaceId, projectId, id, cancelled ? 2 : 1, cancelled ? "job_cancelled" : "job_queued",
     cancelled ? "queued" : null, cancelled ? "cancelled" : "queued",
     JSON.stringify(cancelled ? { reason: "OPERATOR_CANCELLED" } : { template: "site_spec_validation@1" })]);
@@ -47,6 +55,7 @@ export async function cancelJobRow(client, workspaceId, projectId, id) {
 export async function jobRows(client, workspaceId, projectId, { limit, cursor }) {
   const result = await client.query(`SELECT ${jobColumns} FROM jobs j
     JOIN projects p ON p.id=j.project_id AND p.workspace_id=j.workspace_id
+    ${executionJoins}
     WHERE j.workspace_id=$1 AND j.project_id=$2
     AND ($3::timestamptz IS NULL OR (j.created_at,j.id) < ($3::timestamptz,$4::text))
     ORDER BY j.created_at DESC,j.id DESC LIMIT $5`,

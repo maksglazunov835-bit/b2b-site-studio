@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-site-studio.local/contracts/job-data-validation-1.3.schema.json",
+  "title": "Complete data-only SiteSpec validation JobSpec 1.3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "jobSpecVersion",
+    "executionProfile",
+    "type",
+    "jobId",
+    "projectId",
+    "workspaceId",
+    "templateVersion",
+    "validator",
+    "input",
+    "policy",
+    "resultContractVersion"
+  ],
+  "properties": {
+    "jobSpecVersion": {
+      "const": "1.3.0"
+    },
+    "executionProfile": {
+      "const": "data_validation"
+    },
+    "type": {
+      "const": "site_spec_validation"
+    },
+    "jobId": {
+      "type": "string",
+      "pattern": "^job_[a-f0-9]{32}$"
+    },
+    "projectId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "templateVersion": {
+      "const": "site_spec_validation@1"
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "const": "site_spec_builtin"
+        },
+        "version": {
+          "const": "1.0.0"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revisionId",
+        "revision",
+        "schemaVersion",
+        "sha256",
+        "snapshot"
+      ],
+      "properties": {
+        "revisionId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "schemaVersion": {
+          "const": "1.2.0"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "snapshot": {}
+      }
+    },
+    "policy": {
+      "const": {
+        "maxDurationMs": 30000,
+        "leaseDurationMs": 10000,
+        "maxAttempts": 3,
+        "maxSnapshotBytes": 65536,
+        "maxReportBytes": 16384,
+        "maxDetails": 100,
+        "capabilities": [
+          "validate_site_spec"
+        ],
+        "actions": [
+          "validate_site_spec"
+        ],
+        "network": false,
+        "fileAccess": false
+      }
+    },
+    "resultContractVersion": {
+      "const": "1.0.0"
+    }
+  }
+}

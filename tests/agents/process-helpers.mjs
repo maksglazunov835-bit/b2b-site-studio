@@ -3,13 +3,14 @@ import { spawn } from "node:child_process";
 import { runnerEnvironment } from "../../agent/environment.mjs";
 import { assertSafeTestDatabaseUrl } from "../../scripts/db/test-config.mjs";
 
-export function startRunner(origin, secret, { name = "Process Runner fixture", launcher = false } = {}) {
+export function startRunner(origin, secret, { name = "Process Runner fixture", launcher = false, mode } = {}) {
   assertSafeTestDatabaseUrl();
   const windows = process.platform === "win32";
   const env = runnerEnvironment();
   // Launcher must strip even an accidentally inherited credential before session startup.
   if (launcher) Object.assign(env, { DATABASE_URL: "must-not-reach-runner", GH_TOKEN: "must-not-reach-runner", OPENAI_API_KEY: "must-not-reach-runner" });
-  const child = spawn(process.execPath, [launcher ? "agent/connect.mjs" : windows ? "tests/agents/windows-signal-runner.mjs" : "agent/session.mjs", "--origin",origin,"--name",name], {
+  if (mode !== undefined) assert.equal(mode, "data-validation");
+  const child = spawn(process.execPath, [launcher ? "agent/connect.mjs" : windows ? "tests/agents/windows-signal-runner.mjs" : "agent/session.mjs", "--origin",origin,"--name",name, ...(mode ? ["--mode", mode] : [])], {
     env, stdio: !launcher && windows ? ["pipe","pipe","pipe","ipc"] : ["pipe","pipe","pipe"], windowsHide: true
   });
   let output = "";

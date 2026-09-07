@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+import { assertSpec, validationReport, VALIDATOR } from "../../server/execution/contract.mjs";
+import { installedManifest } from "../../scripts/contracts/execution-manifest.mjs";
+import { boundedJson, parseBounded } from "../../server/execution/bounds.mjs";
+import { dataFixture, negativeProfiles } from "./fixtures.mjs";
+import { options } from "../../agent/session.mjs";
+import { registerRequest, newSecret } from "../../server/agents/requests.mjs";
+
+void test("complete 1.3 data profile, real manifest and invalid SiteSpec diagnostic fixtures", async () => {
+  const spec = dataFixture(); assert.equal(assertSpec(spec), spec);
+  assert.equal((await installedManifest()).sha256, VALIDATOR.sha256);
+  const valid = validationReport(spec, 1); assert.equal(valid.validationStatus, "valid");
+  const invalid = validationReport(dataFixture({}), 1);
+  assert.equal(invalid.validationStatus, "invalid"); assert.equal(invalid.semanticChecked, false);
+  for (const fixture of negativeProfiles) assert.throws(() => assertSpec({ ...spec, ...fixture.fields }), { code: fixture.code }, fixture.name);
+  assert.throws(() => assertSpec(spec, "0".repeat(64)), { code: "INPUT_HASH_MISMATCH" });
+  assert.throws(() => assertSpec({ ...spec, input: { ...spec.input, sha256: "0".repeat(64) } }), { code: "INPUT_HASH_MISMATCH" });
+  const schema = JSON.parse(await readFile("docs/contracts/site-spec.schema.json", "utf8"));
+  const semantic = { ...schema["x-semanticNegativeExamples"][0].value, projectId: spec.projectId, revision: 1 };
+  const semanticSpec = dataFixture(semantic);
+  assert.equal(validationReport(semanticSpec, 1).validationStatus, "invalid");
+});
+void test("bytes/depth/node bounds precede recursive validators and reports omit input values", () => {
+  assert.throws(() => parseBounded('"' + "x".repeat(65536) + '"', 65536), { code: "JSON_BYTES_LIMIT" });
+  let deep = {}; for (let i = 0; i < 34; i++) deep = { nested: deep };
+  assert.throws(() => boundedJson(deep), { code: "JSON_COMPLEXITY_LIMIT" });
+  assert.throws(() => boundedJson(Array(6001).fill(0)), { code: "JSON_COMPLEXITY_LIMIT" });
+  const secret = "agt_" + "x".repeat(43);
+  const invalid = dataFixture({ [secret]: secret });
+  assert.equal(JSON.stringify(validationReport(invalid, 1)).includes(secret), false);
+  const lease = "lease_" + "x".repeat(43);
+  assert.throws(() => options(["--origin", "http://127.0.0.1:3000", "--name", lease]), { code: "INVALID_OPTIONS" });
+  assert.throws(() => registerRequest({ mode: "presence_only", agentName: lease, agentVersion: "0.3.0", os: "linux", supportedApiVersions: ["v1"], agentSecret: newSecret("agt") }), { code: "VALIDATION_FAILED" });
+  const many = Object.fromEntries(Array.from({ length: 200 }, (_, index) => [`unknown${index}`, "redacted"]));
+  const report = validationReport(dataFixture(many), 1);
+  assert.equal(report.truncated, true); assert.equal(report.details.length, 100);
+  assert.ok(Buffer.byteLength(JSON.stringify(report)) <= 16384);
+});

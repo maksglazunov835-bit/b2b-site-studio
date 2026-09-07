@@ -6,6 +6,8 @@ import { DEFAULT_WORKSPACE_ID, acquireIdempotencyLock, findIdempotencyRecord, in
   getProjectForWorkspace, getCurrentRevisionForWorkspace, lockProject } from "../persistence/repository.mjs";
 import { createRequest, cancelRequest, assertJobId, jobError, pagination, encodeCursor } from "./requests.mjs";
 import { findJob, insertJob, insertEvent, cancelJobRow, jobRows, eventRows, jobResponse } from "./repository.mjs";
+import { createExecutionService } from "../execution/service.mjs";
+import { transition } from "../execution/transitions.mjs";
 
 async function requireProject(client, workspaceId, projectId) {
   const project = await getProjectForWorkspace(client, workspaceId, projectId);
@@ -75,11 +77,15 @@ export function createJobService(workspaceId = DEFAULT_WORKSPACE_ID) {
         if (previous) return previous;
         const job = await requireJob(client, workspaceId, projectId, id, true);
         if (job.version !== request.expectedVersion) jobError("JOB_VERSION_CONFLICT", "Reload the job before cancelling it.", 409);
-        const noOp = job.state === "cancelled";
+        const noOp = ["cancelled","cancel_requested"].includes(job.state);
         if (!noOp) {
-          if (job.state !== "queued") jobError("INVALID_JOB_TRANSITION", "Only queued jobs can be cancelled.", 409);
-          await cancelJobRow(client, workspaceId, projectId, id);
-          await insertEvent(client, workspaceId, projectId, id, true);
+          if (job.state === "queued") {
+            await cancelJobRow(client, workspaceId, projectId, id);
+            await insertEvent(client, workspaceId, projectId, id, true);
+          } else if (["claimed","running","validating"].includes(job.state)) {
+            await client.query("UPDATE job_attempts SET state='cancel_requested' WHERE job_id=$1 AND finished_at IS NULL", [id]);
+            await transition(client, job, "cancel_requested", "job_cancel_requested", new Date(), { reason: "OPERATOR_CANCELLED" }, "operator");
+          } else jobError("INVALID_JOB_TRANSITION", "Terminal jobs cannot be cancelled.", 409);
         }
         return recordResponse(client, operation, key, hash,
           { job: jobResponse(await requireJob(client, workspaceId, projectId, id)), noOp }, 200);
@@ -87,10 +93,12 @@ export function createJobService(workspaceId = DEFAULT_WORKSPACE_ID) {
     },
     async get(projectId, id) {
       assertProjectId(projectId); assertJobId(id);
+      await createExecutionService({ workspaceId }).sweep(projectId);
       return { job: jobResponse(await requireJob(getDatabasePool(), workspaceId, projectId, id)) };
     },
     async list(projectId, params) {
       assertProjectId(projectId);
+      await createExecutionService({ workspaceId }).sweep(projectId);
       const scope = { kind: "jobs", workspaceId, projectId };
       const page = pagination(params, scope);
       const client = getDatabasePool();

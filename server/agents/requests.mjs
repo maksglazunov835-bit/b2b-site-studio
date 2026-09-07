@@ -4,7 +4,7 @@ import { PersistenceError } from "../persistence/errors.mjs";
 
 const ajv = new Ajv({ strict: true, allErrors: false, coerceTypes: false });
 const empty = ajv.compile({ type: "object", additionalProperties: false, properties: {} });
-const registration = ajv.compile({ type: "object", additionalProperties: false,
+const registrationSchema = { type: "object", additionalProperties: false,
   required: ["mode","agentName","agentVersion","os","supportedApiVersions","agentSecret"], properties: {
     mode: { const: "presence_only" }, agentName: { type: "string", minLength: 1, maxLength: 64, pattern: "^[A-Za-z0-9 ._-]+$" },
     agentVersion: { type: "string", maxLength: 32, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
@@ -12,7 +12,12 @@ const registration = ajv.compile({ type: "object", additionalProperties: false,
     supportedApiVersions: { type: "array", minItems: 1, maxItems: 4, uniqueItems: true, items: { type: "string", pattern: "^v[1-9][0-9]{0,2}$" } },
     agentSecret: { type: "string", pattern: "^agt_[A-Za-z0-9_-]{43}$" }
   }
-});
+};
+const registration = ajv.compile(registrationSchema);
+const dataRegistration = ajv.compile({ ...registrationSchema, required: [...registrationSchema.required, "validator"], properties: {
+  ...registrationSchema.properties, mode: { const: "data_validation" }, validator: { type: "object", additionalProperties: false,
+    required: ["id","version","sha256"], properties: { id: { const: "site_spec_builtin" }, version: { const: "1.0.0" }, sha256: { type: "string", pattern: "^[a-f0-9]{64}$" } } }
+} });
 const health = ajv.compile({ type: "object", additionalProperties: false, required: ["selectedApiVersion"],
   properties: { selectedApiVersion: { type: "string", maxLength: 8 } }
 });
@@ -34,7 +39,7 @@ export function hashMatches(secret, stored) {
     timingSafeEqual(Buffer.from(secretHash(secret), "hex"), Buffer.from(stored.trim(), "hex"));
 }
 export function registerRequest(value) {
-  if (!registration(value) || !value.agentName.trim() || !validSecret(value.agentSecret, "agt") || /(?:pair|agt)_[A-Za-z0-9_-]{43}/.test(value.agentName)) agentError("VALIDATION_FAILED");
+  if (!(value?.mode === "data_validation" ? dataRegistration(value) : registration(value)) || !value.agentName.trim() || !validSecret(value.agentSecret, "agt") || /(?:pair|agt|lease)_[A-Za-z0-9_-]{43}/.test(value.agentName)) agentError("VALIDATION_FAILED");
   if (!value.supportedApiVersions.includes("v1")) agentError("INCOMPATIBLE_PROTOCOL_VERSION", 409);
   return { ...value, agentName: value.agentName.trim(), supportedApiVersions: [...value.supportedApiVersions].sort((a,b) => a.localeCompare(b)) };
 }

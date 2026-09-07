@@ -4,17 +4,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Eye, EyeOff, Link2, Monitor, RefreshCw, ShieldX, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type Agent = { agentId: string; agentName: string; agentVersion: string; selectedApiVersion: string; os: string; status: 'online' | 'offline' | 'revoked'; lastSeenAt: string | null };
+type Agent = { agentId: string; agentName: string; agentVersion: string; selectedApiVersion: string; os: string; status: 'online' | 'offline' | 'revoked'; lastSeenAt: string | null; mode: string; projectId?: string };
 type Pairing = { pairingId: string; expiresAt: string; status: string; pairingSecret?: string };
 
-async function api<T>(path: string, signal: AbortSignal, write = false): Promise<T> {
-  const response = await fetch(`/api/v1/agents${path}`, { signal, ...(write ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' } : {}) });
+async function api<T>(path: string, signal: AbortSignal, write = false, body: object = {}): Promise<T> {
+  const response = await fetch(`/api/v1/agents${path}`, { signal, ...(write ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   const value = await response.json();
   if (!response.ok) throw new Error((value as { error?: { code?: string } } | null)?.error?.code ?? 'REQUEST_FAILED');
   return value as T;
 }
 
-function Connections() {
+function Connections({ projectId }: { projectId?: string }) {
+  const [mode, setMode] = useState('presence_only');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [showSecret, setShowSecret] = useState(false);
@@ -72,7 +73,8 @@ function Connections() {
   }, [pairing]);
 
   const issue = () => void run(async (signal) => {
-    const result = await api<Pairing>('/pairings', signal, true);
+    if (mode === 'data_validation' && !projectId) return;
+    const result = await api<Pairing>('/pairings', signal, true, mode === 'data_validation' ? { mode, projectId } : {});
     if (signal.aborted) return;
     pairId.current = result.pairingId; setPairing(result); setShowSecret(false); setMessage(''); cursor.current = null;
   }, true);
@@ -92,6 +94,12 @@ function Connections() {
     setAgents((old) => old.map((agent) => agent.agentId === id ? result.agent : agent)); setMessage('');
   });
   return <>
+    <label className="mt-3 block text-xs text-slate-400">Режим нового подключения
+      <select aria-label="Режим нового подключения" className="mt-1 w-full min-w-0 rounded border border-white/10 bg-[#121820] p-2 text-xs text-slate-100" value={mode} disabled={pending || !!pairing} onChange={(event) => setMode(event.target.value)}>
+        <option value="presence_only">Только связь</option>
+        <option value="data_validation" disabled={!projectId}>Проверка SiteSpec этого проекта</option>
+      </select>
+    </label>
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <Button variant="outline" className="h-auto min-h-8 whitespace-normal border-white/10 bg-white/5 text-slate-100" disabled={pending || !!pairing} onClick={issue}><Link2 className="size-4" />Разрешить подключение</Button>
       <Button variant="ghost" size="icon" title="Обновить Runner" aria-label="Обновить Runner" disabled={pending} onClick={() => void run(refresh)}><RefreshCw className="size-4" /></Button>
@@ -110,6 +118,7 @@ function Connections() {
       {agents.map((agent) => <li key={agent.agentId} data-agent-id={agent.agentId} className="min-w-0 py-3">
         <p className="break-words text-sm font-medium">{agent.agentName}</p>
         <p className="mt-1 text-xs text-slate-400">{agent.os} · Runner {agent.agentVersion} · API {agent.selectedApiVersion}</p>
+        <p className="mt-1 text-xs text-slate-400">{agent.mode === 'data_validation' ? `Проверка SiteSpec: ${agent.projectId === projectId ? 'этот проект' : 'другой проект'}` : 'Подключён только для проверки связи'}</p>
         <p className={`mt-2 text-xs ${agent.status === 'online' ? 'text-emerald-300' : 'text-slate-400'}`}>{agent.status === 'online' ? 'На связи' : agent.status === 'revoked' ? 'Доступ отозван' : 'Не в сети'}</p>
         <p className="mt-1 text-xs text-slate-400">Последний сигнал: {agent.lastSeenAt ? new Date(agent.lastSeenAt).toLocaleString('ru-RU') : 'ещё не получен'}</p>
         {agent.status !== 'revoked' && <Button variant="ghost" size="sm" className="mt-2" disabled={pending} onClick={() => revoke(agent.agentId)}><ShieldX className="size-4" />Отозвать доступ</Button>}
@@ -122,14 +131,14 @@ function Connections() {
   </>;
 }
 
-export function RunnerPanel() {
+export function RunnerPanel({ projectId }: { projectId?: string }) {
   const [expanded, setExpanded] = useState(false);
   return <section aria-label="Локальный Runner" className="min-w-0 rounded-lg border border-white/10 bg-[#0b1118]/90 p-4">
     <div className="flex items-center justify-between gap-2">
       <h2 className="flex items-center gap-2 text-sm font-semibold"><Monitor className="size-4" />Локальный Runner</h2>
       <Button variant="ghost" size="icon" title={expanded ? 'Закрыть подключения' : 'Открыть подключения'} aria-label={expanded ? 'Закрыть подключения' : 'Открыть подключения'} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? <X className="size-4" /> : <ChevronDown className="size-4" />}</Button>
     </div>
-    <p className="mt-2 text-xs text-slate-400">Исполнение заданий ещё не подключено</p>
-    {expanded && <Connections />}
+    <p className="mt-2 text-xs text-slate-400">Генерация сайтов ещё не подключена</p>
+    {expanded && <Connections projectId={projectId} />}
   </section>;
 }
