@@ -15,7 +15,8 @@ function successful(result) {
   if (result.status === 200) return result.body;
   const code = result.body?.error?.code;
   const known = ["AGENT_REVOKED","UNAUTHORIZED_AGENT","EXECUTION_NOT_GRANTED","VALIDATOR_MISMATCH","PROJECT_NOT_AVAILABLE",
-    "CLAIM_REPLY_UNAVAILABLE","LEASE_EXPIRED","STALE_ATTEMPT","CANCEL_REQUESTED","REPORT_MISMATCH","IDEMPOTENCY_CONFLICT","PERSISTENCE_DISABLED"];
+    "CLAIM_REPLY_UNAVAILABLE","LEASE_EXPIRED","STALE_ATTEMPT","CANCEL_REQUESTED","REPORT_MISMATCH","IDEMPOTENCY_CONFLICT","PERSISTENCE_DISABLED",
+    "TERMINAL_ACK_EXPIRED","TERMINAL_ACK_NOT_FOUND","ATTEMPT_FINISHED"];
   if (known.includes(code)) throw new RunnerError(code);
   throw new RunnerError("EXECUTION_REQUEST_REJECTED", [429,500,502,503,504].includes(result.status));
 }
@@ -45,20 +46,39 @@ function actionReply(value, assignment) {
 }
 async function execute({ origin, registration, credential, assignment, signal, log }) {
   const jobId = assignment.jobSpec.jobId;
+  let terminalUncertain = false;
   const operation = async (kind, extra = {}) => {
     const key = randomUUID();
     const body = JSON.stringify({ attempt: assignment.attempt, leaseToken: assignment.leaseToken, ...extra });
-    for (let retry = 0; retry < 3; retry++) {
+    const terminalState = { result: "succeeded", "cancel-ack": "cancelled", fail: "failed" }[kind];
+    const requestLimit = terminalState ? 10 : 3;
+    const recoveryDeadline = Date.now() + 45000;
+    let recovering = false;
+    for (let retry = 0; retry < requestLimit; retry++) {
       signal.throwIfAborted();
-      const remaining = Math.min(Date.parse(assignment.leaseExpiresAt), Date.parse(assignment.deadlineAt)) - Date.now();
-      if (remaining < 50) throw new RunnerError("LEASE_EXPIRED");
+      // Only an uncertain already-sent terminal operation may outlive its write lease.
+      // It retains the exact tuple; the server can only read a committed receipt after expiry.
+      const remaining = (recovering ? recoveryDeadline : Math.min(Date.parse(assignment.leaseExpiresAt), Date.parse(assignment.deadlineAt))) - Date.now();
+      if (remaining < 50) throw new RunnerError(recovering ? "TERMINAL_ACK_UNCONFIRMED" : "LEASE_EXPIRED");
       try {
         const response = await post(origin, `/api/v1/agents/${registration.agentId}/jobs/${jobId}/${kind}`, credential, body,
           { key, signal, timeoutMs: Math.min(5000, remaining) });
-        return actionReply(successful(response), assignment);
+        const ack = actionReply(successful(response), assignment);
+        if (terminalState && (!ack.terminal || ack.state !== terminalState)) throw new RunnerError("INVALID_EXECUTION_RESPONSE");
+        if (recovering) log("RUNNER_TERMINAL_ACK_RECOVERED");
+        if (terminalState) terminalUncertain = false;
+        return ack;
       } catch (error) {
-        if (!error.retryable || retry === 2) throw error;
-        log("RUNNER_EXECUTION_RETRY"); await delay(100 * 2 ** retry, undefined, { signal });
+        if (terminalState && (error.retryable || ["INVALID_RESPONSE", "INVALID_EXECUTION_RESPONSE", "RESPONSE_TOO_LARGE", "REDIRECT_REFUSED"].includes(error.code))) {
+          recovering = true; terminalUncertain = true;
+          if (retry === requestLimit - 1) throw new RunnerError("TERMINAL_ACK_UNCONFIRMED");
+          log("RUNNER_TERMINAL_ACK_RECOVERY");
+        } else {
+          if (recovering) throw new RunnerError(["AGENT_REVOKED", "UNAUTHORIZED_AGENT"].includes(error.code) ? error.code : "TERMINAL_ACK_UNCONFIRMED");
+          if (!error.retryable || retry === requestLimit - 1) throw error;
+          log("RUNNER_EXECUTION_RETRY");
+        }
+        await delay(Math.max(0, Math.min(100 * 2 ** retry, 500, recovering ? recoveryDeadline - Date.now() : 500)), undefined, { signal });
       }
     }
   };
@@ -90,6 +110,7 @@ async function execute({ origin, registration, credential, assignment, signal, l
   } catch (error) {
     workerController.abort(); if (work) await work;
     if (signal.aborted) throw error;
+    if (terminalUncertain || error.code === "TERMINAL_ACK_UNCONFIRMED") throw error;
     if (error.code === "CANCEL_REQUESTED") { await cancelAck(); return; }
     if (["AGENT_REVOKED","UNAUTHORIZED_AGENT","EXECUTION_NOT_GRANTED","VALIDATOR_MISMATCH","PERSISTENCE_DISABLED"].includes(error.code)) throw error;
     if (["LEASE_EXPIRED","STALE_ATTEMPT"].includes(error.code)) { log("RUNNER_VALIDATION_LEASE_LOST"); return; }

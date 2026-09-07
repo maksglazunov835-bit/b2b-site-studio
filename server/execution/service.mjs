@@ -12,6 +12,8 @@ import { assertSpec, materialize, POLICY, VALIDATOR, validationReport } from "./
 import { executionRequest } from "./requests.mjs";
 import { executionError, transition } from "./transitions.mjs";
 
+export const TERMINAL_ACK_TTL_MS = 300000;
+const terminalStates = { result: "succeeded", "cancel-ack": "cancelled", fail: "failed" };
 async function transaction(action) {
   return withTransaction(async (client) => { await client.query("SET LOCAL statement_timeout='5s'"); return action(client); });
 }
@@ -111,6 +113,7 @@ export function createExecutionService({ workspaceId = DEFAULT_WORKSPACE_ID, clo
     },
     async action(agentId, jobId, secret, kind, input, key) {
       assertAgentId(agentId); assertJobId(jobId); executionRequest(kind, input);
+      if (!validSecret(secret, "agt")) executionError("UNAUTHORIZED_AGENT", 401);
       if (!["start","heartbeat","result","fail","cancel-ack"].includes(kind)) executionError("VALIDATION_FAILED", 422);
       if (kind !== "heartbeat") key = assertIdempotencyKey(key);
       return transaction(async (client) => {
@@ -119,8 +122,18 @@ export function createExecutionService({ workspaceId = DEFAULT_WORKSPACE_ID, clo
         const attempt = (await client.query("SELECT * FROM job_attempts WHERE job_id=$1 ORDER BY attempt DESC LIMIT 1 FOR UPDATE", [jobId])).rows[0];
         if (!attempt || attempt.agent_id !== agentId || attempt.attempt !== input.attempt || !hashMatches(input.leaseToken, attempt.lease_sha256)) executionError("STALE_ATTEMPT", 403);
         const now = clock();
-        if (now >= attempt.expires_at || now >= attempt.deadline_at) executionError("LEASE_EXPIRED");
         const hash = sha256Json({ ...input, leaseToken: secretHash(input.leaseToken) });
+        // Read-only terminal recovery: no sweep, mutation, revalidation or lease renewal.
+        // Identity/fencing/revocation checks above apply even when recovering an old acknowledgement.
+        if (terminalStates[kind] && attempt.finished_at && attempt.state === terminalStates[kind] && job.state === attempt.state) {
+          if (now < attempt.finished_at || now >= +attempt.finished_at + TERMINAL_ACK_TTL_MS) executionError("TERMINAL_ACK_EXPIRED");
+          const previous = (await client.query(`SELECT request_sha256,response FROM execution_operations
+            WHERE job_id=$1 AND attempt=$2 AND operation=$3 AND key_sha256=$4`, [jobId, input.attempt, kind, secretHash(key)])).rows[0];
+          if (!previous) executionError("TERMINAL_ACK_NOT_FOUND");
+          if (previous.request_sha256.trim() !== hash) executionError("IDEMPOTENCY_CONFLICT");
+          return { ...previous.response, replayed: true };
+        }
+        if (now >= attempt.expires_at || now >= attempt.deadline_at) executionError("LEASE_EXPIRED");
         if (kind !== "heartbeat") {
           const previous = (await client.query(`SELECT * FROM execution_operations WHERE job_id=$1 AND attempt=$2 AND operation=$3 AND key_sha256=$4`,
           [jobId, input.attempt, kind, secretHash(key)])).rows[0];

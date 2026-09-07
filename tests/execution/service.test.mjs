@@ -8,10 +8,11 @@ import { DEFAULT_WORKSPACE_ID, insertRevision, updateProjectCurrentRevision } fr
 import { newSecret } from "../../server/agents/requests.mjs";
 import { saveDraft, getProject } from "../../server/persistence/service.mjs";
 import { jobs } from "../../server/jobs/service.mjs";
-import { createExecutionService } from "../../server/execution/service.mjs";
+import { createExecutionService, TERMINAL_ACK_TTL_MS } from "../../server/execution/service.mjs";
 import { sha256Json } from "../../server/persistence/canonical-json.mjs";
 import { validationReport, VALIDATOR } from "../../server/execution/contract.mjs";
-import { fixture } from "./helpers.mjs";
+import { fixture, executionRows } from "./helpers.mjs";
+import { legacyJob } from "./legacy-fixture.mjs";
 
 assertSafeTestDatabaseUrl(); before(prepareTestDatabase); after(closeDatabasePool);
 const query = (sql, values) => getDatabasePool().query(sql, values);
@@ -188,4 +189,81 @@ void test("an invalid historical snapshot produces a completed invalid report wi
   assert.equal((await jobs.get(f.projectId, f.jobId)).job.state, "succeeded");
   assert.deepEqual((await query("SELECT to_jsonb(r) AS row FROM site_spec_revisions r WHERE project_id=$1 ORDER BY revision", [existing.projectId])).rows, before);
   assert.deepEqual((await query("SELECT to_jsonb(c) AS row FROM site_spec_readiness_checks c JOIN site_spec_revisions r ON r.id=c.revision_id WHERE r.project_id=$1 ORDER BY c.check_id,c.gate", [existing.projectId])).rows, readiness);
+});
+for (const kind of ["result", "cancel-ack", "fail"]) void test(`${kind} acknowledgement after lease/deadline is exact, time-bounded, scoped and read-only`, async () => {
+  const f = await fixture(); const a = await running(f);
+  const other = await fixture({ projectId: f.projectId, dispatch: false });
+  const foreignProject = await fixture({ dispatch: false });
+  const foreignWorkspace = createExecutionService({ workspaceId: randomUUID(), clock: f.clock });
+  if (kind === "cancel-ack") await jobs.cancel(f.projectId, f.jobId, { expectedVersion: (await jobs.get(f.projectId, f.jobId)).job.version }, randomUUID());
+  const report = validationReport(a.jobSpec, a.attempt);
+  const extra = kind === "result" ? { report, resultDigest: sha256Json(report) } : kind === "fail" ? { code: "VALIDATOR_FAILED" } : {};
+  const key = randomUUID(); const ack = await f.action(a, kind, extra, key);
+  const before = await executionRows(); const finished = f.time.now;
+  f.time.now = Date.parse(a.deadlineAt) + 1;
+  assert.ok(f.time.now > Date.parse(a.leaseExpiresAt));
+  const replay = await f.action(a, kind, extra, key);
+  assert.deepEqual(replay, { ...ack, replayed: true });
+  assert.deepEqual(await executionRows(), before);
+  assert.equal((await query("SELECT count(*)::int n FROM job_results WHERE job_id=$1", [f.jobId])).rows[0].n, kind === "result" ? 1 : 0);
+  assert.equal((await query("SELECT count(*)::int n FROM job_events WHERE job_id=$1 AND to_state IN ('succeeded','failed','cancelled')", [f.jobId])).rows[0].n, 1);
+  await rejects(f.action(a, kind, extra, randomUUID()), "TERMINAL_ACK_NOT_FOUND");
+  if (kind === "result") {
+    await rejects(f.action(a, kind, { ...extra, resultDigest: "0".repeat(64) }, key), "IDEMPOTENCY_CONFLICT");
+    const changed = { ...report, validationStatus: "invalid" };
+    await rejects(f.action(a, kind, { report: changed, resultDigest: sha256Json(changed) }, key), "IDEMPOTENCY_CONFLICT");
+  } else if (kind === "fail") await rejects(f.action(a, kind, { code: "INPUT_REJECTED" }, key), "IDEMPOTENCY_CONFLICT");
+  else await rejects(f.action(a, kind, { unrecognized: true }, key), "VALIDATION_FAILED");
+  const body = { ...extra, leaseToken: a.leaseToken, attempt: a.attempt };
+  for (const credential of [undefined, f.pairing.pairingSecret, newSecret("agt")]) {
+    await rejects(f.execution.action(f.agentId, f.jobId, credential, kind, body, key), "UNAUTHORIZED_AGENT");
+  }
+  await rejects(f.execution.action(other.agentId, f.jobId, other.credential, kind, body, key), "STALE_ATTEMPT");
+  await rejects(f.execution.action(foreignProject.agentId, f.jobId, foreignProject.credential, kind, body, key), "JOB_NOT_FOUND");
+  await rejects(foreignWorkspace.action(f.agentId, f.jobId, f.credential, kind, body, key), "UNAUTHORIZED_AGENT");
+  await rejects(f.action({ ...a, attempt: 2 }, kind, extra, key), "STALE_ATTEMPT");
+  await rejects(f.action({ ...a, leaseToken: `lease_${"x".repeat(43)}` }, kind, extra, key), "STALE_ATTEMPT");
+  await rejects(f.action(a, "heartbeat", { phase: "validating" }), "LEASE_EXPIRED");
+  for (const otherKind of ["result", "cancel-ack", "fail"].filter((value) => value !== kind)) {
+    const payload = otherKind === "result" ? { report, resultDigest: sha256Json(report) } : otherKind === "fail" ? { code: "VALIDATOR_FAILED" } : {};
+    await rejects(f.action(a, otherKind, payload, key), "LEASE_EXPIRED");
+  }
+  assert.deepEqual(await executionRows(), before);
+  f.time.now = finished + TERMINAL_ACK_TTL_MS - 1;
+  assert.deepEqual(await f.action(a, kind, extra, key), replay);
+  f.time.now++;
+  await rejects(f.action(a, kind, extra, key), "TERMINAL_ACK_EXPIRED");
+  assert.deepEqual(await executionRows(), before);
+  f.time.now = finished + 31000;
+  await f.agents.revoke(f.agentId, {});
+  const revoked = await executionRows();
+  await rejects(f.action(a, kind, extra, key), "AGENT_REVOKED");
+  assert.deepEqual(await executionRows(), revoked);
+});
+void test("expired unfinished attempt and old start replay cannot gain terminal write authority", async () => {
+  const f = await fixture(); const a = (await f.claim()).assignment; const key = randomUUID();
+  await f.action(a, "start", {}, key); await f.action(a, "heartbeat", { phase: "validating" });
+  f.time.now = Date.parse(a.deadlineAt) + 1;
+  const before = await executionRows();
+  await rejects(f.action(a, "start", {}, key), "LEASE_EXPIRED");
+  await rejects(result(f, a), "LEASE_EXPIRED");
+  await rejects(f.action(a, "fail", { code: "VALIDATOR_FAILED" }), "LEASE_EXPIRED");
+  await rejects(f.action(a, "cancel-ack"), "LEASE_EXPIRED");
+  assert.deepEqual(await executionRows(), before);
+  const next = (await f.claim()).assignment; assert.equal(next.attempt, 2);
+  await rejects(result(f, a), "STALE_ATTEMPT");
+});
+void test("incompatible historical special-key hashes fail explicitly without repairing revisions/jobs", async () => {
+  const f = await fixture({ dispatch: false });
+  const snapshot = JSON.parse('{"a":1,"__proto__":{"marker":"CHANGED"}}');
+  await withTransaction(async (client) => {
+    await insertRevision(client, { id: randomUUID(), workspaceId: DEFAULT_WORKSPACE_ID, projectId: f.projectId, revision: 2,
+      schemaVersion: "1.2.0", documentStage: "draft", siteSpec: snapshot, canonicalSha256: sha256Json({ a: 1 }),
+      editableSha256: sha256Json({}), idempotencyKey: randomUUID(), actorType: "test", source: "legacy_fixture" });
+    await updateProjectCurrentRevision(client, DEFAULT_WORKSPACE_ID, f.projectId, 2);
+  });
+  const oldJob = await legacyJob(f.projectId); const before = await executionRows();
+  await rejects(jobs.create(f.projectId, { type: "site_spec_validation", expectedRevision: 2 }, randomUUID()), "SITE_SPEC_INTEGRITY_ERROR");
+  await rejects(f.execution.dispatch(f.projectId, oldJob, { agentId: f.agentId, expectedVersion: 1 }, randomUUID()), "INPUT_HASH_MISMATCH");
+  assert.deepEqual(await executionRows(), before);
 });

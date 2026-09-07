@@ -6,6 +6,15 @@ import { createExecutionService } from "../../server/execution/service.mjs";
 import { newSecret } from "../../server/agents/requests.mjs";
 import { VALIDATOR } from "../../server/execution/contract.mjs";
 import { assertSafeTestDatabaseUrl } from "../../scripts/db/test-config.mjs";
+import { getDatabasePool } from "../../server/persistence/database.mjs";
+export async function executionRows() {
+  assertSafeTestDatabaseUrl();
+  const data = {};
+  for (const table of ["projects", "site_spec_revisions", "site_spec_readiness_checks", "jobs", "job_events", "job_executions", "job_attempts", "job_results", "execution_operations", "api_idempotency_records", "agents", "agent_pairings", "agent_events", "agent_execution_grants"]) {
+    data[table] = (await getDatabasePool().query(`SELECT to_jsonb(t) FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows;
+  }
+  return data;
+}
 export async function fixture({ projectId, revision = 1, dispatch = true, presence = false } = {}) {
   assertSafeTestDatabaseUrl();
   const time = { now: Date.now() }; const clock = () => new Date(time.now);

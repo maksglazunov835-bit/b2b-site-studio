@@ -25,10 +25,10 @@ export async function httpFixture(origin) {
   return { projectId: project.id, base, job, pairing };
 }
 // Fixed loopback transport fault injection. Plaintext is transient and never emitted in evidence.
-export async function lossProxy(origin, { drop = [], holdResult = false } = {}) {
+export async function lossProxy(origin, { drop = [], holdResult = false, terminalAfterDeadline = false, malformedTerminal = false } = {}) {
   assertSafeTestDatabaseUrl();
   assert.match(origin, /^http:\/\/127\.0\.0\.1:[0-9]+$/);
-  const fingerprints = new Map(); const secrets = []; const dropped = new Set();
+  const fingerprints = new Map(); const secrets = []; const dropped = new Set(); const terminalReplies = [];
   let release; let arrived; const waiting = new Promise((resolve) => { arrived = resolve; });
   const hold = new Promise((resolve) => { release = resolve; });
   const proxy = http.createServer(async (request, response) => {
@@ -53,6 +53,28 @@ export async function lossProxy(origin, { drop = [], holdResult = false } = {}) 
       const text = await result.text(); assert.ok(Buffer.byteLength(text) <= 81920);
       const answer = JSON.parse(text);
       if (answer.assignment?.leaseToken) secrets.push(answer.assignment.leaseToken);
+      if (malformedTerminal && kind === "result" && result.ok) {
+        const count = fingerprints.get(kind).length;
+        if (count === 1) {
+          response.writeHead(200, { "Content-Type": "application/json", "Content-Length": 20000 }); response.end(); return;
+        }
+        if (count === 2) {
+          response.writeHead(307, { Location: "http://127.0.0.1:1/never-follow" }); response.end(); return;
+        }
+      }
+      if (terminalAfterDeadline && kind === "result" && result.ok) {
+        arrived();
+        const receipt = { receivedAt: Date.now(), leaseExpiresAt: Date.parse(answer.leaseExpiresAt),
+          deadlineAt: Date.parse(answer.deadlineAt), replayed: answer.replayed === true, delivered: false };
+        terminalReplies.push(receipt);
+        assert.ok(terminalReplies.length <= 10);
+        if (Date.now() < receipt.deadlineAt + 200) {
+          // The real server already committed. Hide replies across both expiry boundaries.
+          await Promise.race([hold, new Promise((resolve) => { timer = setTimeout(resolve, Math.min(5000, receipt.deadlineAt + 200 - Date.now())); })]);
+          response.destroy(); return;
+        }
+        receipt.delivered = true;
+      }
       if (drop.includes(kind) && !dropped.has(kind) && result.ok && (kind !== "claim" || answer.assignment)) {
         dropped.add(kind); response.destroy(); return;
       }
@@ -65,6 +87,6 @@ export async function lossProxy(origin, { drop = [], holdResult = false } = {}) 
     let timer;
     try { await Promise.race([waiting, new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error("Result request was not received.")), 12000); })]); }
     finally { clearTimeout(timer); }
-  }, release, fingerprints, secrets, dropped,
+  }, release, fingerprints, secrets, dropped, terminalReplies,
     async close() { release(); proxy.closeAllConnections(); await new Promise((resolve) => proxy.close(resolve)); } };
 }

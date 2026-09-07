@@ -8,7 +8,8 @@ function canonicalValue(value) {
   }
   if (Array.isArray(value)) return value.map(canonicalValue);
   if (typeof value === "object") {
-    const result = {};
+    // JSON keys are data, including __proto__; never invoke an inherited setter.
+    const result = Object.create(null);
     for (const key of Object.keys(value).sort()) {
       const item = value[key];
       if (item === undefined) throw new TypeError(`Canonical JSON does not support undefined at ${key}.`);

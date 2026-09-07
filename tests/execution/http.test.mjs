@@ -8,6 +8,9 @@ import { newSecret } from "../../server/agents/requests.mjs";
 import { VALIDATOR, validationReport } from "../../server/execution/contract.mjs";
 import { sha256Json } from "../../server/persistence/canonical-json.mjs";
 import { api, ok, write, httpFixture } from "./http-helpers.mjs";
+import { fixture as executionFixture, executionRows } from "./helpers.mjs";
+import { closeDatabasePool, getDatabasePool } from "../../server/persistence/database.mjs";
+import { jobs } from "../../server/jobs/service.mjs";
 
 const config = assertSafeTestDatabaseUrl(); await prepareTestDatabase();
 const server = await startProductionServer();
@@ -55,7 +58,40 @@ try {
   assert.equal((await api(server.origin, `/projects/${randomUUID()}/jobs/${fixture.job.id}/execution`)).status, 404);
   assert.equal((await api(server.origin, `${path}/execution`, { headers: { Authorization: `Bearer ${credential}` } })).status, 403);
   console.log("EXECUTION_HTTP_CONCURRENT_DISPATCH_CLAIM_STRICT_DTO_RESULT_RETRY_TAMPER_SCOPE passed");
-} finally { await stopServer(server); }
+  for (const kind of ["result", "cancel-ack", "fail"]) {
+    const f = await executionFixture();
+    // Seed committed receipts using the service clock, not a production HTTP clock override.
+    f.time.now -= 31000;
+    const a = (await f.claim()).assignment;
+    await f.action(a, "start"); await f.action(a, "heartbeat", { phase: "validating" });
+    if (kind === "cancel-ack") {
+      const version = (await getDatabasePool().query("SELECT version FROM jobs WHERE id=$1", [f.jobId])).rows[0].version;
+      await jobs.cancel(f.projectId, f.jobId, { expectedVersion: version }, randomUUID());
+    }
+    const report = validationReport(a.jobSpec, a.attempt);
+    const extra = kind === "result" ? { report, resultDigest: sha256Json(report) } : kind === "fail" ? { code: "VALIDATOR_FAILED" } : {};
+    const key = randomUUID(); const committed = await f.action(a, kind, extra, key);
+    const before = await executionRows();
+    assert.ok(Date.now() > Date.parse(a.deadlineAt) && Date.now() > Date.parse(a.leaseExpiresAt));
+    const route = `/agents/${f.agentId}/jobs/${f.jobId}/${kind}`;
+    const body = { ...extra, leaseToken: a.leaseToken, attempt: a.attempt };
+    assert.deepEqual(await ok(server.origin, route, write(body, f.credential, key)), { ...committed, replayed: true });
+    assert.deepEqual(await executionRows(), before);
+    assert.equal((await api(server.origin, route, write(body, f.credential))).body.error.code, "TERMINAL_ACK_NOT_FOUND");
+    assert.equal((await api(server.origin, route, write(body, credential, key))).body.error.code, "UNAUTHORIZED_AGENT");
+    assert.equal((await api(server.origin, route, write({ ...body, attempt: 2 }, f.credential, key))).body.error.code, "STALE_ATTEMPT");
+    if (kind === "result") assert.equal((await api(server.origin, route, write({ ...body, resultDigest: "0".repeat(64) }, f.credential, key))).body.error.code, "IDEMPOTENCY_CONFLICT");
+    assert.deepEqual(await executionRows(), before);
+    await f.agents.revoke(f.agentId, {}); const revoked = await executionRows();
+    assert.equal((await api(server.origin, route, write(body, f.credential, key))).body.error.code, "AGENT_REVOKED");
+    assert.deepEqual(await executionRows(), revoked);
+    for (const secret of [f.credential, f.pairing.pairingSecret, a.leaseToken]) {
+      assert.equal(JSON.stringify(revoked).includes(secret), false);
+      assert.equal(server.output().includes(secret), false);
+    }
+    console.log(`EXECUTION_HTTP_${kind.toUpperCase()}_RECEIPT_AFTER_DEADLINE_READ_ONLY_SCOPED_REVOKED passed`);
+  }
+} finally { await closeDatabasePool(); await stopServer(server); }
 const client = new pg.Client(config); await client.connect();
 try {
   const snapshot = async () => {

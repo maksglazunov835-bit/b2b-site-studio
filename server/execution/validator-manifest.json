@@ -1,7 +1,7 @@
 {
   "id": "site_spec_builtin",
   "version": "1.0.0",
-  "sha256": "4ed773e50715109bc82d3126d69dcc0e9f8efa834c6e7115a2d24ad6afae36f4",
+  "sha256": "bbced9312e56699604b819a8d3a7aa400da9a33277318893e66cf9e1f1811edc",
   "files": [
     {
       "path": "docs/contracts/site-spec.schema.json",
@@ -17,7 +17,7 @@
     },
     {
       "path": "server/persistence/canonical-json.mjs",
-      "sha256": "2878ff039c5618f749a1d327b5779e66d8c002cb1391bd0727c7f6f06152923d"
+      "sha256": "98c8f44e933d4b4bddedb0fd67ec9e3f328dbf1b9fd0cf2c0e3a5b6f2bdbadf6"
     },
     {
       "path": "server/execution/bounds.mjs",

@@ -7,6 +7,8 @@ import { boundedJson, parseBounded } from "../../server/execution/bounds.mjs";
 import { dataFixture, negativeProfiles } from "./fixtures.mjs";
 import { options } from "../../agent/session.mjs";
 import { registerRequest, newSecret } from "../../server/agents/requests.mjs";
+import { canonicalStringify, sha256Json } from "../../server/persistence/canonical-json.mjs";
+import legacyHashes from "./canonical-legacy-hashes.json" with { type: "json" };
 
 void test("complete 1.3 data profile, real manifest and invalid SiteSpec diagnostic fixtures", async () => {
   const spec = dataFixture(); assert.equal(assertSpec(spec), spec);
@@ -21,6 +23,45 @@ void test("complete 1.3 data profile, real manifest and invalid SiteSpec diagnos
   const semantic = { ...schema["x-semanticNegativeExamples"][0].value, projectId: spec.projectId, revision: 1 };
   const semanticSpec = dataFixture(semantic);
   assert.equal(validationReport(semanticSpec, 1).validationStatus, "invalid");
+});
+void test("canonical JSON preserves every own special key, round-trips and ignores key order", () => {
+  const plain = JSON.parse('{"a":1}');
+  const changed = JSON.parse('{"a":1,"__proto__":{"marker":"CHANGED"}}');
+  assert.notEqual(canonicalStringify(plain), canonicalStringify(changed));
+  assert.notEqual(sha256Json(plain), sha256Json(changed));
+  for (const name of ["__proto__", "constructor", "prototype"]) {
+    for (const wrap of [(value) => value, (value) => ({ nested: value }), (value) => ({ array: [value] })]) {
+      const value = JSON.parse(`{"z":1,"${name}":{"marker":"original"},"a":2}`);
+      const document = wrap(value); const before = sha256Json(document);
+      assert.deepEqual(JSON.parse(canonicalStringify(document)), document);
+      const reordered = JSON.parse(`{"a":2,"${name}":{"marker":"original"},"z":1}`);
+      assert.equal(before, sha256Json(wrap(reordered)));
+      value[name].marker = "changed";
+      assert.notEqual(before, sha256Json(document));
+      assert.deepEqual(JSON.parse(canonicalStringify(document)), document);
+    }
+  }
+  assert.equal(Object.prototype.marker, undefined);
+});
+void test("changed special-key snapshot cannot pass the previous input or JobSpec digest", () => {
+  for (const addition of ['{"__proto__":{"marker":"CHANGED"}}', '{"nested":{"__proto__":{"marker":"CHANGED"}}}', '{"items":[{"__proto__":{"marker":"CHANGED"}}]}']) {
+    const spec = dataFixture({ a: 1 }); const oldSpecHash = sha256Json(spec);
+    const changed = { ...spec, input: { ...spec.input, snapshot: { ...spec.input.snapshot, ...JSON.parse(addition) } } };
+    assert.throws(() => assertSpec(changed, oldSpecHash), { code: "INPUT_HASH_MISMATCH" });
+    changed.input.sha256 = sha256Json(changed.input.snapshot);
+    assert.throws(() => assertSpec(changed, oldSpecHash), { code: "INPUT_HASH_MISMATCH" });
+    assertSpec(changed, sha256Json(changed));
+  }
+});
+void test("all 56 ordinary legacy fixture hashes remain compatible with the reviewed head", async () => {
+  assert.equal(legacyHashes.baselineCommit, "a84465e014445b6145bc23786ea5db190cc8407f");
+  assert.equal(legacyHashes.fixtures.length, 56);
+  for (const fixture of legacyHashes.fixtures) {
+    const schema = JSON.parse(await readFile(`docs/contracts/${fixture.file}`, "utf8"));
+    const entry = schema[fixture.group][fixture.index];
+    assert.equal(sha256Json(fixture.group === "examples" ? entry : entry.value), fixture.sha256,
+      `${fixture.file} ${fixture.group}[${fixture.index}]`);
+  }
 });
 void test("bytes/depth/node bounds precede recursive validators and reports omit input values", () => {
   assert.throws(() => parseBounded('"' + "x".repeat(65536) + '"', 65536), { code: "JSON_BYTES_LIMIT" });
