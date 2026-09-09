@@ -1,0 +1,140 @@
+{
+  "kind": "actual-windows-wsl",
+  "at": "2026-09-09T19:33:20.311Z",
+  "modelInvocations": 0,
+  "bundleSha256": "e9cd582b3fbc406cf0a70c86674ee1278f2a7be1f40ceeeba647ada47b21a1fb",
+  "coldStartDenied": true,
+  "preflight": {
+    "hashes": {
+      "codex": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+      "node": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+      "bwrap": "77360cb751ccedc5971391444ac86a8a33c15b04d6b4a6fe45f5d25496e62c4c",
+      "python": "c2c20b4745d447551221ec3d4e70f92c270c4609fe3df34fc52ea6dd46e92273"
+    },
+    "kernel": "6.6.114.1-microsoft-standard-WSL2",
+    "uid": 1000,
+    "hostMountsAbsent": true,
+    "home": "/home/codexlab",
+    "codexHome": "/home/codexlab/.codex",
+    "modelInvocations": 0,
+    "configSha256": "3988a4eee4e84e9287dcdec2260a800d2ec64e0f359d04851417161a0d03440d",
+    "managedRequirements": "included",
+    "userConfig": "absent",
+    "accountType": null,
+    "modelSelection": {
+      "source": "official_model_list",
+      "resolvedModel": "gpt-6-astra",
+      "effort": "ultra",
+      "supportedReasoningEfforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra"
+      ]
+    },
+    "canary": {
+      "nonce": "39397b90bf91dbe6b330e905c8eef73a",
+      "completed": true,
+      "checks": {
+        "inputRead": true,
+        "outputWrite": true,
+        "inputWriteDenied": true,
+        "siblingDenied": true,
+        "symlinkDenied": true,
+        "alternateDenied": true,
+        "credentialDenied": true,
+        "nonRoot": true,
+        "noCapabilities": true,
+        "noNewPrivileges": true,
+        "loopback4Denied": true,
+        "loopback6Denied": true,
+        "privateDenied": true,
+        "windowsHostDenied": true,
+        "networkNamespace": true,
+        "noExternalInterface": true,
+        "noRoute": true,
+        "interopDenied": true,
+        "noHostMounts": true
+      },
+      "positiveControls": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "connections": 0,
+      "filesystem": {
+        "inputRead": true,
+        "outputWrite": true,
+        "inputDenied": true,
+        "siblingDenied": true,
+        "symlinkDenied": true,
+        "credentialDenied": true,
+        "outsideWriteDenied": false,
+        "outsideUnchanged": true
+      },
+      "esmCompleted": true,
+      "stdioTransport": {
+        "socketCompleted": true,
+        "socketAsyncDelivered": false,
+        "socketStreamDelivered": false,
+        "realPipeCompleted": true,
+        "realPipeAsyncDelivered": true
+      },
+      "externalNetworkEvidence": "different net namespace, no external interfaces, empty IPv4 routes; no external listener contacted"
+    },
+    "status": "CODEX_LOGIN_REQUIRED",
+    "actionBoundary": {
+      "command": "disabled_and_canary_tested",
+      "applyPatchFilesystem": {
+        "inputRead": true,
+        "outputWrite": true,
+        "inputDenied": true,
+        "siblingDenied": true,
+        "symlinkDenied": true,
+        "credentialDenied": true,
+        "outsideWriteDenied": false,
+        "outsideUnchanged": true
+      },
+      "clock": "server_time_only",
+      "networkTools": "disabled",
+      "modelInvocations": "one"
+    }
+  },
+  "lifecycle": [
+    {
+      "mode": "timeout",
+      "confirmed": true,
+      "reason": "TIMEOUT",
+      "elapsedMs": 3152
+    },
+    {
+      "mode": "abort",
+      "confirmed": true,
+      "reason": "RUNNER_STOPPED",
+      "elapsedMs": 1889
+    },
+    {
+      "mode": "relay-eof",
+      "confirmed": true,
+      "reason": "STOP",
+      "elapsedMs": 1445
+    },
+    {
+      "mode": "pulse-loss",
+      "confirmed": true,
+      "reason": "STOP",
+      "elapsedMs": 3939
+    },
+    {
+      "mode": "relay-kill",
+      "confirmed": true,
+      "reason": "RUNNER_STOPPED",
+      "elapsedMs": 3323
+    }
+  ],
+  "deviceAuthSupported": true,
+  "noRemainingWorkloads": true
+}

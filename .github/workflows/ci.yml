@@ -97,6 +97,7 @@ jobs:
             .test-results/design-2-mobile.png
             .test-results/design-3-mobile.png
             .test-results/process-tree-linux.json
+            .test-results/wsl-protocol-linux.json
 
   windows-process-tree:
     name: Windows native process-tree and streaming regressions

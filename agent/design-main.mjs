@@ -10,11 +10,22 @@ process.on('message', (value) => {
 process.once('disconnect', stop);
 try {
   const args = process.argv.slice(2);
+  const wslIndex = args.indexOf('--codex-wsl');
   const index = args.indexOf('--codex-bin');
-  if (index < 0 || !args[index + 1]) throw new Error();
-  const binary = args.splice(index, 2)[1];
+  if (
+    (wslIndex >= 0 && index >= 0) ||
+    (wslIndex < 0 && (index < 0 || !args[index + 1]))
+  )
+    throw new Error();
+  const binary =
+    wslIndex >= 0 ? (args.splice(wslIndex, 1), null) : args.splice(index, 2)[1];
   const config = options(args);
-  const adapter = await officialAdapter(binary);
+  const adapter = await officialAdapter(binary, {
+    transport: wslIndex >= 0 ? 'wsl' : 'native',
+    signal: controller.signal,
+  });
+  if (controller.signal.aborted)
+    throw Object.assign(Error('RUNNER_STOPPED'), { code: 'RUNNER_STOPPED' });
   console.log(
     `CODEX_PREFLIGHT ${adapter.runtime.cliVersion} ${adapter.runtime.status}`,
   );

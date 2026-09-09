@@ -1,4 +1,10 @@
-# Authorized WSL lab: measured, not admitted
+# Historical WSL installation and partial diagnostic
+
+**Superseded for current adapter status:** [WSL adapter follow-up](wsl-adapter.md)
+and its measured receipt. The installation/removal inventory below remains valid.
+The old standalone diagnostic module was replaced by the shared adapter boundary;
+`run-canary.mjs` now delegates to that implementation. Claims below describe the
+earlier `13e4db1` baseline, not the current connection or admission checks.
 
 Local machine evidence, 2026-09-09. This is not Linux GitHub Actions evidence,
 an independent acceptance, or a successful Codex generation. Actual model calls:

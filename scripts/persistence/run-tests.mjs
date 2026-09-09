@@ -10,6 +10,7 @@ const modes = new Set(["full", "service", "http", "ui", "jobs", "jobs-http", "jo
 const steps = [];
 modes.add('design'); modes.add('design-process'); modes.add('design-ui');
 modes.add('design-regressions');
+modes.add('design-live-smoke');
 
 async function devFingerprint() {
   if (!process.env.DATABASE_URL) return null;
@@ -68,7 +69,7 @@ async function main() {
     if (["full", "agents"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/agents/upgrade.test.mjs", "tests/agents/service.test.mjs", "tests/agents/transport.test.mjs"]);
     if (["full", "execution"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/execution/service.test.mjs", "tests/execution/upgrade.test.mjs", "tests/execution/worker.test.mjs"]);
     if (['full','design'].includes(mode)) await run(['--test','--test-concurrency=1','tests/design/service.test.mjs','tests/design/upgrade.test.mjs']);
-    if (['full','design-regressions'].includes(mode)) await run(['--test','--test-concurrency=1','tests/design/lifecycle.test.mjs','tests/design/streaming.test.mjs','tests/design/model-policy.test.mjs','tests/design/isolation-diagnostic.test.mjs']);
+    if (['full','design-regressions'].includes(mode)) await run(['--test','--test-concurrency=1','tests/design/lifecycle.test.mjs','tests/design/streaming.test.mjs','tests/design/model-policy.test.mjs','tests/design/isolation-diagnostic.test.mjs','tests/design/wsl-policy.test.mjs']);
     if (mode === "full") {
       if (!process.env.npm_execpath) throw new Error("Run ci:full through npm.");
       await run([process.env.npm_execpath, "run", "ci"]);
@@ -85,6 +86,11 @@ async function main() {
     if (["full", "execution-ui"].includes(mode)) await run(["tests/execution/ui.test.mjs"]);
     if (['full','design-process'].includes(mode)) await run(['tests/design/process.test.mjs']);
     if (['full','design-ui'].includes(mode)) await run(['tests/design/ui.test.mjs']);
+    // Never part of CI. The owner must explicitly opt into one real call after login.
+    if (mode === 'design-live-smoke') {
+      if (process.argv[3] !== '--confirm-one-real-call' || process.env.CI || process.platform !== 'win32') throw new Error('LIVE_SMOKE_NOT_AUTHORIZED');
+      await run(['scripts/lab/live-smoke.mjs','--confirm-one-real-call']);
+    }
   } catch (error) { failure = error; }
   const after = await devFingerprint();
   if (mode === "full") {

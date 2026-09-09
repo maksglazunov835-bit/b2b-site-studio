@@ -3,10 +3,17 @@
 ## Status and live-call boundary
 
 The queue, isolated adapter protocol, validation, storage, and preview are implemented.
-The official live call is **blocked**, not demonstrated: `CODEX_ISOLATION_UNVERIFIED`.
+The official live call is **not demonstrated**. Native execution remains
+`CODEX_ISOLATION_UNVERIFIED`; the implemented fixed Windows-to-WSL adapter passes
+the local pre-auth matrix and currently returns `CODEX_LOGIN_REQUIRED`.
 CI uses an explicitly labelled child-process `test_stub`. Its screenshots are not model output.
 No real inference was performed while implementing this issue (zero model invocations).
 Independent functional acceptance still needs a separately evidenced safe official smoke.
+
+Current [WSL adapter evidence and commands](wsl-adapter.md) supersede the earlier
+partial lab diagnostic. This is local Windows/WSL evidence, not GitHub Linux CI.
+No distro was reinstalled. Device login must be performed by the owner; none of
+these changes authorize an automatic login or a model invocation before admission.
 
 The active [Astra and OS-isolation evidence](astra-isolation.md) records official model/list,
 the developer session, the failed same-profile Windows canaries and the one proposed
@@ -35,7 +42,9 @@ The official [non-interactive documentation](https://developers.openai.com/codex
 [configuration schema](https://developers.openai.com/codex/config-schema.json), and
 [authentication documentation](https://developers.openai.com/codex/auth/) were cross-checked with installed help.
 Managed policy is never bypassed. Do not remove the isolation gate merely to make a smoke pass.
-No login change, installation, auth-file copy, API-key fallback, proxy, or model request was attempted.
+The initial native diagnostic made no login change, installation, auth-file copy,
+API-key fallback, proxy, or model request. The separately authorized lab installation
+is recorded in `wsl-lab.md`; this follow-up reuses that lab without reinstalling it.
 
 ## Local commands
 
@@ -64,13 +73,25 @@ npm run agent:design -- --origin http://127.0.0.1:3000 --name "Local design Runn
 
 Create/save a brief with business type, site type and niche. Explicitly issue a new
 `codex_design` pairing for this project and enter its one-time code at the hidden stdin prompt.
-The actual installed client currently connects with execution disabled and the safety-block reason.
+The native installed client connects with execution disabled and the safety-block reason.
 It cannot be made ready by changing a request body or enabling the CI fixture in the normal launcher.
 Ctrl+C stops the foreground Runner; there is no service, scheduled task, or background installation.
 
 For Linux/macOS the corresponding operator path is `$(command -v codex)`, passed to the same
 `--codex-bin` option. This implementation does not claim a verified safe live profile on those platforms.
 The fixed native argv builder is `agent/codex/adapter.mjs:execArguments`; no actual exec command was run.
+
+The implemented WSL path, after manual per-boot lab preparation and official login:
+
+```powershell
+node scripts/lab/transfer.mjs
+npm run design:preflight -- --codex-wsl
+npm run agent:design -- --origin http://127.0.0.1:3000 --name "Local design Runner" --codex-wsl
+```
+
+Preparation removes only the authorized lab's shared mounts; the adapter never
+runs that root helper. Missing preparation, changed policy or absent login blocks
+inference. See `wsl-adapter.md` for the one-call protected TEST smoke command.
 
 ```text
 npm run db:test:up

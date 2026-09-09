@@ -1,22 +1,22 @@
-import { preflight, ISOLATION_STATUS } from '../agent/codex/adapter.mjs';
+import { officialAdapter } from '../agent/codex/adapter.mjs';
 const args = process.argv.slice(2);
-if (args.length !== 2 || args[0] !== '--codex-bin')
-  throw new Error('Expected --codex-bin absolute-native-executable');
-const runtime = await preflight(args[1]);
-// No model invocation is authorized while the same-profile isolation canary fails.
+let adapter;
+if (args.length === 1 && args[0] === '--codex-wsl')
+  adapter = await officialAdapter(null, { transport: 'wsl' });
+else if (args.length === 2 && args[0] === '--codex-bin')
+  adapter = await officialAdapter(args[1]);
+else
+  throw Error('Expected --codex-wsl or --codex-bin absolute-native-executable');
 console.log(
   JSON.stringify(
     {
-      kind: 'official-local-smoke',
-      runtime,
-      isolationStatus: ISOLATION_STATUS,
-      status: 'blocked',
+      kind: 'official-local-preflight',
+      runtime: adapter.runtime,
+      diagnostics: adapter.diagnostics ?? null,
       modelInvocations: 0,
-      reason: runtime.status,
-      evidence:
-        'Official Windows permission-profile canaries did not deny outside reads or loopback access. See astra-isolation.md. No auth file was read or copied.',
     },
     null,
     2,
   ),
 );
+if (adapter.runtime.status !== 'ready') process.exitCode = 1;

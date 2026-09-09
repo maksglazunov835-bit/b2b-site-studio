@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "3af1fd589825489d83d9f446eaa2ad77480182da41f98e18788c1dcf764eb901",
+  "sha256": "b78ec4ec592921c02df698d19b7f77fb92bcd81e7cc56c03632819541cb938c8",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -21,7 +21,23 @@
     },
     {
       "path": "agent/codex/adapter.mjs",
-      "sha256": "abeafa6b12892be499e7f003f5e552bbed64a9da35bb8b10b685952a22af01ef"
+      "sha256": "05a78ebe7c15c31c11959a30c6096a41e5af23d6b7a1e44ed9b95e1d4b7f2b8c"
+    },
+    {
+      "path": "agent/codex/wsl-policy.mjs",
+      "sha256": "a49632d7779898ff8a06f9387c2ba4b8fe3b655d662cf9d7554841b1c5efe63c"
+    },
+    {
+      "path": "agent/codex/wsl-runtime.mjs",
+      "sha256": "9b5853ff946f72194fc73faec16e2f944aff36848eadf7ea505ce11934a5d54b"
+    },
+    {
+      "path": "agent/codex/wsl-bridge.mjs",
+      "sha256": "a192310539fc50114d3e71385fb23e88e9863ee5e03486a7981dd22b3114aa8b"
+    },
+    {
+      "path": "agent/codex/wsl-supervisor.py",
+      "sha256": "3d69466b300a56e625149749c4607a70d750daadff36c7f4613789366efbfd7a"
     },
     {
       "path": "agent/codex/model-catalog.mjs",
@@ -49,7 +65,7 @@
     },
     {
       "path": "agent/design-main.mjs",
-      "sha256": "2e1a5d7367fc6e3778b3b214772ee72575e63816df068f0e45272447a5842047"
+      "sha256": "08577352e2ed2d31b77c59830ac7f28e04ce16c1e699978065e3ea77d49b0c27"
     },
     {
       "path": "agent/session.mjs",

@@ -2,6 +2,7 @@ import { runBounded } from './bounded-process.mjs';
 import { outputParser } from './jsonl.mjs';
 import { queryModelCatalog } from './model-catalog.mjs';
 import { permissionArguments } from './permission-profile.mjs';
+import { callLab } from './wsl-bridge.mjs';
 import {
   mkdtemp,
   mkdir,
@@ -26,7 +27,7 @@ import { RunnerError } from '../transport.mjs';
 
 export const VERIFIED_CLI_VERSION = '0.153.4';
 // Same-profile Windows canaries failed read/network isolation on 2026-09-09.
-// No ready path is authorized until that system boundary passes independent checks.
+// Native path stays blocked. The separate WSL path derives admission per run.
 export const ISOLATION_STATUS = 'CODEX_ISOLATION_UNVERIFIED';
 const disabled = [
   'shell_tool',
@@ -89,9 +90,9 @@ export function execArguments(directory, schemaPath) {
     '-c',
     'web_search="disabled"',
     '-c',
-    'tools.update_plan=false',
+    'tools.update_plan.enabled=false',
     '-c',
-    'tools.experimental_request_user_input=false',
+    'tools.experimental_request_user_input.enabled=false',
     ...disabled.flatMap((flag) => ['--disable', flag]),
     '--cd',
     directory,
@@ -275,7 +276,12 @@ export async function isolatedInvocation(
       await rm(directory, { recursive: true });
   }
 }
-export async function officialAdapter(binary) {
+export async function officialAdapter(
+  binary,
+  { transport = 'native', signal } = {},
+) {
+  if (transport === 'wsl') return officialWslAdapter({ signal });
+  if (transport !== 'native') throw new RunnerError('LAB_SETUP_REQUIRED');
   const runtime = await preflight(binary);
   return {
     runtime,
@@ -285,6 +291,69 @@ export async function officialAdapter(binary) {
           runtime.status === 'ready' ? ISOLATION_STATUS : runtime.status,
         );
       return isolatedInvocation(binary, [], spec, attempt, options);
+    },
+  };
+}
+
+export async function officialWslAdapter({ signal } = {}) {
+  const runtime = {
+    provider: 'codex',
+    cliVersion: VERIFIED_CLI_VERSION,
+    model: DESIGN_SETTINGS.model,
+    effort: DESIGN_SETTINGS.effort,
+    policySha256: ADAPTER.sha256,
+    status: ISOLATION_STATUS,
+    modelSelection: null,
+  };
+  let diagnostics;
+  try {
+    diagnostics = await callLab({ operation: 'preflight' }, { signal });
+    runtime.status = diagnostics.status;
+    runtime.modelSelection = diagnostics.modelSelection;
+  } catch (e) {
+    diagnostics = {
+      status: e.code ?? 'LAB_SETUP_REQUIRED',
+      modelInvocations: 0,
+    };
+  }
+  let invoked = false;
+  return {
+    runtime,
+    diagnostics,
+    async execute(spec, attempt, options = {}) {
+      assertDesignSpec(spec);
+      if (runtime.status !== 'ready') throw new RunnerError(runtime.status);
+      if (invoked) throw new RunnerError('CODEX_PROCESS_FAILED');
+      invoked = true;
+      const parser = outputParser(spec.input.brief);
+      const output = await callLab(
+        { operation: 'invoke', prompt: promptFor(spec.input.brief), schema },
+        {
+          signal: options.signal,
+          timeoutMs: 180000,
+          onData: (stream, bytes) => parser[stream](bytes),
+        },
+      );
+      if (output.confirmed !== true || output.modelInvocations !== 1)
+        throw new RunnerError('STOP_UNCONFIRMED');
+      return assertDesignReport(
+        {
+          reportVersion: '1.1.0',
+          jobId: spec.jobId,
+          attempt,
+          inputSha256: spec.input.sha256,
+          jobSpecSha256: sha256Json(spec),
+          provider: 'codex',
+          cliVersion: runtime.cliVersion,
+          model: runtime.model,
+          effort: runtime.effort,
+          modelEvidence: modelEvidence(spec),
+          providerInvocations: 1,
+          ...parser.finish(output),
+        },
+        spec,
+        attempt,
+      );
     },
   };
 }
