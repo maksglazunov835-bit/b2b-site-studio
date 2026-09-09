@@ -68,7 +68,7 @@ async function main() {
     if (["full", "agents"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/agents/upgrade.test.mjs", "tests/agents/service.test.mjs", "tests/agents/transport.test.mjs"]);
     if (["full", "execution"].includes(mode)) await run(["--test", "--test-concurrency=1", "tests/execution/service.test.mjs", "tests/execution/upgrade.test.mjs", "tests/execution/worker.test.mjs"]);
     if (['full','design'].includes(mode)) await run(['--test','--test-concurrency=1','tests/design/service.test.mjs','tests/design/upgrade.test.mjs']);
-    if (['full','design-regressions'].includes(mode)) await run(['--test','--test-concurrency=1','tests/design/lifecycle.test.mjs','tests/design/streaming.test.mjs','tests/design/model-policy.test.mjs']);
+    if (['full','design-regressions'].includes(mode)) await run(['--test','--test-concurrency=1','tests/design/lifecycle.test.mjs','tests/design/streaming.test.mjs','tests/design/model-policy.test.mjs','tests/design/isolation-diagnostic.test.mjs']);
     if (mode === "full") {
       if (!process.env.npm_execpath) throw new Error("Run ci:full through npm.");
       await run([process.env.npm_execpath, "run", "ci"]);

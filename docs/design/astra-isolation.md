@@ -129,3 +129,10 @@ still permits at most one official Astra model invocation, never a silent repeat
 
 Installed help and generated local protocol schema were checked before diagnostics. The API
 model page is not a billing or transport change; the actual CLI catalog determines the effort.
+
+## Subsequent authorized lab investigation
+
+The 2026-09-09 follow-up is recorded in [wsl-lab.md](wsl-lab.md). It compares
+Windows configuration sources and installs the one owner-authorized WSL lab.
+The original results above remain historical evidence; live execution is still
+blocked and the WSL investigation is not a successful model smoke.

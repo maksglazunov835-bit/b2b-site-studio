@@ -14,11 +14,13 @@ import net from 'node:net';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import { clientEnvironment } from '../agent/codex/adapter.mjs';
+import { windowsProbePassed } from './lab/probe-matrix.mjs';
 import {
   DESIGN_PERMISSION_PROFILE,
   permissionArguments,
 } from '../agent/codex/permission-profile.mjs';
 const binary = process.argv[2];
+const cleanHome = process.argv[3] === '--clean-home';
 if (!path.isAbsolute(binary ?? ''))
   throw new Error('Absolute official binary required');
 const root = await realpath(tmpdir());
@@ -41,7 +43,10 @@ async function sandboxCommand(task, command) {
       ],
       {
         cwd: task,
-        env: clientEnvironment(),
+        env: {
+          ...clientEnvironment(),
+          ...(cleanHome ? { CODEX_HOME: path.join(owned, 'clean-home') } : {}),
+        },
         shell: false,
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -91,6 +96,15 @@ async function sandboxCommand(task, command) {
               profile: c.permissions?.[DESIGN_PERMISSION_PROFILE],
               legacySandbox: c.sandbox_mode,
             };
+            send(4, 'windowsSandbox/readiness', {});
+          }
+          if (r.id === 4) {
+            applied.readiness = r.result.status;
+            if (r.result.status !== 'ready') {
+              result = { setupRequired: true };
+              child.stdin.end();
+              continue;
+            }
             send(3, 'command/exec', {
               command,
               cwd: task,
@@ -128,6 +142,7 @@ try {
   const task = path.join(owned, 'task'),
     outside = path.join(owned, 'outside');
   await mkdir(task);
+  if (cleanHome) await mkdir(path.join(owned, 'clean-home'));
   await mkdir(outside);
   await mkdir(path.join(task, 'output'));
   await writeFile(path.join(task, 'input.json'), '{"synthetic":true}');
@@ -145,6 +160,20 @@ try {
   );
   listener.listen(0, '::');
   await once(listener, 'listening');
+  const positiveControls = {};
+  for (const host of ['127.0.0.1', '::1']) {
+    positiveControls[host] = await new Promise((resolve) => {
+      const socket = net.connect({ host, port: listener.address().port });
+      const finish = (value) => {
+        socket.destroy();
+        resolve(value);
+      };
+      socket.setTimeout(1000, () => finish(false));
+      socket.once('connect', () => finish(true));
+      socket.once('error', () => finish(false));
+    });
+  }
+  connections = 0;
   const result = await sandboxCommand(task, [
     process.execPath,
     path.join(task, 'canary.mjs'),
@@ -158,18 +187,23 @@ try {
   const outsideUnchanged =
     (await readFile(path.join(outside, 'marker.txt'), 'utf8')) ===
     'SYNTHETIC-DO-NOT-READ';
-  const passed =
-    result.exitCode === 0 &&
-    checks &&
-    Object.keys(checks).length === 11 &&
-    Object.values(checks).every((v) => v === true) &&
-    connections === 0 &&
-    outsideUnchanged;
+  const passed = windowsProbePassed({
+    exitCode: result.exitCode,
+    checks,
+    positiveControls,
+    connections,
+    outsideUnchanged,
+  });
   console.log(
     JSON.stringify(
       {
         kind: 'official-sandbox-canary',
         modelInvocations: 0,
+        configSource: cleanHome
+          ? 'empty-owned-CODEX_HOME'
+          : 'existing-user-config',
+        positiveControls,
+        setupRequired: result.setupRequired ?? false,
         exitCode: result.exitCode,
         rpcError: result.rpcError,
         policyError: result.policyError,
