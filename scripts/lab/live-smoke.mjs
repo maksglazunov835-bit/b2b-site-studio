@@ -200,7 +200,7 @@ try {
     provider: 'codex',
     requestedModel: 'gpt-6-astra',
     effort: 'ultra',
-    independentModelObservation: result.report.modelEvidence,
+    modelEvidence: result.report.modelEvidence,
     cliVersion: result.report.cliVersion,
     hashes: preflight.diagnostics.hashes,
     inputSha256: result.report.inputSha256,

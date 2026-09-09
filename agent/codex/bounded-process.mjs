@@ -30,7 +30,7 @@ async function groupAlive(pid) {
 }
 const delay = (ms) => new Promise((done) => setTimeout(done, ms));
 let nativeHelper;
-function windowsHelper() {
+function windowsHelper(timeoutMs) {
   nativeHelper ??= new Promise((resolve, reject) => {
     const root = realpathSync(tmpdir());
     const directory = mkdtempSync(path.join(root, 'b2b-job-host-'));
@@ -65,10 +65,15 @@ function windowsHelper() {
         ),
       },
     );
-    const timer = setTimeout(() => {
-      compiler.kill();
-      reject(new RunnerError('CODEX_NOT_AVAILABLE'));
-    }, 5000);
+    const timer = setTimeout(
+      () => {
+        compiler.kill();
+        reject(new RunnerError('CODEX_NOT_AVAILABLE'));
+        // Cold compiler startup belongs to the caller's existing deadline. The
+        // lifecycle setup test explicitly budgets 15s; execution budgets stay intact.
+      },
+      Math.min(timeoutMs, 15000),
+    );
     compiler.once('error', () => {
       clearTimeout(timer);
       reject(new RunnerError('CODEX_NOT_AVAILABLE'));
@@ -99,7 +104,8 @@ export async function runBounded(
 ) {
   if (signal?.aborted) throw new RunnerError('RUNNER_STOPPED');
   const started = Date.now();
-  const helper = process.platform === 'win32' ? await windowsHelper() : null;
+  const helper =
+    process.platform === 'win32' ? await windowsHelper(timeoutMs) : null;
   if (Date.now() - started >= timeoutMs) throw new RunnerError('CODEX_TIMEOUT');
   timeoutMs -= Date.now() - started;
   return new Promise((resolve, reject) => {

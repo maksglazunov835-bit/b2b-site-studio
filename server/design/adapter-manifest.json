@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "b78ec4ec592921c02df698d19b7f77fb92bcd81e7cc56c03632819541cb938c8",
+  "sha256": "486d4f88a2447b642e3251ada43fee6830e0a6c099a73454203d99b1c4ee7f2c",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -49,7 +49,7 @@
     },
     {
       "path": "agent/codex/bounded-process.mjs",
-      "sha256": "7e2b709ee0b3ce9eb1d04092f313e9132bcbd85d230119a5ce901f5284cb04d1"
+      "sha256": "e9a93766bb03a9e7eb15be82ed01038d8be0800f43a7427d069722790de84559"
     },
     {
       "path": "agent/codex/WindowsJob.cs",
