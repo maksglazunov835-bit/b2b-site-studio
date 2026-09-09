@@ -108,7 +108,16 @@ jobs:
           cache: npm
       - run: npm ci
       # This mode validates the separate TEST target but performs no SQL.
-      - run: node scripts/persistence/run-tests.mjs design-regressions
+      - name: Run native regressions in an explicit test-only environment
+        shell: pwsh
+        run: |
+          # Hosted Windows images include PostgreSQL tooling environment defaults.
+          # Clear only this step's PG* variables, never relax safe-runner rejection.
+          Get-ChildItem Env: | Where-Object Name -Match '^PG' | ForEach-Object {
+            Write-Output ("Removing hosted environment name: " + $_.Name)
+            Remove-Item -LiteralPath ('Env:' + $_.Name)
+          }
+          node scripts/persistence/run-tests.mjs design-regressions
       - uses: actions/upload-artifact@v4
         with:
           name: windows-process-tree-${{ github.event.pull_request.head.sha || github.sha }}
