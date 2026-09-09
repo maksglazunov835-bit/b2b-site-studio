@@ -10,7 +10,7 @@ const args = process.argv.slice(2);
 const schemaPath = args[args.indexOf('--output-schema') + 1];
 assert.deepEqual(args, execArguments(process.cwd(), schemaPath));
 assert.equal(await realpath(process.cwd()), process.cwd());
-assert.deepEqual(await readdir(process.cwd()), ['proposal.schema.json']);
+assert.deepEqual(await readdir(process.cwd()), ['output', 'proposal.schema.json']);
 assert.equal(
   JSON.parse(await readFile(schemaPath)).title,
   'DesignProposal 1.0.0',

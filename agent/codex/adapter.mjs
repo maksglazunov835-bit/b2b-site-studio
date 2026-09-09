@@ -1,6 +1,15 @@
 import { runBounded } from './bounded-process.mjs';
 import { outputParser } from './jsonl.mjs';
-import { mkdtemp, realpath, lstat, writeFile, rm } from 'node:fs/promises';
+import { queryModelCatalog } from './model-catalog.mjs';
+import { permissionArguments } from './permission-profile.mjs';
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  lstat,
+  writeFile,
+  rm,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,12 +19,15 @@ import {
   DESIGN_SETTINGS,
   assertDesignSpec,
   assertDesignReport,
+  modelEvidence,
 } from '../../server/design/contract.mjs';
 import { sha256Json } from '../../server/persistence/canonical-json.mjs';
 import { RunnerError } from '../transport.mjs';
 
 export const VERIFIED_CLI_VERSION = '0.153.4';
-export const SAFE_PROFILE_VERIFIED = false;
+// Same-profile Windows canaries failed read/network isolation on 2026-09-09.
+// No ready path is authorized until that system boundary passes independent checks.
+export const ISOLATION_STATUS = 'CODEX_ISOLATION_UNVERIFIED';
 const disabled = [
   'shell_tool',
   'unified_exec',
@@ -66,8 +78,7 @@ export function execArguments(directory, schemaPath) {
     '--ignore-rules',
     '--skip-git-repo-check',
     '--ephemeral',
-    '--sandbox',
-    'read-only',
+    ...permissionArguments(),
     '--color',
     'never',
     '--json',
@@ -105,7 +116,10 @@ export function promptFor(brief) {
 export function boundedProcess(file, args, options = {}) {
   return runBounded(file, args, { env: clientEnvironment(), ...options });
 }
-export async function preflight(binary, { probe = boundedProcess } = {}) {
+export async function preflight(
+  binary,
+  { probe = boundedProcess, modelQuery = queryModelCatalog } = {},
+) {
   const runtime = {
     provider: 'codex',
     cliVersion: 'unknown',
@@ -113,6 +127,7 @@ export async function preflight(binary, { probe = boundedProcess } = {}) {
     effort: DESIGN_SETTINGS.effort,
     policySha256: ADAPTER.sha256,
     status: 'CODEX_NOT_AVAILABLE',
+    modelSelection: null,
   };
   try {
     if (
@@ -151,8 +166,32 @@ export async function preflight(binary, { probe = boundedProcess } = {}) {
       login.code !== 0
         ? 'CODEX_LOGIN_REQUIRED'
         : /ChatGPT/i.test(login.stdout + login.stderr)
-          ? 'CODEX_SAFE_PROFILE_UNVERIFIED'
+          ? ISOLATION_STATUS
           : 'CODEX_AUTH_UNSUPPORTED';
+    if (runtime.status !== ISOLATION_STATUS) return runtime;
+    try {
+      const selection = await modelQuery(actual, clientEnvironment());
+      if (
+        selection.resolvedModel !== DESIGN_SETTINGS.model ||
+        selection.effort !== DESIGN_SETTINGS.effort
+      )
+        throw new RunnerError('CODEX_MODEL_CAPABILITY_MISMATCH');
+      runtime.modelSelection = {
+        source: selection.source,
+        resolvedModel: selection.resolvedModel,
+        effort: selection.effort,
+        supportedReasoningEfforts: selection.supportedReasoningEfforts,
+      };
+    } catch (e) {
+      runtime.status = [
+        'CODEX_MODEL_NOT_AVAILABLE',
+        'CODEX_MODEL_QUERY_FAILED',
+        'CODEX_MODEL_CAPABILITY_MISMATCH',
+        'CODEX_AUTH_UNSUPPORTED',
+      ].includes(e.code)
+        ? e.code
+        : 'CODEX_MODEL_QUERY_FAILED';
+    }
     return runtime;
   } catch {
     return runtime;
@@ -192,6 +231,7 @@ export async function isolatedInvocation(
     )
       throw new RunnerError('CODEX_PROCESS_FAILED');
     const schemaPath = path.join(directory, 'proposal.schema.json');
+    await mkdir(path.join(directory, 'output'));
     await writeFile(schemaPath, JSON.stringify(schema), { flag: 'wx' });
     const parser = outputParser(spec.input.brief);
     const output = await boundedProcess(
@@ -209,7 +249,7 @@ export async function isolatedInvocation(
     const result = parser.finish(output);
     return assertDesignReport(
       {
-        reportVersion: '1.0.0',
+        reportVersion: '1.1.0',
         jobId: spec.jobId,
         attempt,
         inputSha256: spec.input.sha256,
@@ -218,6 +258,7 @@ export async function isolatedInvocation(
         cliVersion: spec.runtime.cliVersion,
         model: spec.settings.model,
         effort: spec.settings.effort,
+        modelEvidence: modelEvidence(spec),
         providerInvocations: 1,
         ...result,
       },
@@ -239,11 +280,9 @@ export async function officialAdapter(binary) {
   return {
     runtime,
     async execute(spec, attempt, options) {
-      if (!SAFE_PROFILE_VERIFIED || runtime.status !== 'ready')
+      if (runtime.status !== 'ready' || ISOLATION_STATUS !== 'verified')
         throw new RunnerError(
-          runtime.status === 'ready'
-            ? 'CODEX_SAFE_PROFILE_UNVERIFIED'
-            : runtime.status,
+          runtime.status === 'ready' ? ISOLATION_STATUS : runtime.status,
         );
       return isolatedInvocation(binary, [], spec, attempt, options);
     },

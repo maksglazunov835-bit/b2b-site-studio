@@ -81,9 +81,22 @@ void test('sanitized preflight separates missing login, unsupported auth/version
     ['0.0.1', 'ChatGPT', 0, 'CODEX_UNSUPPORTED_VERSION'],
     ['0.153.4', 'Not logged in', 1, 'CODEX_LOGIN_REQUIRED'],
     ['0.153.4', 'API key', 0, 'CODEX_AUTH_UNSUPPORTED'],
-    ['0.153.4', 'ChatGPT', 0, 'CODEX_SAFE_PROFILE_UNVERIFIED'],
+    ['0.153.4', 'ChatGPT', 0, 'CODEX_ISOLATION_UNVERIFIED'],
   ]) {
     const runtime = await preflight(process.execPath, {
+      modelQuery: async () => ({
+        source: 'official_model_list',
+        resolvedModel: 'gpt-6-astra',
+        effort: 'ultra',
+        supportedReasoningEfforts: [
+          'low',
+          'medium',
+          'high',
+          'xhigh',
+          'max',
+          'ultra',
+        ],
+      }),
       probe: async (file, args) => ({
         code: args[0] === 'login' ? code : 0,
         signalCode: null,
@@ -119,7 +132,8 @@ void test('official missing executable refuses; filtered env, fixed argv and unt
     { HOME: 'local-home' },
   );
   const args = execArguments('owned', 'owned/schema.json');
-  assert.ok(args.includes('read-only'));
+  assert.ok(!args.includes('--sandbox'));
+  assert.ok(args.includes('permissions.b2b-design-json.network.enabled=false'));
   assert.ok(args.includes('--ignore-user-config'));
   assert.ok(!args.includes('--full-auto'));
   assert.ok(args.includes('--ignore-rules'));

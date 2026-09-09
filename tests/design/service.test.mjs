@@ -152,6 +152,10 @@ void test('official unverified runtime is visible but cannot dispatch; prior cre
     profile: {
       ...runtime,
       provider: 'codex',
+      modelSelection: {
+        ...runtime.modelSelection,
+        source: 'official_model_list',
+      },
       cliVersion: '0.153.4',
       status: 'CODEX_SAFE_PROFILE_UNVERIFIED',
     },

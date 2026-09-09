@@ -1,11 +1,15 @@
 {
   "id": "codex_design_exec",
-  "version": "1.0.0",
-  "sha256": "f22fd1049e2b6cac06b4dba15a08fe11425889cd9af249206e5260745085f392",
+  "version": "1.1.0",
+  "sha256": "3af1fd589825489d83d9f446eaa2ad77480182da41f98e18788c1dcf764eb901",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
       "sha256": "e3a7ef9d4f6c529224be749a89aaad84676dc1689da00c0fd203cab4b2d7e8f7"
+    },
+    {
+      "path": "docs/contracts/design-job-astra.schema.json",
+      "sha256": "605bedc5283b7b311d35b725c6aab5a512b01e3b4850579f386244e9a9be98a6"
     },
     {
       "path": "docs/contracts/design-proposal.schema.json",
@@ -13,11 +17,19 @@
     },
     {
       "path": "server/design/contract.mjs",
-      "sha256": "e75fa40d0ed8a63517993fa798e9b66ad299e7f376fbb75131017b0fdca9b1be"
+      "sha256": "8ce1844d9b857001eba123f6f075f8598261e0a551b401329691790d53634d6d"
     },
     {
       "path": "agent/codex/adapter.mjs",
-      "sha256": "a5b9d12e48c1cc210ada7d67f39b098574f0d497df37d254df050af7bfe11847"
+      "sha256": "abeafa6b12892be499e7f003f5e552bbed64a9da35bb8b10b685952a22af01ef"
+    },
+    {
+      "path": "agent/codex/model-catalog.mjs",
+      "sha256": "d166cb43b99f8e5194423cf389c845dce53fbf29db6f1ce52de76e3dcd0e2f6c"
+    },
+    {
+      "path": "agent/codex/permission-profile.mjs",
+      "sha256": "556ae37fb46047ed8e9a66d5093f4bb101004e9dd8e501aff05c7f27b5fc6021"
     },
     {
       "path": "agent/codex/bounded-process.mjs",

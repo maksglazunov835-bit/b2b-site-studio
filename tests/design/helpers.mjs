@@ -5,7 +5,7 @@ import { jobs } from '../../server/jobs/service.mjs';
 import { createAgentService } from '../../server/agents/service.mjs';
 import { createExecutionService } from '../../server/execution/service.mjs';
 import { newSecret } from '../../server/agents/requests.mjs';
-import { ADAPTER } from '../../server/design/contract.mjs';
+import { ADAPTER, modelEvidence } from '../../server/design/contract.mjs';
 import { sha256Json } from '../../server/persistence/canonical-json.mjs';
 import { assertSafeTestDatabaseUrl } from '../../scripts/db/test-config.mjs';
 import { runnerEnvironment } from '../../agent/environment.mjs';
@@ -86,7 +86,7 @@ export async function fixture({
 export function report(a) {
   const s = a.jobSpec;
   return {
-    reportVersion: '1.0.0',
+    reportVersion: '1.1.0',
     jobId: s.jobId,
     attempt: 1,
     inputSha256: s.input.sha256,
@@ -95,6 +95,7 @@ export function report(a) {
     cliVersion: runtime.cliVersion,
     model: s.settings.model,
     effort: s.settings.effort,
+    modelEvidence: modelEvidence(s),
     providerInvocations: 1,
     proposal: proposal(s.input.brief),
     usage: null,

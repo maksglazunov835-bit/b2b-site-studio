@@ -10,6 +10,19 @@ export const runtime = {
   effort: DESIGN_SETTINGS.effort,
   policySha256: ADAPTER.sha256,
   status: 'ready',
+  modelSelection: {
+    source: 'test_fixture',
+    resolvedModel: DESIGN_SETTINGS.model,
+    effort: DESIGN_SETTINGS.effort,
+    supportedReasoningEfforts: [
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+      'ultra',
+    ],
+  },
 };
 export const brief = {
   companyName: 'Synthetic catalog',

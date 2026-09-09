@@ -4,7 +4,14 @@ export const designMessages: Record<string, string> = {
   CODEX_LOGIN_REQUIRED: 'Нужен локальный вход в официальный Codex',
   CODEX_AUTH_UNSUPPORTED: 'Нужен вход через ChatGPT; API key не используется',
   CODEX_SAFE_PROFILE_UNVERIFIED:
-    'Запуск заблокирован: профиль без инструментов не подтверждён',
+    'Запуск заблокирован: прежний профиль безопасности не подтверждён',
+  CODEX_ISOLATION_UNVERIFIED:
+    'Запуск заблокирован: изоляция файлов и сети не подтверждена',
+  CODEX_MODEL_NOT_AVAILABLE:
+    'GPT-6 Astra недоступна текущему ChatGPT-входу; замены модели нет',
+  CODEX_MODEL_QUERY_FAILED: 'Не удалось проверить доступность GPT-6 Astra',
+  CODEX_MODEL_CAPABILITY_MISMATCH:
+    'GPT-6 Astra не поддерживает закреплённый quality-профиль ultra',
   CODEX_QUOTA: 'Лимит Codex исчерпан; автоматического повтора не будет',
   CODEX_TIMEOUT: 'Время запроса истекло; автоматического повтора не будет',
   CODEX_INVALID_OUTPUT: 'Ответ не соответствует безопасному формату концепций',

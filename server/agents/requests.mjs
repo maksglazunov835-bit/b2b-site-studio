@@ -45,7 +45,7 @@ function designRegistration(value) {
   if (!registration({ ...base, mode: 'presence_only' }) || !adapterCompatible(adapter)) return false;
   assertRuntime(runtime);
   if (runtime.provider === 'test_stub' && process.env.B2B_DESIGN_TEST_STUB !== '1') return false;
-  // No verified empty-tool profile is available for the installed official release.
+  // The same-profile system isolation canary is not passing on the supported release.
   if (runtime.provider === 'codex' && runtime.status === 'ready') return false;
   return true;
 }

@@ -1,6 +1,6 @@
 import Ajv2020 from 'ajv/dist/2020.js';
 import schema from '../../docs/contracts/design-proposal.schema.json' with { type: 'json' };
-import jobSchema from '../../docs/contracts/design-job.schema.json' with { type: 'json' };
+import jobSchema from '../../docs/contracts/design-job-astra.schema.json' with { type: 'json' };
 import manifest from './adapter-manifest.json' with { type: 'json' };
 import { boundedJson } from '../execution/bounds.mjs';
 import { PersistenceError } from '../persistence/errors.mjs';
@@ -18,22 +18,29 @@ export const DESIGN_POLICY = Object.freeze({
   maxProviderInvocations: 1,
 });
 export const DESIGN_SETTINGS = Object.freeze({
-  model: 'gpt-5.6-luna',
-  effort: 'medium',
+  model: 'gpt-6-astra',
+  effort: 'ultra',
   templateVersion: 'design_proposal@1',
   outputSchemaVersion: '1.0.0',
 });
 export const ADAPTER = Object.freeze({
   id: 'codex_design_exec',
-  version: '1.0.0',
+  version: '1.1.0',
   sha256: manifest.sha256,
 });
-export const DESIGN_CODES = [
+export const DESIGN_PREFLIGHT_CODES = [
   'CODEX_NOT_AVAILABLE',
   'CODEX_UNSUPPORTED_VERSION',
   'CODEX_LOGIN_REQUIRED',
   'CODEX_AUTH_UNSUPPORTED',
   'CODEX_SAFE_PROFILE_UNVERIFIED',
+  'CODEX_MODEL_NOT_AVAILABLE',
+  'CODEX_MODEL_QUERY_FAILED',
+  'CODEX_MODEL_CAPABILITY_MISMATCH',
+  'CODEX_ISOLATION_UNVERIFIED',
+];
+export const DESIGN_CODES = [
+  ...DESIGN_PREFLIGHT_CODES,
   'CODEX_QUOTA',
   'CODEX_TIMEOUT',
   'CODEX_INVALID_OUTPUT',
@@ -57,18 +64,39 @@ export function assertRuntime(value) {
   if (
     !value ||
     Object.keys(value).sort().join() !==
-      'cliVersion,effort,model,policySha256,provider,status' ||
+      'cliVersion,effort,model,modelSelection,policySha256,provider,status' ||
     !['codex', 'test_stub'].includes(value.provider) ||
     typeof value.cliVersion !== 'string' ||
     !/^[A-Za-z0-9.-]{1,32}$/.test(value.cliVersion) ||
     value.model !== DESIGN_SETTINGS.model ||
     value.effort !== DESIGN_SETTINGS.effort ||
     value.policySha256 !== ADAPTER.sha256 ||
-    !['ready', ...DESIGN_CODES.slice(0, 5)].includes(value.status)
+    !['ready', ...DESIGN_PREFLIGHT_CODES].includes(value.status)
   )
     designError('INVALID_CODEX_RUNTIME');
   if (value.provider === 'test_stub' && value.cliVersion !== 'test-cli-1')
     designError('INVALID_CODEX_RUNTIME');
+  const selection = value.modelSelection;
+  if (selection !== null) {
+    if (
+      !selection ||
+      Object.keys(selection).sort().join() !==
+        'effort,resolvedModel,source,supportedReasoningEfforts' ||
+      selection.source !==
+        (value.provider === 'codex' ? 'official_model_list' : 'test_fixture') ||
+      selection.resolvedModel !== DESIGN_SETTINGS.model ||
+      selection.effort !== DESIGN_SETTINGS.effort ||
+      !Array.isArray(selection.supportedReasoningEfforts) ||
+      selection.supportedReasoningEfforts.length > 6 ||
+      new Set(selection.supportedReasoningEfforts).size !==
+        selection.supportedReasoningEfforts.length ||
+      !selection.supportedReasoningEfforts.includes(DESIGN_SETTINGS.effort) ||
+      selection.supportedReasoningEfforts.some(
+        (e) => !['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(e),
+      )
+    )
+      designError('INVALID_CODEX_RUNTIME');
+  } else if (value.status === 'ready') designError('INVALID_CODEX_RUNTIME');
   return value;
 }
 export function designInput(snapshot) {
@@ -147,7 +175,7 @@ export function materializeDesign(job, snapshot, workspaceId, runtime) {
   assertRuntime(runtime);
   const brief = designInput(snapshot);
   const spec = {
-    jobSpecVersion: '1.4.0',
+    jobSpecVersion: '1.4.1',
     executionProfile: 'codex_design',
     type: 'design_proposal',
     jobId: job.id,
@@ -173,7 +201,7 @@ export function assertDesignSpec(spec, digest) {
   boundedJson(spec);
   if (!validateJob(spec)) designError('INVALID_DESIGN_SPEC');
   if (
-    spec?.jobSpecVersion !== '1.4.0' ||
+    spec?.jobSpecVersion !== '1.4.1' ||
     spec?.executionProfile !== 'codex_design' ||
     spec?.type !== 'design_proposal' ||
     Object.keys(spec).sort().join() !==
@@ -211,8 +239,8 @@ export function assertDesignReport(report, spec, attempt) {
   if (
     !report ||
     Object.keys(report).sort().join() !==
-      'attempt,cliVersion,effort,inputSha256,jobId,jobSpecSha256,model,proposal,provider,providerInvocations,reportVersion,usage' ||
-    report.reportVersion !== '1.0.0' ||
+      'attempt,cliVersion,effort,inputSha256,jobId,jobSpecSha256,model,modelEvidence,proposal,provider,providerInvocations,reportVersion,usage' ||
+    report.reportVersion !== '1.1.0' ||
     report.attempt !== attempt ||
     attempt !== 1 ||
     report.jobId !== spec.jobId ||
@@ -222,6 +250,7 @@ export function assertDesignReport(report, spec, attempt) {
     report.cliVersion !== spec.runtime.cliVersion ||
     report.model !== spec.settings.model ||
     report.effort !== spec.settings.effort ||
+    !equal(report.modelEvidence, modelEvidence(spec)) ||
     report.providerInvocations !== 1
   )
     designError('DESIGN_REPORT_MISMATCH');
@@ -236,4 +265,13 @@ export function assertDesignReport(report, spec, attempt) {
     designError('DESIGN_REPORT_MISMATCH');
   assertProposal(report.proposal, spec.input.brief);
   return report;
+}
+
+export function modelEvidence(spec) {
+  return {
+    requestedModel: spec.settings.model,
+    resolvedModel: spec.runtime.modelSelection?.resolvedModel ?? null,
+    observedModel: null,
+    source: spec.runtime.modelSelection?.source ?? null,
+  };
 }

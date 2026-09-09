@@ -3,16 +3,22 @@
 ## Status and live-call boundary
 
 The queue, isolated adapter protocol, validation, storage, and preview are implemented.
-The official live call is **blocked**, not demonstrated: `CODEX_SAFE_PROFILE_UNVERIFIED`.
+The official live call is **blocked**, not demonstrated: `CODEX_ISOLATION_UNVERIFIED`.
 CI uses an explicitly labelled child-process `test_stub`. Its screenshots are not model output.
 No real inference was performed while implementing this issue (zero model invocations).
 Independent functional acceptance still needs a separately evidenced safe official smoke.
 
-The follow-up [2026-09-09 diagnostic matrix](profile-diagnostics.md) records actual
+The active [Astra and OS-isolation evidence](astra-isolation.md) records official model/list,
+the developer session, the failed same-profile Windows canaries and the one proposed
+owner-approved infrastructure step. New jobs require `gpt-6-astra` / `ultra` with no fallback.
+Only the official local ChatGPT-authenticated client is allowed; no separate API billing.
+The owner's clarification supersedes empty-tool inventory as the acceptance condition.
+
+The historical [2026-09-09 diagnostic matrix](profile-diagnostics.md) records actual
 read-only config/managed-requirement observations and the remaining exec-specific gap.
 It also documents the process-tree and incremental JSONL repairs from review 5135047530.
 
-On 2026-09-07 the installed native Windows client was checked without reading auth.json:
+Historical evidence from 2026-09-07 (not the active model policy), without reading auth.json:
 
 - `codex-cli 0.153.4`; Authenticode Valid, OpenAI OpCo, LLC.
 - Executable SHA-256: `e5aa76d19c7c94e2e9ef9b707d590206a73ac0e97c8ddc8382181242494bef75`.
@@ -28,7 +34,7 @@ The official [non-interactive documentation](https://developers.openai.com/codex
 [configuration reference](https://developers.openai.com/codex/config-reference/),
 [configuration schema](https://developers.openai.com/codex/config-schema.json), and
 [authentication documentation](https://developers.openai.com/codex/auth/) were cross-checked with installed help.
-Managed policy is never bypassed. Do not remove the false safety gate merely to make a smoke pass.
+Managed policy is never bypassed. Do not remove the isolation gate merely to make a smoke pass.
 No login change, installation, auth-file copy, API-key fallback, proxy, or model request was attempted.
 
 ## Local commands
@@ -86,8 +92,13 @@ and receives no PostgreSQL or other platform credentials.
 
 ## Contracts and storage
 
-- `design-job.schema.json` is a separate full data envelope, version 1.4.0, not a partial legacy
-  repository/Codex JobSpec. It has no repository IDs, paths, shell commands or fictitious commit SHAs.
+- New `design-job-astra.schema.json` is the complete 1.4.1 envelope with explicit Astra/ultra,
+  catalog evidence and adapter 1.1.0. The unchanged `design-job.schema.json` documents historical
+  1.4.0 Luna inputs. Legacy reports retain their original model/provider; old jobs cannot execute
+  under the new policy. Neither envelope invents repository IDs, paths, commands or commit SHAs.
+- New report 1.1.0 records requested model, catalog-resolved model and `observedModel: null`.
+  Catalog availability does not prove inference, and generated text never sets runtime identity.
+  Historical report 1.0.0 is returned unchanged on reload, not relabelled as Astra.
 - `design-proposal.schema.json` defines exactly three concepts, fixed page/block IDs, tokens,
   local font presets, hex colors and single-column mobile rules. Page composition follows site type.
 - The pinned saved SiteSpec is independently checked by unchanged schema/semantics and SHA-256.
@@ -101,6 +112,8 @@ and receives no PostgreSQL or other platform credentials.
 - Migration 005 extends typed checks on existing jobs/grants and adds immutable
   `design_agent_profiles` and `design_invocations`. The latter consumes the one-call permission
   in the same transaction as the start/event/ack. No old rows or migrations are rewritten.
+- Migration 006 only adds typed model-query/capability/isolation failure codes. The 005->006
+  test preserves a synthetic historical Luna result, old checksums and all source rows on reload.
 - Shared jobs/events/executions/attempts/results/operation receipts stay the only execution history.
   Existing `validator_sha256` also binds the design adapter digest for the new typed grant only.
 - Existing endpoints are extended, not duplicated: POST agents/pairings and agents/register;
@@ -132,7 +145,7 @@ The live Windows Codex descendant behavior has not been validated because infere
 
 ## Evidence and remaining limits
 
-Database tests cover 004->005 preservation, pinned revision, duplicate/concurrent requests,
+Database tests cover 004->latest and 005->006 preservation, pinned revision, duplicate/concurrent requests,
 scope, single budget, event rollback, expiry/crash uncertainty, cancellation and scoped receipts.
 Process tests use a real separate Node Runner and a real built HTTP server, with actual CLI
 child processes for JSONL, faults, cancellation and output bounds. No mocked fetch substitutes

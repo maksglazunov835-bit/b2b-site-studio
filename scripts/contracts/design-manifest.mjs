@@ -4,9 +4,12 @@ import { pathToFileURL } from 'node:url';
 const root = new URL('../../', import.meta.url);
 const sources = [
   'docs/contracts/design-job.schema.json',
+  'docs/contracts/design-job-astra.schema.json',
   'docs/contracts/design-proposal.schema.json',
   'server/design/contract.mjs',
   'agent/codex/adapter.mjs',
+  'agent/codex/model-catalog.mjs',
+  'agent/codex/permission-profile.mjs',
   'agent/codex/bounded-process.mjs',
   'agent/codex/WindowsJob.cs',
   'agent/codex/jsonl.mjs',
@@ -31,7 +34,7 @@ export async function installedDesignManifest() {
   }
   return {
     id: 'codex_design_exec',
-    version: '1.0.0',
+    version: '1.1.0',
     sha256: createHash('sha256').update(JSON.stringify(files)).digest('hex'),
     files,
   };

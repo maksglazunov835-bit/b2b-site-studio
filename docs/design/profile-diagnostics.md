@@ -1,5 +1,10 @@
 # Official Runtime Diagnostics, 2026-09-09
 
+Historical matrix from the earlier review. The owner subsequently replaced the empty-tool
+requirement and rejected a separate Responses/API-key path in comment 5601101683.
+The Luna/medium settings and API proposal below are retained only as dated history, not
+active instructions. Current policy and actual Astra/isolation evidence: [astra-isolation.md](astra-isolation.md).
+
 Review: PR #15 / 5135047530. This is a read-only diagnostic, not a model smoke.
 Actual model calls for both the original implementation and this repair: **0**.
 
