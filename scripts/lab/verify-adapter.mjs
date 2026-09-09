@@ -36,6 +36,11 @@ evidence.coldStartDenied = true;
 await fixed(process.execPath, ['scripts/lab/transfer.mjs']);
 evidence.preflight = await callLab({ operation: 'preflight' });
 assert.equal(evidence.preflight.status, 'CODEX_LOGIN_REQUIRED');
+assert.deepEqual(evidence.preflight.inputInventory, [
+  'input.txt',
+  'output',
+  'proposal.schema.json',
+]);
 evidence.lifecycle = [];
 for (const mode of [
   'timeout',

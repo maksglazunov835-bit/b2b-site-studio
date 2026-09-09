@@ -685,6 +685,35 @@ async function canary(task, supervisor, signal, windowsControl) {
   }
 }
 
+async function prepareInput(task, prompt, schema) {
+  labFilesystem(task);
+  if (
+    typeof prompt !== 'string' ||
+    Buffer.byteLength(prompt) > 16384 ||
+    !schema ||
+    Buffer.byteLength(JSON.stringify(schema)) > 32768
+  )
+    fail('LAB_INPUT_REJECTED');
+  if ((await fs.realpath(task)) !== task) fail('LAB_SETUP_REQUIRED');
+  // All diagnostic processes have been reaped. Do not expose their synthetic
+  // inputs, symlinks, marker files or probe modules to the subsequent model turn.
+  await fs.rm(task, { recursive: true });
+  await fs.mkdir(task);
+  await fs.mkdir(`${task}/output`);
+  await fs.writeFile(`${task}/input.txt`, prompt, { flag: 'wx' });
+  await fs.writeFile(`${task}/proposal.schema.json`, JSON.stringify(schema), {
+    flag: 'wx',
+  });
+  const files = (await fs.readdir(task)).sort();
+  if (
+    JSON.stringify(files) !==
+      JSON.stringify(['input.txt', 'output', 'proposal.schema.json']) ||
+    (await fs.readdir(`${task}/output`)).length
+  )
+    fail('LAB_SETUP_REQUIRED');
+  return files;
+}
+
 export async function runLab(request, { supervisor, signal, emit }) {
   const inventory = await inspectLab();
   const receipts = `${LAB.root}/receipts`;
@@ -817,21 +846,17 @@ export async function runLab(request, { supervisor, signal, emit }) {
       networkTools: 'disabled',
       modelInvocations: 'one',
     };
-    if (request.operation === 'preflight') return receipt;
+    if (request.operation === 'preflight') {
+      receipt.inputInventory = await prepareInput(
+        task,
+        'Synthetic preflight input',
+        { type: 'object' },
+      );
+      return receipt;
+    }
     if (receipt.status !== 'ready') fail(receipt.status);
     if (!config.modelSelection) fail('CODEX_MODEL_NOT_AVAILABLE');
-    if (
-      typeof request.prompt !== 'string' ||
-      Buffer.byteLength(request.prompt) > 16384 ||
-      !request.schema ||
-      Buffer.byteLength(JSON.stringify(request.schema)) > 32768
-    )
-      fail('LAB_INPUT_REJECTED');
-    await fs.writeFile(
-      `${task}/proposal.schema.json`,
-      JSON.stringify(request.schema),
-      { flag: 'wx' },
-    );
+    await prepareInput(task, request.prompt, request.schema);
     await inspectLab();
     const current = await configProbe(task, signal, supervisor);
     if (

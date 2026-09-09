@@ -12,6 +12,9 @@ GitHub CI remains test-CLI evidence, never real Codex generation.
 Runner selects `officialAdapter(..., {transport:'wsl'})`. The adapter validates
 the pinned job and passes only the six-field bounded prompt, strict proposal
 schema and fixed operation over stdin to System32 `wsl.exe`. It never opens the
+model's task directory with leftover diagnostic inputs: probes are reaped and
+the directory is rebuilt with only input.txt, proposal.schema.json and empty output.
+That inventory is checked during preflight as well as invocation. It never opens the
 platform API on another interface. No database, pairing/agent/lease token,
 Windows profile or user file enters the lab.
 

@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "486d4f88a2447b642e3251ada43fee6830e0a6c099a73454203d99b1c4ee7f2c",
+  "sha256": "8f68257b0d99135f817fdfd3cdceaf0ab8e32d867377e3d86c680678572a5247",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -29,7 +29,7 @@
     },
     {
       "path": "agent/codex/wsl-runtime.mjs",
-      "sha256": "9b5853ff946f72194fc73faec16e2f944aff36848eadf7ea505ce11934a5d54b"
+      "sha256": "b010105809a3066582c5e61a497ba3fea0defd76470cc4f48d7893a6718e1866"
     },
     {
       "path": "agent/codex/wsl-bridge.mjs",

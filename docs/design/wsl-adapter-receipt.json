@@ -1,8 +1,8 @@
 {
   "kind": "actual-windows-wsl",
-  "at": "2026-09-09T19:33:20.311Z",
+  "at": "2026-09-09T19:46:45.185Z",
   "modelInvocations": 0,
-  "bundleSha256": "e9cd582b3fbc406cf0a70c86674ee1278f2a7be1f40ceeeba647ada47b21a1fb",
+  "bundleSha256": "0440fe2d7a26a5ba2ac771411106ae41e7adeb7d6c32335c9feb6867b20820b0",
   "coldStartDenied": true,
   "preflight": {
     "hashes": {
@@ -17,7 +17,7 @@
     "home": "/home/codexlab",
     "codexHome": "/home/codexlab/.codex",
     "modelInvocations": 0,
-    "configSha256": "3988a4eee4e84e9287dcdec2260a800d2ec64e0f359d04851417161a0d03440d",
+    "configSha256": "3d3a16e58d8e2f62e58bff5f0ec516ab56ead05767fa908458f58de734b0cefb",
     "managedRequirements": "included",
     "userConfig": "absent",
     "accountType": null,
@@ -35,7 +35,7 @@
       ]
     },
     "canary": {
-      "nonce": "39397b90bf91dbe6b330e905c8eef73a",
+      "nonce": "cc14b3fb150ea42aa50fb156010580fe",
       "completed": true,
       "checks": {
         "inputRead": true,
@@ -101,38 +101,43 @@
       "clock": "server_time_only",
       "networkTools": "disabled",
       "modelInvocations": "one"
-    }
+    },
+    "inputInventory": [
+      "input.txt",
+      "output",
+      "proposal.schema.json"
+    ]
   },
   "lifecycle": [
     {
       "mode": "timeout",
       "confirmed": true,
       "reason": "TIMEOUT",
-      "elapsedMs": 3152
+      "elapsedMs": 2958
     },
     {
       "mode": "abort",
       "confirmed": true,
       "reason": "RUNNER_STOPPED",
-      "elapsedMs": 1889
+      "elapsedMs": 1845
     },
     {
       "mode": "relay-eof",
       "confirmed": true,
       "reason": "STOP",
-      "elapsedMs": 1445
+      "elapsedMs": 1649
     },
     {
       "mode": "pulse-loss",
       "confirmed": true,
       "reason": "STOP",
-      "elapsedMs": 3939
+      "elapsedMs": 4028
     },
     {
       "mode": "relay-kill",
       "confirmed": true,
       "reason": "RUNNER_STOPPED",
-      "elapsedMs": 3323
+      "elapsedMs": 3363
     }
   ],
   "deviceAuthSupported": true,
