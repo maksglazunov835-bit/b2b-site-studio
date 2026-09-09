@@ -93,3 +93,26 @@ jobs:
             .test-results/design-1-mobile.png
             .test-results/design-2-mobile.png
             .test-results/design-3-mobile.png
+            .test-results/process-tree-linux.json
+
+  windows-process-tree:
+    name: Windows native process-tree and streaming regressions
+    runs-on: windows-latest
+    env:
+      TEST_DATABASE_URL: postgresql://b2b_test:disposable@127.0.0.1:5432/b2b_site_studio_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # This mode validates the separate TEST target but performs no SQL.
+      - run: node scripts/persistence/run-tests.mjs design-regressions
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-process-tree-${{ github.event.pull_request.head.sha || github.sha }}
+          path: .test-results/process-tree-win32.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7

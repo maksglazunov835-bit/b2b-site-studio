@@ -48,7 +48,7 @@ else {
   console.log(
     JSON.stringify({
       type: 'item.completed',
-      item: { type: 'agent_message', text: JSON.stringify(proposal(brief)) },
+      item: { id: 'answer', type: 'agent_message', text: JSON.stringify(proposal(brief)) },
     }),
   );
   console.log(

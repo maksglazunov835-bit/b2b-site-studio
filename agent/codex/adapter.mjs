@@ -1,4 +1,5 @@
-import { spawn } from 'node:child_process';
+import { runBounded } from './bounded-process.mjs';
+import { outputParser } from './jsonl.mjs';
 import { mkdtemp, realpath, lstat, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,7 +10,6 @@ import {
   DESIGN_SETTINGS,
   assertDesignSpec,
   assertDesignReport,
-  assertProposal,
 } from '../../server/design/contract.mjs';
 import { sha256Json } from '../../server/persistence/canonical-json.mjs';
 import { RunnerError } from '../transport.mjs';
@@ -102,119 +102,8 @@ export function promptFor(brief) {
 
 // This executes only an operator-selected native CLI or the test's fixed Node fixture.
 // Never accepts an executable, flags, environment or shell program from a JobSpec.
-export function boundedProcess(
-  file,
-  args,
-  {
-    cwd,
-    input = '',
-    signal,
-    timeoutMs = 5000,
-    env = clientEnvironment(),
-    maxBytes = 131072,
-  } = {},
-) {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(new RunnerError('RUNNER_STOPPED'));
-    const child = spawn(file, args, {
-      cwd,
-      env,
-      shell: false,
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    let stdout = '',
-      stderr = '',
-      bytes = 0,
-      failure,
-      killTimer,
-      treeStop;
-    const terminate = (code) => {
-      failure ??= new RunnerError(code);
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      if (process.platform !== 'win32' && child.pid) {
-        try {
-          process.kill(-child.pid, 'SIGTERM');
-        } catch {
-          /* already stopped */
-        }
-      } else if (child.pid) {
-        // Fixed Windows process-tree cleanup for this owned PID, never a job command.
-        const tool = path.join(
-          process.env.SystemRoot ?? 'C:\\Windows',
-          'System32',
-          'taskkill.exe',
-        );
-        treeStop = new Promise((done) => {
-          const killer = spawn(tool, ['/PID', String(child.pid), '/T', '/F'], {
-            shell: false,
-            windowsHide: true,
-            stdio: 'ignore',
-            env: clientEnvironment(),
-          });
-          const timeout = setTimeout(() => {
-            failure = new RunnerError('STOP_UNCONFIRMED');
-            killer.kill();
-            done();
-          }, 3000);
-          killer.once('error', () => {
-            failure = new RunnerError('STOP_UNCONFIRMED');
-            clearTimeout(timeout);
-            done();
-          });
-          killer.once('close', (code) => {
-            if (
-              code !== 0 &&
-              child.exitCode === null &&
-              child.signalCode === null
-            )
-              failure = new RunnerError('STOP_UNCONFIRMED');
-            clearTimeout(timeout);
-            done();
-          });
-        });
-      }
-      killTimer ??= setTimeout(() => {
-        if (process.platform !== 'win32' && child.pid) {
-          try {
-            process.kill(-child.pid, 'SIGKILL');
-          } catch {
-            /* already stopped */
-          }
-        } else if (child.exitCode === null && child.signalCode === null) {
-          failure = new RunnerError('STOP_UNCONFIRMED');
-          child.kill('SIGKILL');
-        }
-      }, 1000);
-    };
-    const abort = () => terminate('RUNNER_STOPPED');
-    signal?.addEventListener('abort', abort, { once: true });
-    const timer = setTimeout(() => terminate('CODEX_TIMEOUT'), timeoutMs);
-    const capture = (chunk, err) => {
-      bytes += Buffer.byteLength(chunk);
-      if (bytes > maxBytes) return terminate('CODEX_OUTPUT_LIMIT');
-      if (err) stderr += chunk;
-      else stdout += chunk;
-    };
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => capture(chunk, false));
-    child.stderr.on('data', (chunk) => capture(chunk, true));
-    child.stdin.on('error', () => {});
-    child.once('error', () => {
-      failure ??= new RunnerError('CODEX_NOT_AVAILABLE');
-    });
-    child.once('close', async (code, signalCode) => {
-      clearTimeout(timer);
-      clearTimeout(killTimer);
-      signal?.removeEventListener('abort', abort);
-      if (treeStop) await treeStop;
-      if (failure) reject(failure);
-      else resolve({ stdout, stderr, code, signalCode });
-    });
-    child.stdin.end(input);
-  });
+export function boundedProcess(file, args, options = {}) {
+  return runBounded(file, args, { env: clientEnvironment(), ...options });
 }
 export async function preflight(binary, { probe = boundedProcess } = {}) {
   const runtime = {
@@ -270,51 +159,10 @@ export async function preflight(binary, { probe = boundedProcess } = {}) {
   }
 }
 export function parseOutput(output, brief) {
-  if (output.code !== 0 || output.signalCode !== null)
-    throw new RunnerError(
-      /quota|limit exceeded|usage limit/i.test(output.stderr)
-        ? 'CODEX_QUOTA'
-        : 'CODEX_PROCESS_FAILED',
-    );
-  if (output.stderr.trim())
-    throw new RunnerError('CODEX_SAFE_PROFILE_UNVERIFIED');
-  let proposal,
-    usage = null,
-    completed = false;
-  try {
-    const lines = output.stdout.trim().split('\n');
-    if (lines.length > 100) throw new Error();
-    for (const line of lines) {
-      if (Buffer.byteLength(line) > 20000) throw new Error();
-      const event = JSON.parse(line);
-      if (['thread.started', 'turn.started'].includes(event.type)) continue;
-      if (
-        event.type === 'item.completed' &&
-        event.item?.type === 'agent_message' &&
-        !proposal &&
-        !completed
-      ) {
-        proposal = JSON.parse(event.item.text);
-        continue;
-      }
-      if (event.type === 'turn.completed' && proposal && !completed) {
-        completed = true;
-        if (event.usage)
-          usage = {
-            inputTokens: event.usage.input_tokens,
-            outputTokens: event.usage.output_tokens,
-          };
-        continue;
-      }
-      // Unexpected tool events are fatal, never rendered or logged.
-      throw new Error();
-    }
-    if (!completed) throw new Error();
-    assertProposal(proposal, brief);
-    return { proposal, usage };
-  } catch {
-    throw new RunnerError('CODEX_INVALID_OUTPUT');
-  }
+  const parser = outputParser(brief);
+  parser.stderr(Buffer.from(output.stderr));
+  parser.stdout(Buffer.from(output.stdout));
+  return parser.finish(output);
 }
 export async function isolatedInvocation(
   binary,
@@ -345,12 +193,20 @@ export async function isolatedInvocation(
       throw new RunnerError('CODEX_PROCESS_FAILED');
     const schemaPath = path.join(directory, 'proposal.schema.json');
     await writeFile(schemaPath, JSON.stringify(schema), { flag: 'wx' });
+    const parser = outputParser(spec.input.brief);
     const output = await boundedProcess(
       binary,
       [...prefix, ...execArguments(directory, schemaPath)],
-      { ...options, cwd: directory, input: promptFor(spec.input.brief) },
+      {
+        ...options,
+        cwd: directory,
+        input: promptFor(spec.input.brief),
+        capture: false,
+        onStdout: parser.stdout,
+        onStderr: parser.stderr,
+      },
     );
-    const result = parseOutput(output, spec.input.brief);
+    const result = parser.finish(output);
     return assertDesignReport(
       {
         reportVersion: '1.0.0',

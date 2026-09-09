@@ -8,6 +8,10 @@ CI uses an explicitly labelled child-process `test_stub`. Its screenshots are no
 No real inference was performed while implementing this issue (zero model invocations).
 Independent functional acceptance still needs a separately evidenced safe official smoke.
 
+The follow-up [2026-09-09 diagnostic matrix](profile-diagnostics.md) records actual
+read-only config/managed-requirement observations and the remaining exec-specific gap.
+It also documents the process-tree and incremental JSONL repairs from review 5135047530.
+
 On 2026-09-07 the installed native Windows client was checked without reading auth.json:
 
 - `codex-cli 0.153.4`; Authenticode Valid, OpenAI OpCo, LLC.
@@ -118,7 +122,9 @@ with current credentials and identical scope/key/body hash. Runner bounds recove
 A new generation always requires a new explicit operator job and consent.
 
 Cancellation aborts owned processes before acknowledging. POSIX uses an owned process group;
-Windows uses fixed argv `taskkill.exe /PID <owned PID> /T /F`, never a user command or shell.
+Windows uses a native Job Object supervisor: assign-before-resume, no breakaway,
+kill-on-close and ActiveProcesses==0 confirmation, never PID discovery or a user shell.
+The helper requires the installed .NET Framework C# compiler; no installation is performed.
 Revoke causes immediate refusal at the next heartbeat and local process cleanup; because a revoked
 credential cannot acknowledge, the server records `STOP_UNCONFIRMED` after lease expiry.
 Local process termination cannot guarantee that an upstream provider did not charge the request.
