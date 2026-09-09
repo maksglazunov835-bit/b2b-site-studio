@@ -64,6 +64,9 @@ void test(
             `/out:${file}`,
             fileURLToPath(new URL('./NativeTreeFixture.cs', import.meta.url)),
           ],
+          // Cold CI setup compiles both the supervisor and fixture; execution
+          // timeout/cleanup assertions below retain their original bounds.
+          { timeoutMs: 15000 },
         );
         assert.equal(compile.code, 0);
       }
