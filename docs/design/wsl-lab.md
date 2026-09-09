@@ -130,12 +130,16 @@ to remove a documented helper-alias warning. No additional flag sweep followed.
 
 ## Auth, model and smoke
 
-Linux `codex login status`: **Not logged in**. No login was initiated because
-isolation admission is incomplete. An authenticated Linux `model/list` receipt
-for `gpt-6-astra` / `ultra` is therefore absent. The earlier Windows receipt is
-not used as Linux evidence. No API-key fallback, account transfer or model
-request was performed. There are no real concepts, output hash or reload smoke
-to report. CI design screenshots continue to be explicitly `test_stub` evidence.
+Linux `codex login status`: **Not logged in**. A separate bounded read-only
+Linux app-server probe called `account/read` (without token refresh) and
+`model/list`: the account was `not_logged_in`; the single catalog page did list
+`gpt-6-astra` with `low`, `medium`, `high`, `xhigh`, `max`, `ultra`.
+This is unauthenticated capability advertisement, not account entitlement,
+quota or inference proof. No login was initiated because isolation admission
+is incomplete. An authenticated Linux catalog receipt is still absent; the
+earlier Windows receipt is not substituted. No API-key fallback, account
+transfer or model request was performed. There are no real concepts, output
+hash or reload smoke to report. CI screenshots remain `test_stub` evidence.
 
 Remaining blockers: complete same-exec/tool-surface proof, positive-controlled
 Windows-host/external-network and cancellation matrix, verified fixed-channel
