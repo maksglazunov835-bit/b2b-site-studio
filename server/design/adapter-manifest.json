@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "706893749bd2158d24b82975a943548f494936f24ee03d1a0599b88db7007137",
+  "sha256": "c20565135153991ff52f98ca661f62bba0b82e2a530c06f61353b119385ed11e",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -53,7 +53,7 @@
     },
     {
       "path": "agent/codex/wsl-bridge.mjs",
-      "sha256": "586cbab36a04421d3ffef26bcd4cd9f00b6131650a627d475f4a1fed1944d21d"
+      "sha256": "7ed1c0d89d8d011fdf0ea3a3f2002dd21fc507cdea37d127a52c6ef076975595"
     },
     {
       "path": "agent/codex/wsl-supervisor.py",

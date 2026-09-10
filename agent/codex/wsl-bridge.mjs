@@ -195,8 +195,11 @@ export function relayProcess(
           'CODEX_INVALID_OUTPUT',
           diagnostic({ code: 'CODEX_INVALID_OUTPUT' }, { source: 'transport' }),
         );
-      processResult = { ...processResult, ...value };
-      onProcess?.(value);
+      // Publish the earlier local/parser cause before a later supervisor STOP
+      // fact can become the recorder's first diagnostic.
+      const facts = error ? {...value, diagnostic: diagnostic(error)} : value;
+      processResult = { ...processResult, ...facts };
+      onProcess?.(facts);
     };
     const stop = (value) => {
       error ??=

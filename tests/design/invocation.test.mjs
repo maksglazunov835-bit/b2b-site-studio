@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { relayProcess } from '../../agent/codex/wsl-bridge.mjs';
 import {
   isolatedInvocation,
   recordedInvocation,
@@ -17,6 +20,24 @@ import { officialUsage } from './protocol-fixtures.mjs';
 assertSafeTestDatabaseUrl();
 const stub = fileURLToPath(new URL('./stub-cli.mjs', import.meta.url));
 const cases = [];
+void test('parser failure precedes later supervisor STOP facts in the recorder', async () => {
+  const receipts=[];
+  await assert.rejects(recordedInvocation(specFor(),1,{onInvocation:r=>receipts.push(r)},async (_parser,observer)=>{
+    const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough()});
+    const work=relayProcess(child,'{}',{onData:()=>{throw Error('SYNTHETIC_SECRET_PARSER');},onProcess:v=>observer.process(v)});
+    const facts={started:true,code:0,signalCode:null,confirmed:true,reason:'STOP'};
+    for(const frame of [{type:'stdout',data:Buffer.from('synthetic').toString('base64')},{type:'process',value:facts},{type:'result',value:facts}]) child.stdout.write(JSON.stringify(frame)+'\n');
+    child.emit('exit',0,null); child.emit('close',0,null);
+    return work;
+  }),{code:'CODEX_PROCESS_FAILED'});
+  assert.equal(receipts.length,1);
+  assert.equal(receipts[0].primary.source,'parser');
+  assert.equal(receipts[0].primary.category,'unclassified');
+  assert.equal(receipts[0].confirmedStop,true);
+  assert.equal(receipts[0].cleanupCode,null);
+  assert.equal(receipts[0].exitCode,0);
+  assert.doesNotMatch(JSON.stringify(receipts),/SYNTHETIC_SECRET/);
+});
 void test(
   'real fixed synthetic CLI uses the production recorder/parser/lifecycle; receipts distinguish every failure',
   { timeout: 30000 },
