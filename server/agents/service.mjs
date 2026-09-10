@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import pg from 'pg';
 import { getDatabasePool, withTransaction } from "../persistence/database.mjs";
 import { DEFAULT_WORKSPACE_ID, acquireIdempotencyLock } from "../persistence/repository.mjs";
 import { assertProjectId, assertIdempotencyKey } from "../persistence/service.mjs";
@@ -8,6 +9,8 @@ import { findPairing, pairingById, agentById, event, agentRows } from "./reposit
 import { pairingPermission, createGrant, pairingGrant, agentGrant, grantProfile } from "../execution/grants.mjs";
 import { VALIDATOR, compatible } from "../execution/contract.mjs";
 import { cancelActiveAgent } from "../execution/transitions.mjs";
+import { ADAPTER, adapterCompatible } from '../design/contract.mjs';
+import { assertSafeTestDatabaseUrl } from '../../scripts/db/test-config.mjs';
 
 const profile = { mode: "presence_only", selectedApiVersion: "v1", executionEnabled: false, freeSlots: 0, currentJobId: null, grantedCapabilities: [] };
 const id = (kind) => `${kind}_${randomUUID().replaceAll("-", "")}`;
@@ -49,10 +52,10 @@ export function createAgentService({ workspaceId = DEFAULT_WORKSPACE_ID, clock =
         const result = await client.query(`INSERT INTO agent_pairings(id,workspace_id,secret_sha256,created_at,expires_at)
           VALUES($1,$2,$3,$4,$4::timestamptz + interval '5 minutes') RETURNING *`, [pairingId,workspaceId,secretHash(secret),now]);
         await event(client, workspaceId, "paired", now, { pairingId });
-        if (permission) await createGrant(client, workspaceId, pairingId, permission.projectId, now);
+        if (permission) await createGrant(client, workspaceId, pairingId, permission.projectId, now, permission.mode);
         // Deliberately not recorded in api_idempotency_records or an event payload.
         return { ...pairingView(result.rows[0], now), pairingSecret: secret,
-          ...(permission ? { mode: "data_validation", projectId: permission.projectId, validator: VALIDATOR } : {}) };
+          ...(permission ? { mode: permission.mode, projectId: permission.projectId, ...(permission.mode === 'codex_design' ? { adapter: ADAPTER } : { validator: VALIDATOR }) } : {}) };
       });
     },
     async pairing(pairingId) {
@@ -75,7 +78,12 @@ export function createAgentService({ workspaceId = DEFAULT_WORKSPACE_ID, clock =
     },
     async register(secret, input, key) {
       if (!validSecret(secret, "pair")) agentError("UNAUTHORIZED_AGENT", 401);
-      const request = registerRequest(input);
+      const request = registerRequest(input, {now:clock().getTime()});
+      if (request.runtime?.provider === 'test_stub') {
+        const config = assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, { devDatabaseUrl: null });
+        const actual = new pg.Client(getDatabasePool().options).connectionParameters;
+        if (['host','port','database'].some((field) => actual[field] !== config[field])) agentError('TEST_PROVIDER_DISABLED', 403);
+      }
       key = assertIdempotencyKey(key);
       const credentialHash = secretHash(request.agentSecret);
       const requestHash = sha256Json({ ...request, agentSecret: credentialHash });
@@ -87,8 +95,10 @@ export function createAgentService({ workspaceId = DEFAULT_WORKSPACE_ID, clock =
         if (pairing.revoked_at) agentError("PAIRING_REVOKED", 401);
         if (now >= pairing.expires_at) agentError("PAIRING_EXPIRED", 401);
         const grant = await pairingGrant(client, workspaceId, pairing.id);
-        if (!!grant !== (request.mode === "data_validation")) agentError("EXECUTION_SCOPE_MISMATCH", 403);
-        if (grant && (grant.project_status !== "active" || !compatible(request.validator) || grant.validator_sha256.trim() !== VALIDATOR.sha256)) agentError("VALIDATOR_MISMATCH", 409);
+        if (!!grant !== (request.mode !== 'presence_only') || (grant && grant.mode !== request.mode)) agentError("EXECUTION_SCOPE_MISMATCH", 403);
+        if (grant && (grant.project_status !== 'active' || (grant.mode === 'codex_design'
+          ? !adapterCompatible(request.adapter) || grant.validator_sha256.trim() !== ADAPTER.sha256
+          : !compatible(request.validator) || grant.validator_sha256.trim() !== VALIDATOR.sha256))) agentError("VALIDATOR_MISMATCH", 409);
         if (pairing.consumed_at) {
           if (pairing.registration_sha256.trim() !== requestHash || !hashMatches(key, pairing.registration_key_sha256)) agentError("PAIRING_CONSUMED", 409);
           const agent = await agentById(client, workspaceId, pairing.agent_id, true);
@@ -104,6 +114,7 @@ export function createAgentService({ workspaceId = DEFAULT_WORKSPACE_ID, clock =
           WHERE workspace_id=$1 AND id=$2`, [workspaceId,pairing.id,now,agentId,secretHash(key),requestHash]);
         await event(client, workspaceId, "registered", now, { agentId, pairingId: pairing.id });
         if (grant) await client.query("UPDATE agent_execution_grants SET agent_id=$3 WHERE workspace_id=$1 AND pairing_id=$2", [workspaceId, pairing.id, agentId]);
+        if (grant?.mode === 'codex_design') await client.query('INSERT INTO design_agent_profiles(pairing_id,runtime) VALUES($1,$2::jsonb)', [pairing.id, JSON.stringify(request.runtime)]);
         return { response: await registrationResponse(result.rows[0], client), responseStatus: 201, replayed: false };
       });
     },

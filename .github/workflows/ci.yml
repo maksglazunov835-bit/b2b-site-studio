@@ -61,7 +61,10 @@ jobs:
         run: npm ci
 
       - name: Install Chromium for UI regression tests
-        run: npx --no-install playwright install --with-deps chromium
+        run: |
+          test -f /etc/apt/sources.list.d/ubuntu.sources
+          sudo env APT_CONFIG="$GITHUB_WORKSPACE/.github/ci/playwright-apt.conf" "$(command -v node)" node_modules/playwright/cli.js install-deps chromium
+          npx --no-install playwright install chromium
 
       - name: Seed separate disposable dev project before the test suite
         run: node tests/persistence/seed-dev-sentinel.mjs
@@ -87,3 +90,49 @@ jobs:
             .test-results/runner-mobile.png
             .test-results/execution-desktop.png
             .test-results/execution-mobile.png
+            .test-results/design-1-desktop.png
+            .test-results/design-2-desktop.png
+            .test-results/design-3-desktop.png
+            .test-results/design-1-mobile.png
+            .test-results/design-2-mobile.png
+            .test-results/design-3-mobile.png
+            .test-results/process-tree-linux.json
+            .test-results/wsl-protocol-linux.json
+            .test-results/startup-regressions.json
+            .test-results/invocation-regressions-linux.json
+            .test-results/receipt-chain-linux.json
+
+  windows-process-tree:
+    name: Windows native process-tree and streaming regressions
+    runs-on: windows-latest
+    env:
+      TEST_DATABASE_URL: postgresql://b2b_test:disposable@127.0.0.1:5432/b2b_site_studio_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # This mode validates the separate TEST target but performs no SQL.
+      - name: Run native regressions in an explicit test-only environment
+        shell: pwsh
+        run: |
+          # Hosted Windows images include PostgreSQL tooling environment defaults.
+          # Clear only this step's PG* variables, never relax safe-runner rejection.
+          Get-ChildItem Env: | Where-Object Name -Match '^PG' | ForEach-Object {
+            Write-Output ("Removing hosted environment name: " + $_.Name)
+            Remove-Item -LiteralPath ('Env:' + $_.Name)
+          }
+          node scripts/persistence/run-tests.mjs design-regressions
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-process-tree-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            .test-results/process-tree-win32.json
+            .test-results/startup-regressions.json
+            .test-results/invocation-regressions-win32.json
+            .test-results/receipt-chain-win32.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7

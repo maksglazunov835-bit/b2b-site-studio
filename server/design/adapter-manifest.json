@@ -1,0 +1,119 @@
+{
+  "id": "codex_design_exec",
+  "version": "1.1.0",
+  "sha256": "c20565135153991ff52f98ca661f62bba0b82e2a530c06f61353b119385ed11e",
+  "files": [
+    {
+      "path": "docs/contracts/design-job.schema.json",
+      "sha256": "e3a7ef9d4f6c529224be749a89aaad84676dc1689da00c0fd203cab4b2d7e8f7"
+    },
+    {
+      "path": "docs/contracts/design-job-astra.schema.json",
+      "sha256": "6b6155883504b0015eda0837fc326d3cd38872ff002c54232c4e85c65828d4e8"
+    },
+    {
+      "path": "docs/contracts/design-proposal.schema.json",
+      "sha256": "e2dd09bde07cfb67e1a860d4144856f76f2b1f5f021dfd11516c3226bfddbbdb"
+    },
+    {
+      "path": "docs/contracts/design-proposal.wire.schema.json",
+      "sha256": "9871add97eb468f3847299cfa9d8f2bed5742f63e6ee70b3bb6f9e3a4191ce94"
+    },
+    {
+      "path": "scripts/contracts/design-wire.mjs",
+      "sha256": "9e8b6c926ac34db937b9551174f7378ffdcb7b7b9f5c3a31dcb5b5e007bc81ce"
+    },
+    {
+      "path": "server/design/contract.mjs",
+      "sha256": "f8ee10d8c94563fcfcfaecf5d7f938cca620f98cec00cb42b57f9bc6c32c0691"
+    },
+    {
+      "path": "server/design/admission.mjs",
+      "sha256": "4383fefad38d519ebc75a0923a550ed28c0f34d462e0afc6735820a69656cb73"
+    },
+    {
+      "path": "server/agents/requests.mjs",
+      "sha256": "4f865548ebfc074e4f3234fa8f313a031399d3002f2241bed220e569a6c5e9eb"
+    },
+    {
+      "path": "server/execution/grants.mjs",
+      "sha256": "170b2e7f68384da1dc29770844f54704d4d1c837624bbaec8da28e48e3aed2a5"
+    },
+    {
+      "path": "agent/codex/adapter.mjs",
+      "sha256": "5523996ebbdb771cd42df338ff45e9076cf0b797fd9967510fa2320cd6ace83e"
+    },
+    {
+      "path": "agent/codex/wsl-policy.mjs",
+      "sha256": "a49632d7779898ff8a06f9387c2ba4b8fe3b655d662cf9d7554841b1c5efe63c"
+    },
+    {
+      "path": "agent/codex/wsl-runtime.mjs",
+      "sha256": "9e353fc569dd79e917cf6dce3843dd6a930dca0d01daace95145fd8aa42b9033"
+    },
+    {
+      "path": "agent/codex/wsl-bridge.mjs",
+      "sha256": "7ed1c0d89d8d011fdf0ea3a3f2002dd21fc507cdea37d127a52c6ef076975595"
+    },
+    {
+      "path": "agent/codex/wsl-supervisor.py",
+      "sha256": "b81fbf3a28d91e9b34743f84beebf9b6588dc9a2d73f4646f0c804b945fb393f"
+    },
+    {
+      "path": "agent/codex/model-catalog.mjs",
+      "sha256": "d166cb43b99f8e5194423cf389c845dce53fbf29db6f1ce52de76e3dcd0e2f6c"
+    },
+    {
+      "path": "agent/codex/permission-profile.mjs",
+      "sha256": "556ae37fb46047ed8e9a66d5093f4bb101004e9dd8e501aff05c7f27b5fc6021"
+    },
+    {
+      "path": "agent/codex/bounded-process.mjs",
+      "sha256": "e5a30d288f9282f0de01e99115aa54e8d672adf5c37c4c56af71cf711d72f71c"
+    },
+    {
+      "path": "agent/codex/WindowsJob.cs",
+      "sha256": "793fa1c372070859b0097c03cae6021de6d27957175b7315fbd9e872bfae6f17"
+    },
+    {
+      "path": "agent/codex/jsonl.mjs",
+      "sha256": "e5ae0accdaf69c145d63369801d94a069ac1f5c2987448feddc8eb5a1d1e4615"
+    },
+    {
+      "path": "agent/codex/invocation-receipt.mjs",
+      "sha256": "39c0c2ea264473a98b539dcef9115541914cb019d5e78ab3cf4f31d68b058a2f"
+    },
+    {
+      "path": "agent/design-connect.mjs",
+      "sha256": "2cc907d857bb54899f04866fe51ab66bb8c6f6a84c4b4c04d12a338221747369"
+    },
+    {
+      "path": "agent/design-main.mjs",
+      "sha256": "a0a47896d478d2b36fa3f4acd51331e579b103bdeacd7c260693ebb51f2eef5e"
+    },
+    {
+      "path": "agent/startup-receipt.mjs",
+      "sha256": "dfb7e44c8afbbd9e9b2594e946fd063dfd427fc9f92f2233fbce188f4d8920e5"
+    },
+    {
+      "path": "agent/session.mjs",
+      "sha256": "09b596044d745053110cd399cdde5a9c00635bc80e9f50813bbce44f6dfef663"
+    },
+    {
+      "path": "agent/data-session.mjs",
+      "sha256": "ca6f3e1729f231a5b1643e46f6f66489566ba0713a9f8c965b3905dcca40a80a"
+    },
+    {
+      "path": "agent/protocol.mjs",
+      "sha256": "aa981f60122455c12e82df23741cd27d195a1e7b7d729a99fc6f7a5a8466409a"
+    },
+    {
+      "path": "agent/transport.mjs",
+      "sha256": "5a1817d70dd0a5400ab68026f8e2dd4c64de40df4ebf12d46c6cef200e3ddf14"
+    },
+    {
+      "path": "agent/runner-error.mjs",
+      "sha256": "cfbf584ae3d82ba41420fc657cb10f3f6bc362cfc70246d2ee4d8b4126a84574"
+    }
+  ]
+}

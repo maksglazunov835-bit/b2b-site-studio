@@ -18,6 +18,8 @@ export async function resetTestDatabase({ databaseUrl = process.env.TEST_DATABAS
     await client.query("BEGIN");
     await client.query(`
       DROP TABLE IF EXISTS
+        design_invocations,
+        design_agent_profiles,
         execution_operations,
         job_results,
         job_attempts,
@@ -44,6 +46,7 @@ export async function resetTestDatabase({ databaseUrl = process.env.TEST_DATABAS
     await client.query("DROP FUNCTION IF EXISTS protect_agent_pairing() CASCADE");
     await client.query("DROP FUNCTION IF EXISTS protect_execution_grant() CASCADE");
     await client.query("DROP FUNCTION IF EXISTS protect_job_attempt() CASCADE");
+    await client.query('DROP FUNCTION IF EXISTS check_typed_attempt_policy() CASCADE');
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");

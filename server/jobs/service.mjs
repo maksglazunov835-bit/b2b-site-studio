@@ -8,6 +8,7 @@ import { createRequest, cancelRequest, assertJobId, jobError, pagination, encode
 import { findJob, insertJob, insertEvent, cancelJobRow, jobRows, eventRows, jobResponse } from "./repository.mjs";
 import { createExecutionService } from "../execution/service.mjs";
 import { transition } from "../execution/transitions.mjs";
+import { designInput } from '../design/contract.mjs';
 
 async function requireProject(client, workspaceId, projectId) {
   const project = await getProjectForWorkspace(client, workspaceId, projectId);
@@ -54,10 +55,11 @@ export function createJobService(workspaceId = DEFAULT_WORKSPACE_ID) {
         if (!revision) jobError("REVISION_NOT_FOUND", "The saved revision does not exist.", 404);
         if (sha256Json(revision.value) !== revision.sha256) jobError("SITE_SPEC_INTEGRITY_ERROR", "The saved input failed its integrity check.", 409);
         const id = `job_${randomUUID().replaceAll("-", "")}`;
-        const snapshot = { type: request.type, templateVersion: "site_spec_validation@1",
+        if (request.type === 'design_proposal') designInput(revision.value);
+        const snapshot = { type: request.type, templateVersion: `${request.type}@1`,
           input: { revisionId: revision.id, revision: revision.revision, schemaVersion: revision.schemaVersion, sha256: revision.sha256 },
-          objective: "Validate the pinned SiteSpec without changing it.",
-          acceptanceCriteria: ["Validate SiteSpec schema and semantics", "Report findings without modifying inputs"] };
+          objective: request.type === 'design_proposal' ? 'Propose three bounded designs from the saved brief.' : "Validate the pinned SiteSpec without changing it.",
+          acceptanceCriteria: request.type === 'design_proposal' ? ['One authorized provider invocation', 'Three server-validated concepts; no publication'] : ["Validate SiteSpec schema and semantics", "Report findings without modifying inputs"] };
         await insertJob(client, workspaceId, projectId, id, revision, snapshot);
         await insertEvent(client, workspaceId, projectId, id);
         const response = { job: jobResponse(await requireJob(client, workspaceId, projectId, id)) };

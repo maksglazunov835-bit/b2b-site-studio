@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-site-studio.local/contracts/design-job-1.4.1.json",
+  "title": "Astra-only design job 1.4.1 (legacy 1.4 remains read-only history)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "jobSpecVersion",
+    "executionProfile",
+    "type",
+    "jobId",
+    "projectId",
+    "workspaceId",
+    "input",
+    "settings",
+    "policy",
+    "adapter",
+    "runtime"
+  ],
+  "properties": {
+    "jobSpecVersion": {
+      "const": "1.4.1"
+    },
+    "executionProfile": {
+      "const": "codex_design"
+    },
+    "type": {
+      "const": "design_proposal"
+    },
+    "jobId": {
+      "type": "string",
+      "pattern": "^job_[a-f0-9]{32}$"
+    },
+    "projectId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revisionId",
+        "revision",
+        "sha256",
+        "snapshot",
+        "brief",
+        "briefSha256"
+      ],
+      "properties": {
+        "revisionId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "snapshot": {
+          "type": "object",
+          "description": "Independently checked by the unchanged SiteSpec 1.2 schema and semantics."
+        },
+        "brief": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "companyName",
+            "niche",
+            "salesRegion",
+            "businessType",
+            "siteType",
+            "networkType"
+          ],
+          "properties": {
+            "companyName": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "niche": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "salesRegion": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "businessType": {
+              "enum": ["wholesale", "manufacturer", "distributor", "services"]
+            },
+            "siteType": {
+              "enum": ["landing", "multipage", "catalog", "seo-network"]
+            },
+            "networkType": {
+              "enum": ["", "single", "regions", "niches", "domains"]
+            }
+          }
+        },
+        "briefSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "effort", "templateVersion", "outputSchemaVersion"],
+      "properties": {
+        "model": {
+          "const": "gpt-6-astra"
+        },
+        "effort": {
+          "const": "ultra"
+        },
+        "templateVersion": {
+          "const": "design_proposal@1"
+        },
+        "outputSchemaVersion": {
+          "const": "1.0.0"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leaseDurationMs",
+        "maxDurationMs",
+        "maxAttempts",
+        "maxProviderInvocations"
+      ],
+      "properties": {
+        "leaseDurationMs": {
+          "const": 10000
+        },
+        "maxDurationMs": {
+          "const": 180000
+        },
+        "maxAttempts": {
+          "const": 1
+        },
+        "maxProviderInvocations": {
+          "const": 1
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "sha256"],
+      "properties": {
+        "id": {
+          "const": "codex_design_exec"
+        },
+        "version": {
+          "const": "1.1.0"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "cliVersion",
+        "model",
+        "effort",
+        "policySha256",
+        "status",
+        "modelSelection"
+      ],
+      "properties": {
+        "admission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transport", "profile", "checkedAt", "configSha256"],
+          "properties": {
+            "transport": {"const": "wsl2"},
+            "profile": {"const": "b2b-design-json"},
+            "checkedAt": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},
+            "configSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
+        "provider": {
+          "enum": ["codex", "test_stub"]
+        },
+        "cliVersion": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9.-]{1,32}$"
+        },
+        "model": {
+          "const": "gpt-6-astra"
+        },
+        "effort": {
+          "const": "ultra"
+        },
+        "policySha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "CODEX_NOT_AVAILABLE",
+            "CODEX_UNSUPPORTED_VERSION",
+            "CODEX_LOGIN_REQUIRED",
+            "CODEX_AUTH_UNSUPPORTED",
+            "CODEX_SAFE_PROFILE_UNVERIFIED",
+            "CODEX_MODEL_NOT_AVAILABLE",
+            "CODEX_MODEL_QUERY_FAILED",
+            "CODEX_MODEL_CAPABILITY_MISMATCH",
+            "CODEX_ISOLATION_UNVERIFIED"
+          ]
+        },
+        "modelSelection": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source",
+                "resolvedModel",
+                "effort",
+                "supportedReasoningEfforts"
+              ],
+              "properties": {
+                "source": {
+                  "enum": ["official_model_list", "test_fixture"]
+                },
+                "resolvedModel": {
+                  "const": "gpt-6-astra"
+                },
+                "effort": {
+                  "const": "ultra"
+                },
+                "supportedReasoningEfforts": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 6,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": ["low", "medium", "high", "xhigh", "max", "ultra"]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

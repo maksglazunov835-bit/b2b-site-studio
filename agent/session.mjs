@@ -7,6 +7,8 @@ import { runnerEnvironment } from "./environment.mjs";
 import { installedManifest } from "../scripts/contracts/execution-manifest.mjs";
 import { VALIDATOR } from "../server/execution/contract.mjs";
 import { dataSession } from "./data-session.mjs";
+import { ADAPTER } from '../server/design/contract.mjs';
+import { installedDesignManifest } from '../scripts/contracts/design-manifest.mjs';
 
 export function options(args) {
   const values = {};
@@ -57,13 +59,21 @@ export function readSecret(signal, input = process.stdin, output = process.stdou
   });
 }
 
-export async function runSession({ origin, name, pairingSecret, signal, mode = "presence_only", log = console.log }) {
+export async function runSession({ origin, name, pairingSecret, signal, mode = "presence_only", log = console.log, designAdapter, startup, onInvocation, registrationOnly = false, readDesignManifest = installedDesignManifest }) {
+  startup?.begin('manifest_validation');
+  if (mode === 'codex_design' && !designAdapter) throw new RunnerError('CODEX_NOT_AVAILABLE');
+  if (mode === 'codex_design' && (await readDesignManifest()).sha256 !== ADAPTER.sha256) throw new RunnerError('CODEX_UNSUPPORTED_VERSION');
   if (mode === "data_validation" && (await installedManifest()).sha256 !== VALIDATOR.sha256) throw new RunnerError("VALIDATOR_MISMATCH");
+  if (designAdapter?.runtime.provider === 'codex') {
+    if (typeof designAdapter.assertRegistrationAdmission !== 'function') throw new RunnerError('CODEX_ISOLATION_UNVERIFIED');
+    designAdapter.assertRegistrationAdmission();
+  }
+  startup?.complete('manifest_validation'); startup?.begin('registration');
   const agentSecret = `agt_${randomBytes(32).toString("base64url")}`;
   const os = { win32: "windows", linux: "linux", darwin: "macos" }[process.platform];
   if (!os) throw new RunnerError("UNSUPPORTED_OS");
   const body = JSON.stringify({ mode, agentName: name, agentVersion: mode === "presence_only" ? "0.3.0" : "0.3.1", os, supportedApiVersions: ["v1"], agentSecret,
-    ...(mode === "data_validation" ? { validator: VALIDATOR } : {}) });
+    ...(mode === "data_validation" ? { validator: VALIDATOR } : mode === 'codex_design' ? { adapter: ADAPTER, runtime: designAdapter.runtime } : {}) });
   const key = randomUUID();
   const deadline = Date.now() + 300000;
   let registered;
@@ -78,8 +88,14 @@ export async function runSession({ origin, name, pairingSecret, signal, mode = "
     }
   }
   pairingSecret = undefined;
+  if (designAdapter) {
+    const { sha256Json } = await import('../server/persistence/canonical-json.mjs');
+    if (sha256Json(registered.runtime) !== sha256Json(designAdapter.runtime)) throw new RunnerError('INVALID_RESPONSE');
+  }
+  startup?.complete('registration');
   log(`RUNNER_REGISTERED ${registered.agentId} ${mode}`);
   if (mode === "data_validation") return dataSession({ origin, registration: registered, credential: agentSecret, signal, log });
+  if (mode === 'codex_design') return dataSession({ origin, registration: registered, credential: agentSecret, signal, log, designAdapter, startup, onInvocation, registrationOnly });
   let interval = registered.heartbeatIntervalSeconds;
   let failures = 0;
   while (!signal.aborted) {
