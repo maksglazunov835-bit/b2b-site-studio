@@ -1,6 +1,11 @@
 import { TextDecoder } from 'node:util';
 import { RunnerError } from '../transport.mjs';
 import { assertProposal } from '../../server/design/contract.mjs';
+import {
+  diagnostic,
+  diagnosticError,
+  validUsage,
+} from './invocation-receipt.mjs';
 
 const fail = (code = 'CODEX_INVALID_OUTPUT') => {
   throw new RunnerError(code);
@@ -24,6 +29,21 @@ export function diagnosticCode(text) {
   if (text.trim() === '' || text.trim() === 'Reading prompt from stdin...')
     return null;
   return 'CODEX_PROCESS_FAILED';
+}
+export function streamDiagnostic(text, source) {
+  let code = diagnosticCode(text);
+  if (!code) return null;
+  let category =
+    {
+      CODEX_SAFE_PROFILE_UNVERIFIED: 'config',
+      CODEX_QUOTA: 'quota',
+      CODEX_LOGIN_REQUIRED: 'auth',
+    }[code] ?? 'unclassified';
+  if (/invalid (json )?schema/i.test(text)) {
+    code = 'CODEX_INVALID_OUTPUT';
+    category = 'schema';
+  }
+  return diagnostic({ code }, { source, stage: 'stream', category, text });
 }
 function lineStream(consume, maxLine, maxLines) {
   const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -51,31 +71,34 @@ function lineStream(consume, maxLine, maxLines) {
     push(chunk) {
       bytes += chunk.length;
       if (bytes > 131072) fail('CODEX_OUTPUT_LIMIT');
+      let text;
       try {
-        drain(decoder.decode(chunk, { stream: true }));
-      } catch (e) {
-        if (e instanceof RunnerError) throw e;
-        fail();
-      }
+        text = decoder.decode(chunk, { stream: true });
+      } catch { fail(); }
+      drain(text);
     },
     end() {
+      let text;
       try {
-        drain(decoder.decode(), true);
-      } catch (e) {
-        if (e instanceof RunnerError) throw e;
-        fail();
-      }
+        text = decoder.decode();
+      } catch { fail(); }
+      drain(text, true);
     },
   };
 }
 
 // Codex exec 0.153.4 JSONL: service/reasoning notifications are not executable items.
 // Reasoning and diagnostics are consumed and discarded, never retained in the report.
-export function outputParser(brief) {
+export function outputParser(brief, observer) {
   let state = 'initial',
     proposal,
     usage = null;
   const reasoning = new Map();
+  const rejectDiagnostic = (details) => {
+    const error = diagnosticError(details.primaryCode, details);
+    observer?.failure(error);
+    throw error;
+  };
   const stdout = lineStream(
     (line) => {
       let e;
@@ -86,10 +109,24 @@ export function outputParser(brief) {
       }
       if (!e || typeof e.type !== 'string' || state === 'done') fail();
       if (e.type === 'error' || e.type === 'turn.failed') {
-        const message = e.message ?? e.error?.message;
-        fail(
-          diagnosticCode(typeof message === 'string' ? message : '') ??
-            'CODEX_PROCESS_FAILED',
+        if (
+          e.type === 'error'
+            ? !fields(e, ['type', 'message']) || typeof e.message !== 'string'
+            : state !== 'turn' ||
+              !fields(e, ['type', 'error']) ||
+              !fields(e.error, ['message']) ||
+              typeof e.error.message !== 'string'
+        )
+          fail();
+        observer?.event(e.type);
+        observer?.terminal();
+        const text = e.type === 'error' ? e.message : e.error.message;
+        rejectDiagnostic(
+          streamDiagnostic(text, 'provider_event') ??
+            diagnostic(
+              { code: 'CODEX_PROCESS_FAILED' },
+              { source: 'provider_event', text },
+            ),
         );
       }
       if (
@@ -100,6 +137,7 @@ export function outputParser(brief) {
         e.thread_id.length <= 128
       ) {
         state = 'thread';
+        observer?.event(e.type);
         return;
       }
       if (
@@ -108,6 +146,7 @@ export function outputParser(brief) {
         fields(e, ['type'])
       ) {
         state = 'turn';
+        observer?.event(e.type);
         return;
       }
       if (state !== 'turn') fail();
@@ -132,6 +171,7 @@ export function outputParser(brief) {
             item.id,
             e.type === 'item.completed' ? 'done' : 'active',
           );
+          observer?.event(e.type);
           return;
         }
         if (
@@ -146,6 +186,7 @@ export function outputParser(brief) {
         } catch {
           fail();
         }
+        observer?.event(e.type);
         return;
       }
       if (
@@ -153,27 +194,17 @@ export function outputParser(brief) {
         proposal &&
         fields(e, ['type', 'usage'])
       ) {
-        if (e.usage !== undefined) {
-          if (
-            !fields(e.usage, [
-              'input_tokens',
-              'cached_input_tokens',
-              'output_tokens',
-            ]) ||
-            !['input_tokens', 'output_tokens'].every(
-              (k) => Number.isSafeInteger(e.usage[k]) && e.usage[k] >= 0,
-            ) ||
-            (e.usage.cached_input_tokens !== undefined &&
-              (!Number.isSafeInteger(e.usage.cached_input_tokens) ||
-                e.usage.cached_input_tokens < 0))
-          )
-            fail();
+        observer?.terminal();
+        if (!validUsage(e.usage)) fail();
+        {
+          observer?.usage(e.usage);
           usage = {
             inputTokens: e.usage.input_tokens,
             outputTokens: e.usage.output_tokens,
           };
         }
         state = 'done';
+        observer?.event(e.type);
         return;
       }
       fail();
@@ -183,22 +214,44 @@ export function outputParser(brief) {
   );
   const stderr = lineStream(
     (line) => {
-      const code = diagnosticCode(line);
-      if (code) fail(code);
+      const details = streamDiagnostic(line, 'stderr');
+      if (details) rejectDiagnostic(details);
     },
     4096,
     32,
   );
+  const guarded = (fn, bytes) => {
+    try {
+      return fn();
+    } catch (error) {
+      const details = diagnostic(error, {
+        source: 'parser',
+        stage: 'parser',
+        category: error instanceof RunnerError ? 'protocol' : 'unclassified',
+        text: error instanceof RunnerError ? bytes?.toString('utf8') : undefined,
+      });
+      observer?.failure(diagnosticError(details.primaryCode, details));
+      throw diagnosticError(details.primaryCode, details);
+    }
+  };
   return {
-    stdout: (chunk) => stdout.push(chunk),
-    stderr: (chunk) => stderr.push(chunk),
+    stdout: (chunk) => guarded(() => stdout.push(chunk), chunk),
+    stderr: (chunk) => guarded(() => stderr.push(chunk), chunk),
     finish(output) {
-      stderr.end();
-      stdout.end();
-      if (output.code !== 0 || output.signalCode !== null)
-        fail('CODEX_PROCESS_FAILED');
-      if (state !== 'done') fail();
-      return { proposal, usage };
+      return guarded(() => {
+        stderr.end();
+        stdout.end();
+        if (output.code !== 0 || output.signalCode !== null)
+          throw diagnosticError(
+            'CODEX_PROCESS_FAILED',
+            diagnostic(
+              { code: 'CODEX_PROCESS_FAILED' },
+              { source: 'cli_exit', stage: 'process_exit' },
+            ),
+          );
+        if (state !== 'done') fail();
+        return { proposal, usage };
+      });
     },
   };
 }

@@ -47,7 +47,7 @@ function actionReply(value, assignment) {
   assignment.leaseExpiresAt = value.leaseExpiresAt;
   return value;
 }
-async function execute({ origin, registration, credential, assignment, signal, log, designAdapter }) {
+async function execute({ origin, registration, credential, assignment, signal, log, designAdapter, onInvocation, runId }) {
   const jobId = assignment.jobSpec.jobId;
   let terminalUncertain = false;
   const operation = async (kind, extra = {}) => {
@@ -94,7 +94,7 @@ async function execute({ origin, registration, credential, assignment, signal, l
     if (started.cancelRequested) { await cancelAck(); return; }
     log(`RUNNER_VALIDATION_STARTED ${jobId} attempt_${assignment.attempt}`);
     const task = designAdapter ? (spec, attempt, options) => designAdapter.execute(spec, attempt, options) : validationTask;
-    work = task(assignment.jobSpec, assignment.attempt, { signal: workerController.signal,
+    work = task(assignment.jobSpec, assignment.attempt, { signal: workerController.signal, onInvocation, runId,
       timeoutMs: Math.max(1, Math.min(designAdapter ? 175000 : 30000, Date.parse(assignment.deadlineAt) - Date.now())) }).then((report) => ({ report }), (error) => ({ error }));
     let outcome;
     while (!outcome) {
@@ -140,7 +140,7 @@ async function execute({ origin, registration, credential, assignment, signal, l
     assignment.leaseToken = undefined;
   }
 }
-export async function dataSession({ origin, registration, credential, signal, log, designAdapter, startup, registrationOnly = false }) {
+export async function dataSession({ origin, registration, credential, signal, log, designAdapter, startup, onInvocation, registrationOnly = false }) {
   let lastPresence = 0; let failures = 0;
   startup?.begin('first_heartbeat');
   let first = true;
@@ -152,7 +152,7 @@ export async function dataSession({ origin, registration, credential, signal, lo
         if (first) { startup?.complete('first_heartbeat'); first=false; }
       }
       const assignment = registration.executionEnabled && !registrationOnly ? assignmentReply(successful(await post(origin, `/api/v1/agents/${registration.agentId}/claim`, credential, "{}", { key: randomUUID(), signal })), registration) : null;
-      if (assignment) await execute({ origin, registration, credential, assignment, signal, log, designAdapter });
+      if (assignment) await execute({ origin, registration, credential, assignment, signal, log, designAdapter, onInvocation, runId: startup?.snapshot().runId });
       failures = 0;
     } catch (error) {
       if (signal.aborted) throw error;

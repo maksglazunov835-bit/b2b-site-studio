@@ -12,6 +12,7 @@ import { createStartup, validStartup } from '../../agent/startup-receipt.mjs';
 import { observeStartup } from '../../scripts/lab/runner-process.mjs';
 import { ADAPTER } from '../../server/design/contract.mjs';
 import { runtime } from './fixtures.mjs';
+import { createInvocation } from '../../agent/codex/invocation-receipt.mjs';
 const secret = 'pair_' + 'S'.repeat(43);
 async function execute(
   load,
@@ -222,8 +223,20 @@ void test('actual entry catches early options exit; spawn failure and closed pip
   const result = await monitor.finish();
   assert.equal(result.errorCode, 'INVALID_OPTIONS');
   assert.equal(result.exitCode, 1);
-  await mkdir('.test-results',{recursive:true});
-  await writeFile('.test-results/startup-regressions.json',JSON.stringify({synthetic:true,platform:process.platform,modelInvocations:0,receipt:result},null,2)+'\n');
+  await mkdir('.test-results', { recursive: true });
+  await writeFile(
+    '.test-results/startup-regressions.json',
+    JSON.stringify(
+      {
+        synthetic: true,
+        platform: process.platform,
+        modelInvocations: 0,
+        receipt: result,
+      },
+      null,
+      2,
+    ) + '\n',
+  );
   const absent = observeStartup(
     spawn('b2b-deliberately-missing-binary', [], {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
@@ -275,4 +288,54 @@ void test('late IPC is drained after exit, bounded pipes and unknown messages ca
   e.stderr.write(Buffer.alloc(32769, 83));
   e.emit('close', 0, null);
   assert.equal((await overflow.finished).errorCode, 'STARTUP_OUTPUT_LIMIT');
+});
+void test('invocation IPC is scoped, immutable, bounded and rejects duplicate or secret-bearing fields', async () => {
+  for (const scenario of ['valid', 'foreign-run', 'extra-field', 'duplicate']) {
+    const child = Object.assign(new EventEmitter(), {
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      stdin: new PassThrough(),
+      connected: false,
+    });
+    const monitor = observeStartup(child, { drainMs: 30 });
+    const startup = createStartup({
+      send: (value) => child.emit('message', value),
+    });
+    const invocation = createInvocation({
+      runId: startup.snapshot().runId,
+      jobId: 'job_' + 'a'.repeat(32),
+      attempt: 1,
+      runtimeSha256: 'b'.repeat(64),
+      inputSha256: 'c'.repeat(64),
+      schemaSha256: 'd'.repeat(64),
+      jobSpecSha256: 'e'.repeat(64),
+    });
+    invocation.process({
+      started: true,
+      code: 2,
+      signalCode: null,
+      confirmed: true,
+    });
+    const receipt = invocation.finish({ code: 'CODEX_PROCESS_FAILED' });
+    if (scenario === 'foreign-run')
+      receipt.runId = 'f'.repeat(8) + '-ffff-ffff-ffff-' + 'f'.repeat(12);
+    if (scenario === 'extra-field') receipt.secret = 'SYNTHETIC_SECRET';
+    child.emit('exit', 0, null);
+    child.emit('message', receipt);
+    if (scenario === 'duplicate') child.emit('message', receipt);
+    receipt.jobId = 'job_' + 'f'.repeat(32);
+    startup.stop(true);
+    child.emit('close', 0, null);
+    const result = await monitor.finished;
+    assert.equal(
+      result.errorCode,
+      scenario === 'valid' ? 'RUNNER_BOOTSTRAP_ERROR' : 'STARTUP_DIAGNOSTIC_INVALID',
+    );
+    if (scenario === 'valid')
+      assert.equal(monitor.invocations()[0].jobId, 'job_' + 'a'.repeat(32));
+    assert.doesNotMatch(
+      JSON.stringify(monitor.invocations()),
+      /SYNTHETIC_SECRET/,
+    );
+  }
 });

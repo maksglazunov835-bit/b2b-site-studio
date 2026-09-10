@@ -1,10 +1,17 @@
 import { spawn } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  readFileSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { RunnerError } from '../transport.mjs';
+import { diagnostic, diagnosticError } from './invocation-receipt.mjs';
 
 async function groupAlive(pid) {
   try {
@@ -100,6 +107,7 @@ export async function runBounded(
     onStdout,
     onStderr,
     capture = true,
+    onProcess,
   } = {},
 ) {
   if (signal?.aborted) throw new RunnerError('RUNNER_STOPPED');
@@ -111,6 +119,11 @@ export async function runBounded(
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new RunnerError('RUNNER_STOPPED'));
     const windows = process.platform === 'win32';
+    const receiptRoot = windows ? realpathSync(tmpdir()) : null;
+    const receiptDir = windows
+      ? mkdtempSync(path.join(receiptRoot, 'b2b-exit-'))
+      : null;
+    const receiptPath = windows ? path.join(receiptDir, 'exit.json') : null;
     const child = spawn(windows ? helper : file, windows ? [] : args, {
       cwd,
       env,
@@ -138,9 +151,57 @@ export async function runBounded(
       child.stdin.destroy();
       child.stdout.destroy();
       child.stderr.destroy();
-      if (!confirmed) failure = new RunnerError('STOP_UNCONFIRMED');
-      if (failure) reject(failure);
-      else resolve({ stdout, stderr, code: exitCode, signalCode });
+      let measured;
+      if (windows) {
+        try {
+          if (statSync(receiptPath).size <= 256) {
+            const v = JSON.parse(readFileSync(receiptPath, 'utf8'));
+            if (
+              Object.keys(v).sort().join() === 'code,signalCode,started' &&
+              Number.isInteger(v.code) &&
+              v.code >= 0 &&
+              v.code <= 4294967295 &&
+              v.signalCode === null &&
+              v.started === true
+            )
+              measured = v;
+          }
+        } catch {
+          /* Missing child exit is unknown, never a supervisor exit substituted. */
+        }
+        if (
+          path.dirname(receiptDir) === receiptRoot &&
+          realpathSync(receiptDir) === receiptDir
+        )
+          rmSync(receiptDir, { recursive: true });
+      }
+      const result = {
+        code: windows ? (measured?.code ?? null) : (exitCode ?? null),
+        signalCode: windows ? null : (signalCode ?? null),
+        confirmed,
+        started: windows ? measured?.started === true : Boolean(child.pid),
+      };
+      if (windows && exitCode === 122 && measured?.code === 0)
+        failure ??= diagnosticError(
+          'CODEX_PROCESS_FAILED',
+          diagnostic(
+            { code: 'CODEX_PROCESS_FAILED' },
+            { source: 'sandbox', category: 'isolation' },
+          ),
+        );
+      onProcess?.(result);
+      if (!confirmed)
+        failure = diagnosticError(
+          'STOP_UNCONFIRMED',
+          diagnostic(failure ?? { code: 'STOP_UNCONFIRMED' }, {
+            source: 'transport',
+            stage: 'cleanup',
+          }),
+        );
+      if (failure) {
+        failure.processResult = result;
+        reject(failure);
+      } else resolve({ stdout, stderr, ...result });
     };
     const cleanup = async () => {
       if (cleaning || settled) return;
@@ -196,8 +257,25 @@ export async function runBounded(
         finish(false);
       }
     };
-    const terminate = (code) => {
-      failure ??= new RunnerError(code);
+    const terminate = (value) => {
+      failure ??=
+        typeof value === 'string'
+          ? diagnosticError(
+              value,
+              diagnostic(
+                { code: value },
+                {
+                  source: 'transport',
+                  category:
+                    value === 'CODEX_TIMEOUT'
+                      ? 'timeout'
+                      : value === 'RUNNER_STOPPED'
+                        ? 'cancelled'
+                        : 'unclassified',
+                },
+              ),
+            )
+          : value;
       void cleanup();
     };
     const abort = () => terminate('RUNNER_STOPPED');
@@ -214,7 +292,12 @@ export async function runBounded(
           else stdout += chunk.toString('utf8');
         }
       } catch (e) {
-        terminate(e instanceof RunnerError ? e.code : 'CODEX_INVALID_OUTPUT');
+        terminate(
+          diagnosticError(
+            e instanceof RunnerError ? e.code : 'CODEX_INVALID_OUTPUT',
+            diagnostic(e, { source: 'parser', stage: 'parser' }),
+          ),
+        );
       }
     };
     child.stdout.on('data', (c) => consume(c, false));
@@ -245,7 +328,13 @@ export async function runBounded(
     });
     if (windows)
       child.stdin.write(
-        JSON.stringify({ file, args, cwd: cwd ?? process.cwd(), input }) + '\n',
+        JSON.stringify({
+          file,
+          args,
+          cwd: cwd ?? process.cwd(),
+          input,
+          receipt: receiptPath,
+        }) + '\n',
       );
     else child.stdin.end(input);
   });

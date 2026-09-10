@@ -2,7 +2,27 @@ import {
   ADAPTER,
   DESIGN_SETTINGS,
   expectedPages,
+  materializeDesign,
 } from '../../server/design/contract.mjs';
+import { randomUUID } from 'node:crypto';
+import { buildDraftSiteSpec } from '../../server/persistence/site-spec.mjs';
+import { sha256Json } from '../../server/persistence/canonical-json.mjs';
+export function specFor(draft = brief) {
+  const projectId = randomUUID();
+  const { siteSpec } = buildDraftSiteSpec({ projectId, revision: 1, draft });
+  return materializeDesign(
+    {
+      id: `job_${randomUUID().replaceAll('-', '')}`,
+      project_id: projectId,
+      site_spec_revision_id: randomUUID(),
+      input_revision: 1,
+      input_sha256: sha256Json(siteSpec),
+    },
+    siteSpec,
+    randomUUID(),
+    runtime,
+  ).spec;
+}
 export const runtime = {
   provider: 'test_stub',
   cliVersion: 'test-cli-1',
@@ -33,9 +53,18 @@ export const brief = {
   networkType: 'single',
 };
 // Contract fixture only. It does not assert real WSL isolation or inference.
-export const officialRuntime = () => ({...runtime,provider:'codex',cliVersion:'0.153.4',
-  modelSelection:{...runtime.modelSelection,source:'official_model_list'},
-  admission:{transport:'wsl2',profile:'b2b-design-json',checkedAt:new Date().toISOString(),configSha256:'a'.repeat(64)}});
+export const officialRuntime = () => ({
+  ...runtime,
+  provider: 'codex',
+  cliVersion: '0.153.4',
+  modelSelection: { ...runtime.modelSelection, source: 'official_model_list' },
+  admission: {
+    transport: 'wsl2',
+    profile: 'b2b-design-json',
+    checkedAt: new Date().toISOString(),
+    configSha256: 'a'.repeat(64),
+  },
+});
 export function proposal(input = brief) {
   const blocks = {
     home: ['hero', 'categories', 'enquiry'],

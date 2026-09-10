@@ -234,6 +234,12 @@ async function main() {
           await runner.finish();
         } finally {
           const receipt = runner.snapshot();
+          for (const invocation of runner.invocations())
+            await writeFile(
+              `.test-results/invocation-${invocation.runId}-${invocation.jobId}-attempt-${invocation.attempt}.json`,
+              JSON.stringify(invocation, null, 2) + '\n',
+              { flag: 'wx' },
+            );
           await writeFile(
             `.test-results/startup-${receipt.runId}.json`,
             JSON.stringify(receipt, null, 2) + '\n',

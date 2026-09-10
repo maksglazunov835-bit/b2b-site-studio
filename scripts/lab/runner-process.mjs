@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { clientEnvironment } from '../../agent/codex/adapter.mjs';
 import { validStartup } from '../../agent/startup-receipt.mjs';
+import {
+  INVOCATION_TYPE,
+  validInvocation,
+} from '../../agent/codex/invocation-receipt.mjs';
 
 export function observeStartup(child, { drainMs = 500 } = {}) {
   const at = new Date().toISOString();
@@ -24,6 +28,7 @@ export function observeStartup(child, { drainMs = 500 } = {}) {
     closed = false,
     settled = false,
     timer;
+  const invocations = [];
   let exitCode = null,
     signalCode = null,
     diagnosticError = null,
@@ -66,6 +71,20 @@ export function observeStartup(child, { drainMs = 500 } = {}) {
         };
   child.on('message', (value) => {
     if (settled) return;
+    if (value?.type === INVOCATION_TYPE) {
+      if (
+        invocations.length ||
+        !validInvocation(value) ||
+        value.runId !== latest.runId ||
+        !value.finishedAt
+      ) {
+        diagnosticError = 'STARTUP_DIAGNOSTIC_INVALID';
+        stop();
+        return;
+      }
+      invocations.push(structuredClone(value));
+      return;
+    }
     if (
       ++messages > 24 ||
       !validStartup(value) ||
@@ -113,6 +132,7 @@ export function observeStartup(child, { drainMs = 500 } = {}) {
     child,
     finished,
     snapshot,
+    invocations: () => structuredClone(invocations),
     async waitForHeartbeat(timeoutMs = 60000) {
       const until = Date.now() + timeoutMs;
       while (Date.now() < until) {

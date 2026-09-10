@@ -8,14 +8,14 @@ using Microsoft.Win32.SafeHandles;
 // An owned Job Object is assigned BEFORE the native child can create descendants.
 // No breakaway flags; closing the last job handle kills every remaining member.
 public static class B2BWindowsJob {
-    public class Config { public string file; public string[] args; public string cwd; public string input; }
+    public class Config { public string file; public string[] args; public string cwd; public string input; public string receipt; }
     public static int Main() {
         try {
             Console.InputEncoding = new UTF8Encoding(false, true);
             var json = new System.Web.Script.Serialization.JavaScriptSerializer();
             json.MaxJsonLength = 262144;
             var config = json.Deserialize<Config>(Console.ReadLine());
-            return Run(config.file, config.args, config.cwd, config.input);
+            return Run(config.file, config.args, config.cwd, config.input, config.receipt);
         } catch { return 124; }
     }
     [StructLayout(LayoutKind.Sequential)] struct Limits {
@@ -64,7 +64,7 @@ public static class B2BWindowsJob {
         if(!QueryInformationJobObject(job, 1, out a, (uint)Marshal.SizeOf(typeof(Accounting)), IntPtr.Zero)) throw new IOException();
         return a.Active;
     }
-    public static int Run(string file, string[] args, string cwd, string input) {
+    public static int Run(string file, string[] args, string cwd, string input, string receipt) {
         IntPtr job = IntPtr.Zero, read = IntPtr.Zero, write = IntPtr.Zero, output = IntPtr.Zero, error = IntPtr.Zero;
         ProcessInfo p = new ProcessInfo(); bool assigned = false;
         int stop = 0;
@@ -103,6 +103,12 @@ public static class B2BWindowsJob {
             var deadline = System.Diagnostics.Stopwatch.StartNew();
             while(Active(job) != 0 && deadline.ElapsedMilliseconds < 2000) Thread.Sleep(10);
             if(Active(job) != 0) return 124;
+            if(!GetExitCodeProcess(p.Process, out childCode)) return 124;
+            if(receipt != null) {
+                using(var stream = new FileStream(receipt, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using(var receiptWriter = new StreamWriter(stream, new UTF8Encoding(false)))
+                    receiptWriter.Write("{\"code\":" + childCode.ToString(System.Globalization.CultureInfo.InvariantCulture) + ",\"signalCode\":null,\"started\":true}");
+            }
             if(Volatile.Read(ref stop) != 0) return 123; // confirmed cancellation
             return survivors || childCode != 0 ? 122 : 0;
         } catch { return 124; }

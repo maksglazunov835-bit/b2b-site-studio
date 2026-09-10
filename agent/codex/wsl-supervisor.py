@@ -2,6 +2,7 @@
 import ctypes
 import base64
 import json
+import hashlib
 import os
 import selectors
 import signal
@@ -27,6 +28,7 @@ def main():
     start = time.monotonic()
     bytes_seen = 0
     code = None
+    child = None
     control_buffer = b''
 
     def descendants():
@@ -102,6 +104,15 @@ def main():
             code = child.poll()
             if code is not None and not any(k.data != 'control' for k in selector.get_map().values()):
                 break
+    except Exception as error:
+        text = str(error)
+        sample = text[:4096].encode('utf-8')[:4096]
+        emit({'type': 'failure', 'diagnostic': {
+            'source': 'transport', 'stage': 'stream' if child else 'provider_start',
+            'primaryCode': 'CODEX_PROCESS_FAILED', 'category': 'unclassified',
+            'httpStatus': None, 'byteLength': len(text.encode('utf-8')),
+            'fingerprintBytes': len(sample),
+            'fingerprint': hashlib.sha256(sample).hexdigest() if text else None}})
     finally:
         for pid, row in descendants().items():
             if row[1] not in ('Z', 'X'):
@@ -125,7 +136,10 @@ def main():
                     pass
             while True:
                 try:
-                    if os.waitpid(-1, os.WNOHANG)[0] == 0:
+                    pid, status = os.waitpid(-1, os.WNOHANG)
+                    if child is not None and pid == child.pid:
+                        code = os.waitstatus_to_exitcode(status)
+                    if pid == 0:
                         break
                 except ChildProcessError:
                     break
@@ -141,12 +155,19 @@ def main():
                     start_ticks = stat.read().rsplit(')', 1)[1].split()[19]
                 json.dump({'nonce': request['nonce'], 'stopped': True,
                            'pid': os.getpid(), 'startTicks': start_ticks}, file)
-        emit({'type': 'stopped', 'confirmed': True, 'code': code,
+        signal_code = signal.Signals(-code).name if code is not None and code < 0 else None
+        emit({'type': 'stopped', 'started': child is not None, 'confirmed': True, 'code': code if code is None or code >= 0 else None,
+              'signalCode': signal_code,
               'reason': stopping[0] if stopping else ('DESCENDANTS' if signalled else None)})
 
 
 try:
     main()
-except Exception:
-    print('{"type":"failure","code":"STOP_UNCONFIRMED"}', flush=True)
+except Exception as error:
+    text = str(error)
+    sample = text[:4096].encode('utf-8')[:4096]
+    print(json.dumps({'type': 'failure', 'code': 'STOP_UNCONFIRMED', 'diagnostic': {
+        'source': 'transport', 'stage': 'cleanup', 'primaryCode': 'STOP_UNCONFIRMED',
+        'category': 'unclassified', 'httpStatus': None, 'byteLength': len(text.encode('utf-8')),
+        'fingerprintBytes': len(sample), 'fingerprint': hashlib.sha256(sample).hexdigest() if text else None}}), flush=True)
     sys.exit(1)

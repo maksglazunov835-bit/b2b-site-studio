@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "7450494032fdadf96b678a24812f04a6479415eea0f345c23e8c6779e5179538",
+  "sha256": "706893749bd2158d24b82975a943548f494936f24ee03d1a0599b88db7007137",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -14,6 +14,14 @@
     {
       "path": "docs/contracts/design-proposal.schema.json",
       "sha256": "e2dd09bde07cfb67e1a860d4144856f76f2b1f5f021dfd11516c3226bfddbbdb"
+    },
+    {
+      "path": "docs/contracts/design-proposal.wire.schema.json",
+      "sha256": "9871add97eb468f3847299cfa9d8f2bed5742f63e6ee70b3bb6f9e3a4191ce94"
+    },
+    {
+      "path": "scripts/contracts/design-wire.mjs",
+      "sha256": "9e8b6c926ac34db937b9551174f7378ffdcb7b7b9f5c3a31dcb5b5e007bc81ce"
     },
     {
       "path": "server/design/contract.mjs",
@@ -33,7 +41,7 @@
     },
     {
       "path": "agent/codex/adapter.mjs",
-      "sha256": "bd6de2cf505b9963baa919e431dc8a3daa0b3c16f9132ef4f2e10cbca9f36fe3"
+      "sha256": "5523996ebbdb771cd42df338ff45e9076cf0b797fd9967510fa2320cd6ace83e"
     },
     {
       "path": "agent/codex/wsl-policy.mjs",
@@ -41,15 +49,15 @@
     },
     {
       "path": "agent/codex/wsl-runtime.mjs",
-      "sha256": "b010105809a3066582c5e61a497ba3fea0defd76470cc4f48d7893a6718e1866"
+      "sha256": "9e353fc569dd79e917cf6dce3843dd6a930dca0d01daace95145fd8aa42b9033"
     },
     {
       "path": "agent/codex/wsl-bridge.mjs",
-      "sha256": "a192310539fc50114d3e71385fb23e88e9863ee5e03486a7981dd22b3114aa8b"
+      "sha256": "586cbab36a04421d3ffef26bcd4cd9f00b6131650a627d475f4a1fed1944d21d"
     },
     {
       "path": "agent/codex/wsl-supervisor.py",
-      "sha256": "3d69466b300a56e625149749c4607a70d750daadff36c7f4613789366efbfd7a"
+      "sha256": "b81fbf3a28d91e9b34743f84beebf9b6588dc9a2d73f4646f0c804b945fb393f"
     },
     {
       "path": "agent/codex/model-catalog.mjs",
@@ -61,15 +69,19 @@
     },
     {
       "path": "agent/codex/bounded-process.mjs",
-      "sha256": "e9a93766bb03a9e7eb15be82ed01038d8be0800f43a7427d069722790de84559"
+      "sha256": "e5a30d288f9282f0de01e99115aa54e8d672adf5c37c4c56af71cf711d72f71c"
     },
     {
       "path": "agent/codex/WindowsJob.cs",
-      "sha256": "17d829ae5a4354100e5a3d5854d394548be11333ff770e7d4771f34860eba84d"
+      "sha256": "793fa1c372070859b0097c03cae6021de6d27957175b7315fbd9e872bfae6f17"
     },
     {
       "path": "agent/codex/jsonl.mjs",
-      "sha256": "8fa3021560b0f737c4c302c29337c6dd6496f2aeb037ddc6e8c41040aa7af35d"
+      "sha256": "e5ae0accdaf69c145d63369801d94a069ac1f5c2987448feddc8eb5a1d1e4615"
+    },
+    {
+      "path": "agent/codex/invocation-receipt.mjs",
+      "sha256": "39c0c2ea264473a98b539dcef9115541914cb019d5e78ab3cf4f31d68b058a2f"
     },
     {
       "path": "agent/design-connect.mjs",
@@ -77,7 +89,7 @@
     },
     {
       "path": "agent/design-main.mjs",
-      "sha256": "c4f36e6f2e189e814fda0758dff5bffe18e9527961e53f065af1678d737aca6a"
+      "sha256": "a0a47896d478d2b36fa3f4acd51331e579b103bdeacd7c260693ebb51f2eef5e"
     },
     {
       "path": "agent/startup-receipt.mjs",
@@ -85,11 +97,11 @@
     },
     {
       "path": "agent/session.mjs",
-      "sha256": "bd5134bedc49e352a53bde58d87c5091d76512650696ed3fa481c83201ca2504"
+      "sha256": "09b596044d745053110cd399cdde5a9c00635bc80e9f50813bbce44f6dfef663"
     },
     {
       "path": "agent/data-session.mjs",
-      "sha256": "bd28df6a27bedd99f5770e7ed3995afd693c9e3e600c7e7ddf34b8875730ff7d"
+      "sha256": "ca6f3e1729f231a5b1643e46f6f66489566ba0713a9f8c965b3905dcca40a80a"
     },
     {
       "path": "agent/protocol.mjs",
@@ -97,7 +109,11 @@
     },
     {
       "path": "agent/transport.mjs",
-      "sha256": "cda2893ee7dcf06331705a81ff95a4fd4bcb78919b4240102db860b94bd81fd0"
+      "sha256": "5a1817d70dd0a5400ab68026f8e2dd4c64de40df4ebf12d46c6cef200e3ddf14"
+    },
+    {
+      "path": "agent/runner-error.mjs",
+      "sha256": "cfbf584ae3d82ba41420fc657cb10f3f6bc362cfc70246d2ee4d8b4126a84574"
     }
   ]
 }

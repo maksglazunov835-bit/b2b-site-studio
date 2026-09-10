@@ -40,15 +40,7 @@ try {
         '/projects',
         write({
           displayName: 'Design transport fixture',
-          draft: {
-            ...brief,
-            niche:
-              scenario === 'stop-unconfirmed'
-                ? 'fixture-stop-unconfirmed'
-                : ['cancel', 'revoke'].includes(scenario)
-                  ? 'fixture-timeout'
-                  : brief.niche,
-          },
+          draft: brief,
         }),
       )
     ).project;
@@ -77,7 +69,15 @@ try {
               : [],
     });
     proxies.push(proxy);
-    const runner = startDesignRunner(proxy.origin, pair.pairingSecret);
+    const runner = startDesignRunner(
+      proxy.origin,
+      pair.pairingSecret,
+      scenario === 'stop-unconfirmed'
+        ? 'stop-unconfirmed'
+        : ['cancel', 'revoke'].includes(scenario)
+          ? 'timeout'
+          : 'success',
+    );
     runners.push(runner);
     await until(() => {
       assert.equal(runner.child.exitCode, null, runner.output());
@@ -100,6 +100,10 @@ try {
       const result = await ok(server.origin, `${target}/execution`);
       assert.equal(result.report.provider, 'test_stub');
       assert.equal(result.report.proposal.concepts.length, 3);
+      assert.equal(runner.invocations.length, 1);
+      assert.equal(runner.invocations[0].terminalSeen, true);
+      assert.equal(runner.invocations[0].usage.reasoning_output_tokens, 150);
+      assert.equal(runner.invocations[0].confirmedStop, true);
       assert.equal(result.attempts.length, 1);
       assert.equal(new Set(proxy.fingerprints.get('result')).size, 1);
       assert.equal(proxy.fingerprints.get('result').length, 2);
@@ -231,7 +235,11 @@ try {
     'DESIGN_DEFAULT_DENY_FORGED_HOST_TEST_PROVIDER_DISABLED_IN_NORMAL_MODE passed',
   );
   for (const secret of [...secrets, ...proxies.flatMap((p) => p.secrets)])
-    for (const text of [server.output(), ...runners.map((r) => r.output())])
+    for (const text of [
+      server.output(),
+      ...runners.map((r) => r.output()),
+      ...runners.map((r) => JSON.stringify(r.invocations)),
+    ])
       assert.equal(text.includes(secret), false);
 } finally {
   for (const p of proxies) p.release();

@@ -59,7 +59,7 @@ export function readSecret(signal, input = process.stdin, output = process.stdou
   });
 }
 
-export async function runSession({ origin, name, pairingSecret, signal, mode = "presence_only", log = console.log, designAdapter, startup, registrationOnly = false, readDesignManifest = installedDesignManifest }) {
+export async function runSession({ origin, name, pairingSecret, signal, mode = "presence_only", log = console.log, designAdapter, startup, onInvocation, registrationOnly = false, readDesignManifest = installedDesignManifest }) {
   startup?.begin('manifest_validation');
   if (mode === 'codex_design' && !designAdapter) throw new RunnerError('CODEX_NOT_AVAILABLE');
   if (mode === 'codex_design' && (await readDesignManifest()).sha256 !== ADAPTER.sha256) throw new RunnerError('CODEX_UNSUPPORTED_VERSION');
@@ -95,7 +95,7 @@ export async function runSession({ origin, name, pairingSecret, signal, mode = "
   startup?.complete('registration');
   log(`RUNNER_REGISTERED ${registered.agentId} ${mode}`);
   if (mode === "data_validation") return dataSession({ origin, registration: registered, credential: agentSecret, signal, log });
-  if (mode === 'codex_design') return dataSession({ origin, registration: registered, credential: agentSecret, signal, log, designAdapter, startup, registrationOnly });
+  if (mode === 'codex_design') return dataSession({ origin, registration: registered, credential: agentSecret, signal, log, designAdapter, startup, onInvocation, registrationOnly });
   let interval = registered.heartbeatIntervalSeconds;
   let failures = 0;
   while (!signal.aborted) {

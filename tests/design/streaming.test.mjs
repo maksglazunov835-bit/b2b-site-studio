@@ -23,7 +23,13 @@ const events = () => [
   },
   {
     type: 'turn.completed',
-    usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 2 },
+    usage: {
+      input_tokens: 1,
+      cached_input_tokens: 0,
+      cache_write_input_tokens: 0,
+      output_tokens: 2,
+      reasoning_output_tokens: 1,
+    },
   },
 ];
 const jsonl = (list) =>

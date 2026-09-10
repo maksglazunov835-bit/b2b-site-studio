@@ -175,26 +175,28 @@ void test('official missing executable refuses; filtered env, fixed argv and unt
 });
 void test('real test CLI child: JSONL, malformed, oversized, quota, timeout and signal cleanup', async () => {
   const spec = specFor();
-  const result = await isolatedInvocation(process.execPath, [stub], spec, 1, {
-    timeoutMs: 5000,
-  });
+  const result = await isolatedInvocation(
+    process.execPath,
+    [stub, 'success'],
+    spec,
+    1,
+    {
+      timeoutMs: 5000,
+    },
+  );
   assert.equal(result.provider, 'test_stub');
   assert.equal(result.proposal.concepts.length, 3);
-  for (const [niche, code] of [
-    ['fixture-malformed', 'CODEX_INVALID_OUTPUT'],
-    ['fixture-oversized', 'CODEX_OUTPUT_LIMIT'],
-    ['fixture-quota', 'CODEX_QUOTA'],
-    ['fixture-tool', 'CODEX_INVALID_OUTPUT'],
-    ['fixture-timeout', 'CODEX_TIMEOUT'],
+  for (const [scenario, code] of [
+    ['malformed', 'CODEX_INVALID_OUTPUT'],
+    ['oversized', 'CODEX_OUTPUT_LIMIT'],
+    ['quota', 'CODEX_QUOTA'],
+    ['tool', 'CODEX_INVALID_OUTPUT'],
+    ['timeout', 'CODEX_TIMEOUT'],
   ]) {
     await assert.rejects(
-      isolatedInvocation(
-        process.execPath,
-        [stub],
-        specFor({ ...brief, niche }),
-        1,
-        { timeoutMs: niche === 'fixture-timeout' ? 500 : 5000 },
-      ),
+      isolatedInvocation(process.execPath, [stub, scenario], specFor(), 1, {
+        timeoutMs: scenario === 'timeout' ? 500 : 5000,
+      }),
       (error) => error.code === code,
     );
   }
@@ -202,13 +204,10 @@ void test('real test CLI child: JSONL, malformed, oversized, quota, timeout and 
   const timer = setTimeout(() => controller.abort(), 500);
   try {
     await assert.rejects(
-      isolatedInvocation(
-        process.execPath,
-        [stub],
-        specFor({ ...brief, niche: 'fixture-timeout' }),
-        1,
-        { timeoutMs: 5000, signal: controller.signal },
-      ),
+      isolatedInvocation(process.execPath, [stub, 'timeout'], specFor(), 1, {
+        timeoutMs: 5000,
+        signal: controller.signal,
+      }),
       (e) => e.code === 'RUNNER_STOPPED',
     );
   } finally {

@@ -10,6 +10,7 @@ import { sha256Json } from '../../server/persistence/canonical-json.mjs';
 import { assertSafeTestDatabaseUrl } from '../../scripts/db/test-config.mjs';
 import { runnerEnvironment } from '../../agent/environment.mjs';
 import { runtime, brief, proposal } from './fixtures.mjs';
+import { validInvocation } from '../../agent/codex/invocation-receipt.mjs';
 export async function fixture({
   projectId,
   dispatch = true,
@@ -111,12 +112,13 @@ export async function running(f) {
   await f.action(a, 'heartbeat', { phase: 'validating' });
   return a;
 }
-export function startDesignRunner(origin, secret) {
+export function startDesignRunner(origin, secret, scenario = 'success') {
   assertSafeTestDatabaseUrl();
   const child = spawn(
     process.execPath,
     [
       'tests/design/stub-runner.mjs',
+      scenario,
       '--origin',
       origin,
       '--name',
@@ -129,6 +131,10 @@ export function startDesignRunner(origin, secret) {
     },
   );
   let output = '';
+  const invocations = [];
+  child.on('message', (value) => {
+    if (validInvocation(value)) invocations.push(value);
+  });
   const capture = (chunk) => {
     output = (output + chunk).slice(-16384);
   };
@@ -140,5 +146,5 @@ export function startDesignRunner(origin, secret) {
     child.once('exit', (code, signal) => resolve({ code, signal }));
   });
   child.stdin.end(secret + '\n');
-  return { child, exited, output: () => output, launcher: false };
+  return { child, exited, output: () => output, launcher: false, invocations };
 }

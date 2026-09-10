@@ -5,6 +5,12 @@ import { createInterface } from 'node:readline';
 import net from 'node:net';
 import os from 'node:os';
 import {
+  diagnostic,
+  diagnosticError,
+  validDiagnostic,
+  validProcessResult,
+} from './invocation-receipt.mjs';
+import {
   LAB,
   LAB_DISABLED,
   labEnvironment,
@@ -182,7 +188,8 @@ export async function supervise(
       stdout = '',
       stderr = '',
       bytes = 0,
-      invalid = false;
+      invalid = false,
+      primary = null;
     const abort = () => child.stdin.end('stop\n');
     const timer = setTimeout(() => child.kill('SIGTERM'), timeoutMs + 1000);
     const hard = setTimeout(() => {
@@ -191,11 +198,22 @@ export async function supervise(
     }, timeoutMs + 4500);
     signal?.addEventListener('abort', abort, { once: true });
     child.stdin.on('error', () => {});
+    child.stdout.on('data', (data) => {
+      bytes += data.length;
+      if (bytes > 262144) {
+        primary ??= diagnostic(
+          { code: 'CODEX_OUTPUT_LIMIT' },
+          { source: 'transport' },
+        );
+        invalid = true;
+        lines.close();
+        abort();
+      }
+    });
     const lines = createInterface({ input: child.stdout });
     lines.on('line', (line) => {
+      if (bytes > 262144) return;
       try {
-        bytes += Buffer.byteLength(line);
-        if (bytes > 262144) throw Error();
         const value = JSON.parse(line);
         if (value.type === 'started')
           onStarted?.(
@@ -208,23 +226,40 @@ export async function supervise(
               ),
             () => child.stdin.write('{"type":"end"}\n'),
           );
-        else if (value.type === 'stopped') last = value;
-        else if (['stdout', 'stderr'].includes(value.type)) {
+        else if (value.type === 'stopped') {
+          const { type: _type, ...status } = value;
+          if (!validProcessResult(status))
+            throw Error('Invalid supervisor status');
+          last = status;
+        } else if (value.type === 'failure') {
+          if (validDiagnostic(value.diagnostic)) primary ??= value.diagnostic;
+          invalid = true;
+          abort();
+        } else if (['stdout', 'stderr'].includes(value.type)) {
           const data = Buffer.from(value.data, 'base64');
           if (onData) onData(value.type, data);
           else if (value.type === 'stdout') stdout += data.toString();
           else stderr += data.toString();
         } else throw Error();
-      } catch {
+      } catch (error) {
+        primary ??= diagnostic(error, { source: 'transport', stage: 'stream' });
         invalid = true;
         abort();
       }
     });
-    child.stderr.on('data', () => {
+    child.stderr.on('data', (data) => {
+      primary ??= diagnostic(
+        { code: 'CODEX_PROCESS_FAILED' },
+        { source: 'transport', text: data.toString('utf8') },
+      );
       invalid = true;
       abort();
     });
-    child.once('error', () => {
+    child.once('error', (error) => {
+      primary ??= diagnostic(error, {
+        source: 'transport',
+        stage: 'provider_start',
+      });
       invalid = true;
     });
     child.once('close', (code, signalCode) => {
@@ -232,13 +267,24 @@ export async function supervise(
       clearTimeout(hard);
       lines.close();
       signal?.removeEventListener('abort', abort);
-      if (invalid || code !== 0 || signalCode || last?.confirmed !== true)
-        reject(
-          Object.assign(Error('STOP_UNCONFIRMED'), {
-            code: 'STOP_UNCONFIRMED',
-          }),
+      const confirmed = code === 0 && !signalCode && last?.confirmed === true;
+      if (!confirmed || invalid) {
+        const error = diagnosticError(
+          confirmed && primary ? primary.primaryCode : 'STOP_UNCONFIRMED',
+          primary ??
+            diagnostic(
+              { code: 'STOP_UNCONFIRMED' },
+              { source: 'transport', stage: 'cleanup' },
+            ),
         );
-      else resolve({ ...last, stdout, stderr });
+        error.processResult = {
+          ...last,
+          confirmed,
+          ...(primary ? { diagnostic: primary } : {}),
+          ...(!confirmed ? { cleanupCode: 'STOP_UNCONFIRMED' } : {}),
+        };
+        reject(error);
+      } else resolve({ ...last, stdout, stderr });
     });
     child.stdin.write(
       JSON.stringify({
@@ -864,25 +910,62 @@ export async function runLab(request, { supervisor, signal, emit }) {
       current.accountType !== 'chatgpt'
     )
       fail('LAB_CONFIG_CHANGED');
-    const result = await supervise(
-      supervisor,
-      [LAB.binary, ...labExecArgs(task)],
-      {
+    let result;
+    try {
+      result = await supervise(supervisor, [LAB.binary, ...labExecArgs(task)], {
         cwd: task,
         input: request.prompt,
         signal,
         timeoutMs: LAB.timeoutMs,
         onData: (stream, data) =>
           emit({ type: stream, data: data.toString('base64') }),
-      },
-    );
+        onStarted: () => emit({ type: 'process', value: { started: true } }),
+      });
+    } catch (error) {
+      emit({
+        type: 'process',
+        value: error.processResult ?? {
+          confirmed: false,
+          cleanupCode: 'STOP_UNCONFIRMED',
+        },
+      });
+      throw error;
+    }
+    const status = {
+      code: result.code,
+      signalCode: result.signalCode,
+      confirmed: result.confirmed,
+      reason: result.reason,
+      started: true,
+    };
+    emit({ type: 'process', value: status });
     if (result.reason)
-      fail(result.reason === 'TIMEOUT' ? 'CODEX_TIMEOUT' : 'RUNNER_STOPPED');
+      throw diagnosticError(
+        result.reason === 'TIMEOUT'
+          ? 'CODEX_TIMEOUT'
+          : result.reason === 'OUTPUT_LIMIT'
+            ? 'CODEX_OUTPUT_LIMIT'
+            : 'RUNNER_STOPPED',
+        diagnostic(
+          {
+            code:
+              result.reason === 'TIMEOUT'
+                ? 'CODEX_TIMEOUT'
+                : result.reason === 'OUTPUT_LIMIT'
+                  ? 'CODEX_OUTPUT_LIMIT'
+                  : 'RUNNER_STOPPED',
+          },
+          {
+            source: 'transport',
+            category: result.reason === 'TIMEOUT' ? 'timeout' : 'cancelled',
+          },
+        ),
+      );
     return {
       code: result.code,
       confirmed: result.confirmed,
       modelInvocations: 1,
-      signalCode: null,
+      signalCode: result.signalCode,
     };
   } catch (e) {
     if (e.code === 'STOP_UNCONFIRMED') stopped = false;
@@ -929,6 +1012,14 @@ export async function relay(request, supervisor) {
     emit({
       type: 'error',
       code: /^[A-Z_]+$/.test(e.code ?? '') ? e.code : 'LAB_SETUP_REQUIRED',
+      diagnostic: diagnostic(e, {
+        source: 'sandbox',
+        stage: 'preflight',
+        category: 'isolation',
+      }),
+      processResult: e.processResult ?? {
+        confirmed: e.code !== 'STOP_UNCONFIRMED',
+      },
     });
   } finally {
     clearInterval(watchdog);

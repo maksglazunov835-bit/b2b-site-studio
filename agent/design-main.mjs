@@ -25,6 +25,7 @@ export async function main({
   let startup, failure;
   try {
     const { createStartup } = await import('./startup-receipt.mjs');
+    const { validInvocation } = await import('./codex/invocation-receipt.mjs');
     startup = createStartup({ runId, startedAt, send });
     const [{ officialAdapter }, { options, readSecret, runSession }] =
       await load();
@@ -69,6 +70,11 @@ export async function main({
       designAdapter: adapter,
       registrationOnly,
       startup,
+      onInvocation: (value) => {
+        if (!validInvocation(value) || value.runId !== runId)
+          throw Object.assign(Error(), { code: 'CODEX_INVALID_OUTPUT' });
+        send(value);
+      },
       log,
     });
   } catch (error) {

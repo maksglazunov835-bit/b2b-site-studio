@@ -7,6 +7,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { LAB, labEnvironment } from './wsl-policy.mjs';
 import { RunnerError } from '../transport.mjs';
+import {
+  diagnostic,
+  diagnosticError,
+  validDiagnostic,
+  validProcessResult,
+} from './invocation-receipt.mjs';
 
 const digest = (s) => createHash('sha256').update(s).digest('hex');
 export async function labBundle() {
@@ -21,7 +27,19 @@ export async function labBundle() {
   ).replaceAll('\r\n', '\n');
   const uri =
     'data:text/javascript;base64,' + Buffer.from(policy).toString('base64');
-  const source = runtime.replace("'./wsl-policy.mjs'", JSON.stringify(uri));
+  const dataUri = (value) =>
+    'data:text/javascript;base64,' + Buffer.from(value).toString('base64');
+  const errors = (
+    await readFile(new URL('../runner-error.mjs', import.meta.url), 'utf8')
+  ).replaceAll('\r\n', '\n');
+  const receipts = (
+    await readFile(new URL('./invocation-receipt.mjs', import.meta.url), 'utf8')
+  )
+    .replaceAll('\r\n', '\n')
+    .replace("'../runner-error.mjs'", JSON.stringify(dataUri(errors)));
+  const source = runtime
+    .replace("'./wsl-policy.mjs'", JSON.stringify(uri))
+    .replace("'./invocation-receipt.mjs'", JSON.stringify(dataUri(receipts)));
   return { source, supervisor, sha256: digest(source + supervisor) };
 }
 
@@ -63,7 +81,14 @@ export function wslCommand(source = process.env) {
 
 export async function callLab(
   request,
-  { signal, onData, onStarted, timeoutMs = 45000, diagnosticFault } = {},
+  {
+    signal,
+    onData,
+    onStarted,
+    onProcess,
+    timeoutMs = 45000,
+    diagnosticFault,
+  } = {},
 ) {
   if (signal?.aborted) throw new RunnerError('RUNNER_STOPPED');
   if (
@@ -102,110 +127,234 @@ export async function callLab(
   try {
     if (Buffer.byteLength(packet) > 262144)
       throw new RunnerError('LAB_INPUT_REJECTED');
-    return await new Promise((resolve, reject) => {
-      const child = spawn(command.executable, command.args, {
-        env: command.env,
-        shell: false,
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      let result,
-        error,
-        bytes = 0,
-        stopping = false,
-        cleanupTimer;
-      const stop = (code) => {
-        error ??= new RunnerError(code);
-        if (stopping) return;
-        stopping = true;
-        clearInterval(pulse);
-        child.stdin.end('stop\n');
-        // A dead wsl.exe is not proof of a dead Linux process tree.
-        cleanupTimer = setTimeout(() => {
-          error = new RunnerError('STOP_UNCONFIRMED');
-          child.kill();
-        }, 6500);
-      };
-      const abort = () => stop('RUNNER_STOPPED');
-      const pulse = setInterval(() => {
-        if (!stopping) child.stdin.write('pulse\n');
-      }, 500);
-      const deadline = setTimeout(
-        () => stop('CODEX_TIMEOUT'),
-        Math.min(timeoutMs, LAB.timeoutMs + 45000),
-      );
-      signal?.addEventListener('abort', abort, { once: true });
-      const lines = createInterface({ input: child.stdout });
-      lines.on('line', (line) => {
-        try {
-          bytes += Buffer.byteLength(line);
-          if (bytes > 262144) return stop('CODEX_OUTPUT_LIMIT');
-          const value = JSON.parse(line);
-          if (value.type === 'result') result = value.value;
-          else if (value.type === 'error')
-            error = new RunnerError(
-              /^[A-Z_]{1,64}$/.test(value.code)
-                ? value.code
-                : 'LAB_SETUP_REQUIRED',
-            );
-          else if (value.type === 'started') {
-            onStarted?.();
-            if (diagnosticFault === 'relay-eof') {
-              clearInterval(pulse);
-              child.stdin.end();
-            }
-            if (diagnosticFault === 'relay-kill') {
-              clearInterval(pulse);
-              child.kill();
-            }
-            if (diagnosticFault === 'pulse-loss') clearInterval(pulse);
-          } else if (['stdout', 'stderr'].includes(value.type))
-            onData?.(value.type, Buffer.from(value.data, 'base64'));
-          else stop('CODEX_INVALID_OUTPUT');
-        } catch {
-          stop('CODEX_INVALID_OUTPUT');
+    const child = spawn(command.executable, command.args, {
+      env: command.env,
+      shell: false,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return await relayProcess(child, packet, {
+      signal,
+      onData,
+      onStarted,
+      onProcess,
+      timeoutMs,
+      diagnosticFault,
+      recoverStop: async () => {
+        if (request.operation === 'receipt') return false;
+        for (let n = 0; n < 4; n++) {
+          await new Promise((r) => setTimeout(r, 800));
+          try {
+            if (
+              (
+                await callLab(
+                  { operation: 'receipt', receiptId: runId },
+                  { timeoutMs: 6000 },
+                )
+              ).stopped === true
+            )
+              return true;
+          } catch {}
         }
-      });
-      child.stderr.on('data', (chunk) => {
-        bytes += chunk.length;
-        if (bytes > 262144) stop('CODEX_OUTPUT_LIMIT');
-      });
-      child.stdin.on('error', () => {});
-      child.once('error', () => {
-        error = new RunnerError('LAB_SETUP_REQUIRED');
-      });
-      child.once('close', async (code, signalCode) => {
-        clearInterval(pulse);
-        clearTimeout(deadline);
-        clearTimeout(cleanupTimer);
-        lines.close();
-        signal?.removeEventListener('abort', abort);
-        if (signalCode || code !== 0 || (!result && !error)) {
-          let confirmed = false;
-          if (request.operation !== 'receipt') {
-            for (let n = 0; n < 4 && !confirmed; n++) {
-              await new Promise((r) => setTimeout(r, 800));
-              try {
-                confirmed =
-                  (
-                    await callLab(
-                      { operation: 'receipt', receiptId: runId },
-                      { timeoutMs: 6000 },
-                    )
-                  ).stopped === true;
-              } catch {}
-            }
-          }
-          error = new RunnerError(
-            confirmed ? 'RUNNER_STOPPED' : 'STOP_UNCONFIRMED',
-          );
-        }
-        if (error) reject(error);
-        else resolve(result);
-      });
-      child.stdin.write(packet + '\n');
+        return false;
+      },
     });
   } finally {
     listener?.close();
   }
+}
+
+// Shared bounded pipe protocol. It accepts an already-owned child, not a
+// job-selected executable. Production callLab always constructs the fixed WSL command.
+export function relayProcess(
+  child,
+  packet,
+  {
+    signal,
+    onData,
+    onStarted,
+    onProcess,
+    timeoutMs = 45000,
+    diagnosticFault,
+    recoverStop = async () => false,
+  } = {},
+) {
+  return new Promise((resolve, reject) => {
+    let result,
+      error,
+      bytes = 0,
+      stopping = false,
+      cleanupTimer,
+      drainTimer,
+      settled = false,
+      cleanupFailed = false,
+      processResult = {};
+    const measured = (value) => {
+      if (!validProcessResult(value))
+        throw diagnosticError(
+          'CODEX_INVALID_OUTPUT',
+          diagnostic({ code: 'CODEX_INVALID_OUTPUT' }, { source: 'transport' }),
+        );
+      processResult = { ...processResult, ...value };
+      onProcess?.(value);
+    };
+    const stop = (value) => {
+      error ??=
+        typeof value === 'string'
+          ? diagnosticError(
+              value,
+              diagnostic(
+                { code: value },
+                {
+                  source: 'transport',
+                  category:
+                    value === 'CODEX_TIMEOUT'
+                      ? 'timeout'
+                      : value === 'RUNNER_STOPPED'
+                        ? 'cancelled'
+                        : 'unclassified',
+                },
+              ),
+            )
+          : value;
+      if (stopping) return;
+      stopping = true;
+      clearInterval(pulse);
+      child.stdin.end('stop\n');
+      // A dead wsl.exe is not proof of a dead Linux process tree.
+      cleanupTimer = setTimeout(() => {
+        cleanupFailed = true;
+        child.kill();
+        void complete(null, null, false);
+      }, 6500);
+    };
+    const abort = () => stop('RUNNER_STOPPED');
+    const pulse = setInterval(() => {
+      if (!stopping) child.stdin.write('pulse\n');
+    }, 500);
+    const deadline = setTimeout(
+      () => stop('CODEX_TIMEOUT'),
+      Math.min(timeoutMs, LAB.timeoutMs + 45000),
+    );
+    signal?.addEventListener('abort', abort, { once: true });
+    // Bound bytes before readline can accumulate an unterminated hostile line.
+    child.stdout.on('data', (chunk) => {
+      bytes += chunk.length;
+      if (bytes > 262144) {
+        lines.close();
+        stop('CODEX_OUTPUT_LIMIT');
+      }
+    });
+    const lines = createInterface({ input: child.stdout });
+    lines.on('line', (line) => {
+      if (settled || bytes > 262144) return;
+      try {
+        const value = JSON.parse(line);
+        if (value.type === 'result') result = value.value;
+        else if (value.type === 'error') {
+          error ??= diagnosticError(
+            value.code,
+            validDiagnostic(value.diagnostic)
+              ? value.diagnostic
+              : diagnostic(
+                  { code: value.code },
+                  { source: 'sandbox', stage: 'preflight' },
+                ),
+          );
+          if (value.processResult) measured(value.processResult);
+          if (value.code === 'STOP_UNCONFIRMED') cleanupFailed = true;
+        } else if (value.type === 'process') measured(value.value);
+        else if (value.type === 'started') {
+          onStarted?.();
+          if (diagnosticFault === 'relay-eof') {
+            clearInterval(pulse);
+            child.stdin.end();
+          }
+          if (diagnosticFault === 'relay-kill') {
+            clearInterval(pulse);
+            child.kill();
+          }
+          if (diagnosticFault === 'pulse-loss') clearInterval(pulse);
+        } else if (['stdout', 'stderr'].includes(value.type)) {
+          if (!error) {
+            try {
+              onData?.(value.type, Buffer.from(value.data, 'base64'));
+            } catch (failure) {
+              const details = diagnostic(failure, {
+                source: 'parser',
+                stage: 'parser',
+              });
+              stop(diagnosticError(details.primaryCode, details));
+            }
+          }
+        } else stop('CODEX_INVALID_OUTPUT');
+      } catch (failure) {
+        stop(
+          diagnosticError(
+            'CODEX_INVALID_OUTPUT',
+            diagnostic(failure, { source: 'transport' }),
+          ),
+        );
+      }
+    });
+    child.stderr.on('data', (chunk) => {
+      bytes += chunk.length;
+      if (bytes > 262144) stop('CODEX_OUTPUT_LIMIT');
+    });
+    child.stdin.on('error', () => {});
+    child.once('error', (failure) => {
+      error ??= diagnosticError(
+        'LAB_SETUP_REQUIRED',
+        diagnostic(failure, { source: 'transport', stage: 'provider_start' }),
+      );
+    });
+    const complete = async (code, signalCode, closed) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(pulse);
+      clearTimeout(deadline);
+      clearTimeout(cleanupTimer);
+      clearTimeout(drainTimer);
+      lines.close();
+      signal?.removeEventListener('abort', abort);
+      if (!closed || signalCode || code !== 0 || (!result && !error)) {
+        let confirmed = false;
+        try {
+          confirmed = await recoverStop();
+        } catch {}
+        cleanupFailed ||= !confirmed;
+        measured({ confirmed });
+        error ??= diagnosticError(
+          'RUNNER_STOPPED',
+          diagnostic({ code: 'RUNNER_STOPPED' }, { source: 'transport' }),
+        );
+      }
+      if (cleanupFailed) {
+        measured({ confirmed: false, cleanupCode: 'STOP_UNCONFIRMED' });
+        error = diagnosticError(
+          'STOP_UNCONFIRMED',
+          diagnostic(error ?? { code: 'STOP_UNCONFIRMED' }, {
+            source: 'transport',
+            stage: 'cleanup',
+          }),
+        );
+      }
+      child.stdout.destroy();
+      child.stderr.destroy();
+      child.stdin.destroy();
+      if (error) {
+        error.processResult = processResult;
+        reject(error);
+      } else resolve(result);
+    };
+    child.once('exit', (code, signalCode) => {
+      drainTimer = setTimeout(() => {
+        void complete(code, signalCode, false);
+      }, 500);
+    });
+    child.once('close', (code, signalCode) => {
+      void complete(code, signalCode, true);
+    });
+    child.stdin.write(packet + '\n');
+  });
 }

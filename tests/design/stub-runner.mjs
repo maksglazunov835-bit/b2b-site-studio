@@ -3,6 +3,12 @@ import { options, readSecret, runSession } from '../../agent/session.mjs';
 import { isolatedInvocation } from '../../agent/codex/adapter.mjs';
 import { runtime } from './fixtures.mjs';
 import { RunnerError } from '../../agent/transport.mjs';
+import { fixtureScenarios } from './protocol-fixtures.mjs';
+import { createStartup } from '../../agent/startup-receipt.mjs';
+const scenario = process.argv[2];
+if (!fixtureScenarios.includes(scenario))
+  throw Error('Invalid test-only scenario');
+const startup = createStartup();
 const controller = new AbortController();
 const stop = () => controller.abort();
 process.once('SIGTERM', stop);
@@ -13,13 +19,15 @@ process.on('message', (value) => {
 process.once('disconnect', stop);
 let calls = 0;
 try {
-  const config = options(process.argv.slice(2));
+  const config = options(process.argv.slice(3));
   const secret = await readSecret(controller.signal);
   await runSession({
     ...config,
     mode: 'codex_design',
     pairingSecret: secret,
     signal: controller.signal,
+    startup,
+    onInvocation: (value) => process.send?.(value),
     designAdapter: {
       runtime,
       async execute(spec, attempt, options) {
@@ -28,16 +36,16 @@ try {
         try {
           return await isolatedInvocation(
             process.execPath,
-            [fileURLToPath(new URL('./stub-cli.mjs', import.meta.url))],
+            [
+              fileURLToPath(new URL('./stub-cli.mjs', import.meta.url)),
+              scenario,
+            ],
             spec,
             attempt,
             options,
           );
         } catch (error) {
-          if (
-            spec.input.brief.niche === 'fixture-stop-unconfirmed' &&
-            options.signal.aborted
-          )
+          if (scenario === 'stop-unconfirmed' && options.signal.aborted)
             throw new RunnerError('STOP_UNCONFIRMED');
           throw error;
         }

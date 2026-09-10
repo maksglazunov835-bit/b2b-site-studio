@@ -1,9 +1,8 @@
 import http from "node:http";
 import { parseBounded } from "../server/execution/bounds.mjs";
 
-export class RunnerError extends Error {
-  constructor(code, retryable = false) { super(code); this.code = code; this.retryable = retryable; }
-}
+import { RunnerError } from "./runner-error.mjs";
+export { RunnerError } from "./runner-error.mjs";
 export function localOrigin(value) {
   const match = typeof value === "string" && /^http:\/\/(127\.0\.0\.1|\[::1\]):([1-9][0-9]{0,4})\/?$/.exec(value);
   if (!match || Number(match[2]) > 65535) throw new RunnerError("LOCAL_ORIGIN_REQUIRED");

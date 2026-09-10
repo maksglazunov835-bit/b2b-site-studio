@@ -1,9 +1,17 @@
 import { runBounded } from './bounded-process.mjs';
 import { outputParser } from './jsonl.mjs';
+import {
+  createInvocation,
+  diagnostic,
+  diagnosticError,
+} from './invocation-receipt.mjs';
 import { queryModelCatalog } from './model-catalog.mjs';
 import { permissionArguments } from './permission-profile.mjs';
 import { callLab } from './wsl-bridge.mjs';
-import { measuredWslAdmission, freshWslAdmission } from '../../server/design/admission.mjs';
+import {
+  measuredWslAdmission,
+  freshWslAdmission,
+} from '../../server/design/admission.mjs';
 import {
   mkdtemp,
   mkdir,
@@ -15,7 +23,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import schema from '../../docs/contracts/design-proposal.schema.json' with { type: 'json' };
+import schema from '../../docs/contracts/design-proposal.wire.schema.json' with { type: 'json' };
 import {
   ADAPTER,
   DESIGN_SETTINGS,
@@ -205,6 +213,58 @@ export function parseOutput(output, brief) {
   parser.stdout(Buffer.from(output.stdout));
   return parser.finish(output);
 }
+// The executable/transport is selected only by committed adapter code, never a
+// job field. Test harnesses reuse this recorder with a fixed synthetic transport.
+export async function recordedInvocation(spec, attempt, options, perform) {
+  assertDesignSpec(spec);
+  const receipt = createInvocation({
+    runId: options.runId,
+    jobId: spec.jobId,
+    attempt,
+    runtimeSha256: sha256Json(spec.runtime),
+    inputSha256: spec.input.sha256,
+    schemaSha256: sha256Json(schema),
+    jobSpecSha256: sha256Json(spec),
+  });
+  const parser = outputParser(spec.input.brief, receipt);
+  let failure;
+  try {
+    const output = await perform(parser, receipt);
+    receipt.process(output);
+    const parsed = parser.finish(output);
+    return assertDesignReport(
+      {
+        reportVersion: '1.1.0',
+        jobId: spec.jobId,
+        attempt,
+        inputSha256: spec.input.sha256,
+        jobSpecSha256: sha256Json(spec),
+        provider: spec.runtime.provider,
+        cliVersion: spec.runtime.cliVersion,
+        model: spec.settings.model,
+        effort: spec.settings.effort,
+        modelEvidence: modelEvidence(spec),
+        providerInvocations: 1,
+        ...parsed,
+      },
+      spec,
+      attempt,
+    );
+  } catch (error) {
+    if (error.processResult) receipt.process(error.processResult);
+    receipt.failure(error, { source: 'transport' });
+    failure = error;
+    const value = receipt.finish(error);
+    const propagated = diagnosticError(
+      value.errorCode,
+      value.primary ?? diagnostic(error),
+    );
+    propagated.invocationReceipt = value;
+    throw propagated;
+  } finally {
+    options.onInvocation?.(receipt.finish(failure));
+  }
+}
 export async function isolatedInvocation(
   binary,
   prefix,
@@ -235,37 +295,27 @@ export async function isolatedInvocation(
     const schemaPath = path.join(directory, 'proposal.schema.json');
     await mkdir(path.join(directory, 'output'));
     await writeFile(schemaPath, JSON.stringify(schema), { flag: 'wx' });
-    const parser = outputParser(spec.input.brief);
-    const output = await boundedProcess(
-      binary,
-      [...prefix, ...execArguments(directory, schemaPath)],
-      {
-        ...options,
-        cwd: directory,
-        input: promptFor(spec.input.brief),
-        capture: false,
-        onStdout: parser.stdout,
-        onStderr: parser.stderr,
-      },
-    );
-    const result = parser.finish(output);
-    return assertDesignReport(
-      {
-        reportVersion: '1.1.0',
-        jobId: spec.jobId,
-        attempt,
-        inputSha256: spec.input.sha256,
-        jobSpecSha256: sha256Json(spec),
-        provider: spec.runtime.provider,
-        cliVersion: spec.runtime.cliVersion,
-        model: spec.settings.model,
-        effort: spec.settings.effort,
-        modelEvidence: modelEvidence(spec),
-        providerInvocations: 1,
-        ...result,
-      },
+    return await recordedInvocation(
       spec,
       attempt,
+      options ?? {},
+      async (parser, receipt) => {
+        receipt.stage('input');
+        const output = await boundedProcess(
+          binary,
+          [...prefix, ...execArguments(directory, schemaPath)],
+          {
+            ...options,
+            cwd: directory,
+            input: promptFor(spec.input.brief),
+            capture: false,
+            onStdout: parser.stdout,
+            onStderr: parser.stderr,
+            onProcess: (value) => receipt.process(value),
+          },
+        );
+        return output;
+      },
     );
   } finally {
     // Only the directory created here is owned. Never traverse an altered symlink.
@@ -311,7 +361,8 @@ export async function officialWslAdapter({ signal } = {}) {
     diagnostics = await callLab({ operation: 'preflight' }, { signal });
     runtime.status = diagnostics.status;
     runtime.modelSelection = diagnostics.modelSelection;
-    if (runtime.status === 'ready') runtime.admission = measuredWslAdmission(diagnostics);
+    if (runtime.status === 'ready')
+      runtime.admission = measuredWslAdmission(diagnostics);
   } catch (e) {
     runtime.status = ISOLATION_STATUS;
     diagnostics = {
@@ -324,42 +375,42 @@ export async function officialWslAdapter({ signal } = {}) {
     runtime,
     diagnostics,
     assertRegistrationAdmission() {
-      if (!freshWslAdmission(runtime)) throw new RunnerError(diagnostics?.status === 'ready' ? 'CODEX_ISOLATION_UNVERIFIED' : diagnostics?.status ?? runtime.status);
+      if (!freshWslAdmission(runtime))
+        throw new RunnerError(
+          diagnostics?.status === 'ready'
+            ? 'CODEX_ISOLATION_UNVERIFIED'
+            : (diagnostics?.status ?? runtime.status),
+        );
     },
     async execute(spec, attempt, options = {}) {
       assertDesignSpec(spec);
       if (runtime.status !== 'ready') throw new RunnerError(runtime.status);
-      if (sha256Json(spec.runtime) !== sha256Json(runtime)) throw new RunnerError('INVALID_ASSIGNMENT');
+      if (sha256Json(spec.runtime) !== sha256Json(runtime))
+        throw new RunnerError('INVALID_ASSIGNMENT');
       if (invoked) throw new RunnerError('CODEX_PROCESS_FAILED');
       invoked = true;
-      const parser = outputParser(spec.input.brief);
-      const output = await callLab(
-        { operation: 'invoke', prompt: promptFor(spec.input.brief), schema },
-        {
-          signal: options.signal,
-          timeoutMs: 180000,
-          onData: (stream, bytes) => parser[stream](bytes),
-        },
-      );
-      if (output.confirmed !== true || output.modelInvocations !== 1)
-        throw new RunnerError('STOP_UNCONFIRMED');
-      return assertDesignReport(
-        {
-          reportVersion: '1.1.0',
-          jobId: spec.jobId,
-          attempt,
-          inputSha256: spec.input.sha256,
-          jobSpecSha256: sha256Json(spec),
-          provider: 'codex',
-          cliVersion: runtime.cliVersion,
-          model: runtime.model,
-          effort: runtime.effort,
-          modelEvidence: modelEvidence(spec),
-          providerInvocations: 1,
-          ...parser.finish(output),
-        },
+      return recordedInvocation(
         spec,
         attempt,
+        options,
+        async (parser, receipt) => {
+          const output = await callLab(
+            {
+              operation: 'invoke',
+              prompt: promptFor(spec.input.brief),
+              schema,
+            },
+            {
+              signal: options.signal,
+              timeoutMs: 180000,
+              onData: (stream, bytes) => parser[stream](bytes),
+              onProcess: (value) => receipt.process(value),
+            },
+          );
+          if (output.confirmed !== true || output.modelInvocations !== 1)
+            throw new RunnerError('STOP_UNCONFIRMED');
+          return output;
+        },
       );
     },
   };
