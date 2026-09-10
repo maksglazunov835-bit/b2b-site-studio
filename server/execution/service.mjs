@@ -11,7 +11,7 @@ import { agentGrant } from "./grants.mjs";
 import { assertSpec, materialize, POLICY, VALIDATOR, validationReport } from "./contract.mjs";
 import { executionRequest } from "./requests.mjs";
 import { executionError, transition } from "./transitions.mjs";
-import { ADAPTER, DESIGN_POLICY, materializeDesign, assertDesignSpec, assertDesignReport } from '../design/contract.mjs';
+import { ADAPTER, DESIGN_POLICY, materializeDesign, assertDesignSpec, assertDesignReport, runtimeExecutable } from '../design/contract.mjs';
 
 export const TERMINAL_ACK_TTL_MS = 300000;
 const terminalStates = { result: "succeeded", "cancel-ack": "cancelled", fail: "failed" };
@@ -32,6 +32,7 @@ export function createExecutionService({ workspaceId = DEFAULT_WORKSPACE_ID, clo
     if (grant.validator_sha256.trim() !== (grant.mode === 'codex_design' ? ADAPTER.sha256 : VALIDATOR.sha256)) executionError("VALIDATOR_MISMATCH");
     if (grant.mode === 'codex_design' && grant.runtime?.status !== 'ready') executionError(grant.runtime?.status ?? 'CODEX_NOT_AVAILABLE');
     if (grant.runtime?.provider === 'test_stub' && process.env.B2B_DESIGN_TEST_STUB !== '1') executionError('TEST_PROVIDER_DISABLED', 403);
+    if (grant.mode === 'codex_design' && !runtimeExecutable(grant.runtime,{allowTest:process.env.B2B_DESIGN_TEST_STUB === '1'})) executionError('CODEX_ISOLATION_UNVERIFIED');
     return { agent, grant };
   }
   async function lockedJob(client, projectId, jobId) {

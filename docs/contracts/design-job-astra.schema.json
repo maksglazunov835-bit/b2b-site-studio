@@ -183,6 +183,17 @@
         "modelSelection"
       ],
       "properties": {
+        "admission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transport", "profile", "checkedAt", "configSha256"],
+          "properties": {
+            "transport": {"const": "wsl2"},
+            "profile": {"const": "b2b-design-json"},
+            "checkedAt": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},
+            "configSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
         "provider": {
           "enum": ["codex", "test_stub"]
         },

@@ -3,6 +3,7 @@ import { outputParser } from './jsonl.mjs';
 import { queryModelCatalog } from './model-catalog.mjs';
 import { permissionArguments } from './permission-profile.mjs';
 import { callLab } from './wsl-bridge.mjs';
+import { measuredWslAdmission, freshWslAdmission } from '../../server/design/admission.mjs';
 import {
   mkdtemp,
   mkdir,
@@ -310,7 +311,9 @@ export async function officialWslAdapter({ signal } = {}) {
     diagnostics = await callLab({ operation: 'preflight' }, { signal });
     runtime.status = diagnostics.status;
     runtime.modelSelection = diagnostics.modelSelection;
+    if (runtime.status === 'ready') runtime.admission = measuredWslAdmission(diagnostics);
   } catch (e) {
+    runtime.status = ISOLATION_STATUS;
     diagnostics = {
       status: e.code ?? 'LAB_SETUP_REQUIRED',
       modelInvocations: 0,
@@ -320,9 +323,13 @@ export async function officialWslAdapter({ signal } = {}) {
   return {
     runtime,
     diagnostics,
+    assertRegistrationAdmission() {
+      if (!freshWslAdmission(runtime)) throw new RunnerError(diagnostics?.status === 'ready' ? 'CODEX_ISOLATION_UNVERIFIED' : diagnostics?.status ?? runtime.status);
+    },
     async execute(spec, attempt, options = {}) {
       assertDesignSpec(spec);
       if (runtime.status !== 'ready') throw new RunnerError(runtime.status);
+      if (sha256Json(spec.runtime) !== sha256Json(runtime)) throw new RunnerError('INVALID_ASSIGNMENT');
       if (invoked) throw new RunnerError('CODEX_PROCESS_FAILED');
       invoked = true;
       const parser = outputParser(spec.input.brief);

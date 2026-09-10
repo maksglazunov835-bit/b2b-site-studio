@@ -98,6 +98,7 @@ jobs:
             .test-results/design-3-mobile.png
             .test-results/process-tree-linux.json
             .test-results/wsl-protocol-linux.json
+            .test-results/startup-regressions.json
 
   windows-process-tree:
     name: Windows native process-tree and streaming regressions
@@ -125,7 +126,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-process-tree-${{ github.event.pull_request.head.sha || github.sha }}
-          path: .test-results/process-tree-win32.json
+          path: |
+            .test-results/process-tree-win32.json
+            .test-results/startup-regressions.json
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7

@@ -1,5 +1,10 @@
 # WSL adapter follow-up to review 5158287241
 
+Historical pre-login measurement below. For the later authenticated registration
+fix, phase receipts and preserved one-call continuation, see
+[WSL Runner admission](wsl-runner-admission.md). The login-required status in this
+dated section is not the current status.
+
 Local Windows/WSL measurement, 2026-09-10 (Omsk). **Not independent acceptance.**
 Real model invocations: **0**. The existing lab passes the pre-authentication
 boundary checks; `account/read` returns no account, so inference is blocked by

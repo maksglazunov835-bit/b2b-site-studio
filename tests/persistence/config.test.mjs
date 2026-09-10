@@ -34,8 +34,9 @@ void test("all test entrypoints refuse missing TEST_DATABASE_URL before a connec
       ["scripts/db/test-reset.mjs"], ["scripts/persistence/http-smoke.mjs"], ["tests/persistence/ui.test.mjs"],
       ...["service", "upgrade", "http", "ui"].map((name) => [`tests/jobs/${name}.test.mjs`]),
       ...["service", "upgrade", "transport", "http", "process", "ui"].map((name) => [`tests/agents/${name}.test.mjs`]),
-      ...['design','design-process','design-ui','design-regressions','design-live-smoke'].map((mode)=>['scripts/persistence/run-tests.mjs',mode]),
+      ...['design','design-process','design-ui','design-regressions','design-live-smoke','design-preserve-smoke','design-registration-only','design-admission-http'].map((mode)=>['scripts/persistence/run-tests.mjs',mode]),
       ['scripts/lab/live-smoke.mjs','--confirm-one-real-call'],
+      ['scripts/lab/registration-only.mjs'], ['scripts/lab/preserve-smoke.mjs'], ['tests/design/admission-http.test.mjs'],
       ['tests/design/lifecycle.test.mjs'],
       ...['service','upgrade','process','ui'].map((name)=>[`tests/design/${name}.test.mjs`]),
       ...["service", "upgrade", "worker", "http", "process", "ui"].map((name) => [`tests/execution/${name}.test.mjs`])

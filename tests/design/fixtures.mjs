@@ -32,6 +32,10 @@ export const brief = {
   siteType: 'catalog',
   networkType: 'single',
 };
+// Contract fixture only. It does not assert real WSL isolation or inference.
+export const officialRuntime = () => ({...runtime,provider:'codex',cliVersion:'0.153.4',
+  modelSelection:{...runtime.modelSelection,source:'official_model_list'},
+  admission:{transport:'wsl2',profile:'b2b-design-json',checkedAt:new Date().toISOString(),configSha256:'a'.repeat(64)}});
 export function proposal(input = brief) {
   const blocks = {
     home: ['hero', 'categories', 'enquiry'],

@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "8f68257b0d99135f817fdfd3cdceaf0ab8e32d867377e3d86c680678572a5247",
+  "sha256": "7450494032fdadf96b678a24812f04a6479415eea0f345c23e8c6779e5179538",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -9,7 +9,7 @@
     },
     {
       "path": "docs/contracts/design-job-astra.schema.json",
-      "sha256": "605bedc5283b7b311d35b725c6aab5a512b01e3b4850579f386244e9a9be98a6"
+      "sha256": "6b6155883504b0015eda0837fc326d3cd38872ff002c54232c4e85c65828d4e8"
     },
     {
       "path": "docs/contracts/design-proposal.schema.json",
@@ -17,11 +17,23 @@
     },
     {
       "path": "server/design/contract.mjs",
-      "sha256": "8ce1844d9b857001eba123f6f075f8598261e0a551b401329691790d53634d6d"
+      "sha256": "f8ee10d8c94563fcfcfaecf5d7f938cca620f98cec00cb42b57f9bc6c32c0691"
+    },
+    {
+      "path": "server/design/admission.mjs",
+      "sha256": "4383fefad38d519ebc75a0923a550ed28c0f34d462e0afc6735820a69656cb73"
+    },
+    {
+      "path": "server/agents/requests.mjs",
+      "sha256": "4f865548ebfc074e4f3234fa8f313a031399d3002f2241bed220e569a6c5e9eb"
+    },
+    {
+      "path": "server/execution/grants.mjs",
+      "sha256": "170b2e7f68384da1dc29770844f54704d4d1c837624bbaec8da28e48e3aed2a5"
     },
     {
       "path": "agent/codex/adapter.mjs",
-      "sha256": "05a78ebe7c15c31c11959a30c6096a41e5af23d6b7a1e44ed9b95e1d4b7f2b8c"
+      "sha256": "bd6de2cf505b9963baa919e431dc8a3daa0b3c16f9132ef4f2e10cbca9f36fe3"
     },
     {
       "path": "agent/codex/wsl-policy.mjs",
@@ -65,19 +77,23 @@
     },
     {
       "path": "agent/design-main.mjs",
-      "sha256": "08577352e2ed2d31b77c59830ac7f28e04ce16c1e699978065e3ea77d49b0c27"
+      "sha256": "c4f36e6f2e189e814fda0758dff5bffe18e9527961e53f065af1678d737aca6a"
+    },
+    {
+      "path": "agent/startup-receipt.mjs",
+      "sha256": "dfb7e44c8afbbd9e9b2594e946fd063dfd427fc9f92f2233fbce188f4d8920e5"
     },
     {
       "path": "agent/session.mjs",
-      "sha256": "ac1e4393bfa60e373dc05b3ce76b490f93bdfdb5d720ffc6bae43ef4169c5e0b"
+      "sha256": "bd5134bedc49e352a53bde58d87c5091d76512650696ed3fa481c83201ca2504"
     },
     {
       "path": "agent/data-session.mjs",
-      "sha256": "9cd45aaba50e6abdf0693fbd7669411d6af6f115938a64d3fd34fc903c265ac8"
+      "sha256": "bd28df6a27bedd99f5770e7ed3995afd693c9e3e600c7e7ddf34b8875730ff7d"
     },
     {
       "path": "agent/protocol.mjs",
-      "sha256": "f96b84e09df9e641a3524d9e13de355145da8d8eaa6dfd4f68bad322c88b6340"
+      "sha256": "aa981f60122455c12e82df23741cd27d195a1e7b7d729a99fc6f7a5a8466409a"
     },
     {
       "path": "agent/transport.mjs",

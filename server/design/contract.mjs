@@ -5,6 +5,7 @@ import manifest from './adapter-manifest.json' with { type: 'json' };
 import { boundedJson } from '../execution/bounds.mjs';
 import { PersistenceError } from '../persistence/errors.mjs';
 import { sha256Json } from '../persistence/canonical-json.mjs';
+import { validWslAdmission, officialWslReady } from './admission.mjs';
 import {
   editableDraftFromSiteSpec,
   normalizeEditableDraft,
@@ -63,7 +64,7 @@ export function adapterCompatible(value) {
 export function assertRuntime(value) {
   if (
     !value ||
-    Object.keys(value).sort().join() !==
+    Object.keys(value).filter(k => k !== 'admission').sort().join() !==
       'cliVersion,effort,model,modelSelection,policySha256,provider,status' ||
     !['codex', 'test_stub'].includes(value.provider) ||
     typeof value.cliVersion !== 'string' ||
@@ -73,6 +74,10 @@ export function assertRuntime(value) {
     value.policySha256 !== ADAPTER.sha256 ||
     !['ready', ...DESIGN_PREFLIGHT_CODES].includes(value.status)
   )
+    designError('INVALID_CODEX_RUNTIME');
+  if (Object.hasOwn(value, 'admission') && (value.provider !== 'codex' || !validWslAdmission(value.admission)))
+    designError('INVALID_CODEX_RUNTIME');
+  if (value.provider === 'codex' && value.status === 'ready' && !officialWslReady(value))
     designError('INVALID_CODEX_RUNTIME');
   if (value.provider === 'test_stub' && value.cliVersion !== 'test-cli-1')
     designError('INVALID_CODEX_RUNTIME');
@@ -98,6 +103,10 @@ export function assertRuntime(value) {
       designError('INVALID_CODEX_RUNTIME');
   } else if (value.status === 'ready') designError('INVALID_CODEX_RUNTIME');
   return value;
+}
+export function runtimeExecutable(runtime, {allowTest = false} = {}) {
+  try { assertRuntime(runtime); } catch { return false; }
+  return runtime.status === 'ready' && (officialWslReady(runtime) || allowTest && runtime.provider === 'test_stub');
 }
 export function designInput(snapshot) {
   validateCanonicalSiteSpec(snapshot);

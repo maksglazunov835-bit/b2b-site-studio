@@ -78,7 +78,7 @@ export function createAgentService({ workspaceId = DEFAULT_WORKSPACE_ID, clock =
     },
     async register(secret, input, key) {
       if (!validSecret(secret, "pair")) agentError("UNAUTHORIZED_AGENT", 401);
-      const request = registerRequest(input);
+      const request = registerRequest(input, {now:clock().getTime()});
       if (request.runtime?.provider === 'test_stub') {
         const config = assertSafeTestDatabaseUrl(process.env.TEST_DATABASE_URL, { devDatabaseUrl: null });
         const actual = new pg.Client(getDatabasePool().options).connectionParameters;

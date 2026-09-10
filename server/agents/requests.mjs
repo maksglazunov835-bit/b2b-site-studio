@@ -2,6 +2,7 @@ import Ajv from "ajv";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { PersistenceError } from "../persistence/errors.mjs";
 import { assertRuntime, adapterCompatible } from '../design/contract.mjs';
+import { freshWslAdmission } from '../design/admission.mjs';
 
 const ajv = new Ajv({ strict: true, allErrors: false, coerceTypes: false });
 const empty = ajv.compile({ type: "object", additionalProperties: false, properties: {} });
@@ -39,18 +40,20 @@ export function hashMatches(secret, stored) {
   return typeof stored === "string" && /^[a-f0-9]{64}$/.test(stored.trim()) &&
     timingSafeEqual(Buffer.from(secretHash(secret), "hex"), Buffer.from(stored.trim(), "hex"));
 }
-function designRegistration(value) {
+function designRegistration(value, now) {
   if (!value || Object.keys(value).sort().join() !== 'adapter,agentName,agentSecret,agentVersion,mode,os,runtime,supportedApiVersions') return false;
   const { adapter, runtime, ...base } = value;
   if (!registration({ ...base, mode: 'presence_only' }) || !adapterCompatible(adapter)) return false;
   assertRuntime(runtime);
   if (runtime.provider === 'test_stub' && process.env.B2B_DESIGN_TEST_STUB !== '1') return false;
-  // The same-profile system isolation canary is not passing on the supported release.
-  if (runtime.provider === 'codex' && runtime.status === 'ready') return false;
+  // Ready is not consent: the transaction still requires an unconsumed scoped
+  // pairing. This verifies the trusted local Runner contract, not remote attestation.
+  if (runtime.provider === 'codex' && runtime.status === 'ready' &&
+      (value.os !== 'windows' || !freshWslAdmission(runtime, now))) return false;
   return true;
 }
-export function registerRequest(value) {
-  if (!(value?.mode === 'codex_design' ? designRegistration(value) : value?.mode === "data_validation" ? dataRegistration(value) : registration(value)) || !value.agentName.trim() || !validSecret(value.agentSecret, "agt") || /(?:pair|agt|lease)_[A-Za-z0-9_-]{43}/.test(value.agentName)) agentError("VALIDATION_FAILED");
+export function registerRequest(value, {now = Date.now()} = {}) {
+  if (!(value?.mode === 'codex_design' ? designRegistration(value, now) : value?.mode === "data_validation" ? dataRegistration(value) : registration(value)) || !value.agentName.trim() || !validSecret(value.agentSecret, "agt") || /(?:pair|agt|lease)_[A-Za-z0-9_-]{43}/.test(value.agentName)) agentError("VALIDATION_FAILED");
   if (!value.supportedApiVersions.includes("v1")) agentError("INCOMPATIBLE_PROTOCOL_VERSION", 409);
   return { ...value, agentName: value.agentName.trim(), supportedApiVersions: [...value.supportedApiVersions].sort((a,b) => a.localeCompare(b)) };
 }

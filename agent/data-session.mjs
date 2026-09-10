@@ -140,15 +140,18 @@ async function execute({ origin, registration, credential, assignment, signal, l
     assignment.leaseToken = undefined;
   }
 }
-export async function dataSession({ origin, registration, credential, signal, log, designAdapter }) {
+export async function dataSession({ origin, registration, credential, signal, log, designAdapter, startup, registrationOnly = false }) {
   let lastPresence = 0; let failures = 0;
+  startup?.begin('first_heartbeat');
+  let first = true;
   while (!signal.aborted) {
     try {
       if (Date.now() - lastPresence >= registration.heartbeatIntervalSeconds * 1000) {
         reply(await post(origin, `/api/v1/agents/${registration.agentId}/health`, credential, '{"selectedApiVersion":"v1"}', { signal }), "health", registration.agentId, designAdapter ? 'codex_design' : "data_validation");
         lastPresence = Date.now(); log("RUNNER_HEARTBEAT_ACK");
+        if (first) { startup?.complete('first_heartbeat'); first=false; }
       }
-      const assignment = registration.executionEnabled ? assignmentReply(successful(await post(origin, `/api/v1/agents/${registration.agentId}/claim`, credential, "{}", { key: randomUUID(), signal })), registration) : null;
+      const assignment = registration.executionEnabled && !registrationOnly ? assignmentReply(successful(await post(origin, `/api/v1/agents/${registration.agentId}/claim`, credential, "{}", { key: randomUUID(), signal })), registration) : null;
       if (assignment) await execute({ origin, registration, credential, assignment, signal, log, designAdapter });
       failures = 0;
     } catch (error) {

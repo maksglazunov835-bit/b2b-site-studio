@@ -1,7 +1,7 @@
 import Ajv from "ajv";
 import { VALIDATOR } from "./contract.mjs";
 import { executionError } from "./transitions.mjs";
-import { ADAPTER } from '../design/contract.mjs';
+import { ADAPTER, runtimeExecutable } from '../design/contract.mjs';
 
 const validate = new Ajv({ strict: true }).compile({ type: "object", additionalProperties: false,
   required: ["mode", "projectId"], properties: { mode: { enum: ["data_validation", "codex_design"] },
@@ -31,8 +31,8 @@ export async function agentGrant(client, workspaceId, agentId) {
 }
 export function grantProfile(grant, revoked = false) {
   if (grant.mode === 'codex_design') {
-    const enabled = !revoked && grant.project_status === 'active' && grant.validator_sha256.trim() === ADAPTER.sha256 && grant.runtime?.status === 'ready' &&
-      (grant.runtime.provider !== 'test_stub' || process.env.B2B_DESIGN_TEST_STUB === '1');
+    const enabled = !revoked && grant.project_status === 'active' && grant.validator_sha256.trim() === ADAPTER.sha256 &&
+      runtimeExecutable(grant.runtime,{allowTest:process.env.B2B_DESIGN_TEST_STUB === '1'});
     return { mode: 'codex_design', projectId: grant.project_id, adapter: ADAPTER, runtime: grant.runtime,
       executionEnabled: enabled, freeSlots: enabled && !grant.current_job_id ? 1 : 0,
       currentJobId: grant.current_job_id ?? null, grantedCapabilities: enabled ? ['codex-design'] : [] };
