@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import pg from "pg";
 import { assertSafeTestDatabaseUrl, localConnectionConfig } from "../db/test-config.mjs";
 import { runMigrations, getMigrationStatus, safeDatabaseCommandError } from "../db/migration-lib.mjs";
+import { SMOKE_AUTHORIZATION } from '../lab/smoke-budget.mjs';
 
 const modes = new Set(["full", "service", "http", "ui", "jobs", "jobs-http", "jobs-ui", "agents", "agents-http", "agents-process", "agents-ui", "execution", "execution-http", "execution-process", "execution-ui", "migrate", "status"]);
 const steps = [];
@@ -95,8 +96,8 @@ async function main() {
     // Never part of CI. The owner must explicitly opt into one real call after login.
     if (mode === 'design-live-smoke') {
       if (process.argv[3] !== '--confirm-one-real-call' || process.env.CI || process.platform !== 'win32') throw new Error('LIVE_SMOKE_NOT_AUTHORIZED');
-      if (process.argv[4] !== '--continue-unused-reservation' || process.argv.length !== 5) throw new Error('LIVE_SMOKE_NOT_AUTHORIZED');
-      await run(['scripts/lab/live-smoke.mjs','--confirm-one-real-call','--continue-unused-reservation']);
+      if (process.argv[4] !== '--authorization' || process.argv[5] !== SMOKE_AUTHORIZATION.id || process.argv.length !== 6) throw new Error('LIVE_SMOKE_NOT_AUTHORIZED');
+      await run(['scripts/lab/live-smoke.mjs','--confirm-one-real-call','--authorization',SMOKE_AUTHORIZATION.id]);
     }
   } catch (error) { failure = error; }
   const after = await devFingerprint();
