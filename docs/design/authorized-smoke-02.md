@@ -1,5 +1,11 @@
 # Additional owner-authorized smoke
 
+Update after review 5433068735: the first attempt stopped at preflight with
+zero invocations. The owner permits explicit lab-only cold-start preparation
+and exactly one append-only continuation of this same unused authorization.
+See [cold-start preparation](cold-start-preparation.md); this is not budget 03
+and does not reuse the historical consumed continuation.
+
 The owner explicitly authorized `pr15-live-smoke-02` on 2026-10-07 after
 review 5171129862 of head `27ac6a2a0d280a1840cabdd57b66e538b97ad989`.
 This permits at most one additional generation invocation, not acceptance,

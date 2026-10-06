@@ -16,6 +16,8 @@ import {
   consumeAuthorization,
   preservedConsumedHistory,
   writeSmokeEvidence,
+  continueUnusedAuthorization,
+  continuationDirectory,
 } from '../../scripts/lab/smoke-budget.mjs';
 const hash = (b) => createHash('sha256').update(b).digest('hex');
 void test('preserved pre-reset evidence permits exactly one explicit continuation/start, not a reset inference', async () => {
@@ -91,6 +93,165 @@ void test('preserved pre-reset evidence permits exactly one explicit continuatio
     });
   } finally {
     await rm(root, { recursive: true });
+  }
+});
+
+async function preflightFailure(root) {
+  const reservation = await reserveAuthorization(
+    root,
+    SMOKE_AUTHORIZATION.id,
+    context,
+  );
+  const directory = authorizationDirectory(root);
+  await writeSmokeEvidence(directory, 'preflight.json', {
+    runtime: {
+      provider: 'codex',
+      model: SMOKE_AUTHORIZATION.model,
+      effort: SMOKE_AUTHORIZATION.effort,
+      policySha256: context.manifestSha256,
+      status: 'CODEX_ISOLATION_UNVERIFIED',
+    },
+    diagnostics: { status: 'LAB_HOST_MOUNTS_PRESENT', modelInvocations: 0 },
+    modelInvocations: 0,
+  });
+  await writeSmokeEvidence(directory, 'failure.json', {
+    authorizationId: SMOKE_AUTHORIZATION.id,
+    headSha: context.headSha,
+    stage: 'preflight',
+    errorCode: 'LAB_HOST_MOUNTS_PRESENT',
+    consumed: false,
+    projectId: null,
+    jobId: null,
+    at: new Date().toISOString(),
+  });
+  return reservation;
+}
+void test('same unused authorization continuation and consumption are exclusive across processes, old receipts unchanged', async () => {
+  const root = await consumedFixture();
+  try {
+    const reservation = await preflightFailure(root);
+    const directory = authorizationDirectory(root);
+    const names = ['reservation.json', 'preflight.json', 'failure.json'];
+    const before = await Promise.all(
+      names.map((n) => readFile(path.join(directory, n), 'utf8')),
+    );
+    const moduleUrl = new URL(
+      '../../scripts/lab/smoke-budget.mjs',
+      import.meta.url,
+    ).href;
+    const run = (source) =>
+      new Promise((resolve, reject) => {
+        const child = spawn(
+          process.execPath,
+          [
+            '--input-type=module',
+            '-e',
+            `import * as b from ${JSON.stringify(moduleUrl)}; import {readFile} from 'node:fs/promises'; try { ${source} } catch { process.exitCode=10; }`,
+            root,
+            JSON.stringify({ ...context, headSha: '1'.repeat(40) }),
+          ],
+          { stdio: 'ignore', windowsHide: true },
+        );
+        child.once('error', reject);
+        child.once('exit', (c, s) =>
+          s ? reject(Error('signal')) : resolve(c),
+        );
+      });
+    const start = `await b.continueUnusedAuthorization(process.argv[1], 'pr15-live-smoke-02', JSON.parse(process.argv[2]));`;
+    assert.deepEqual(
+      (await Promise.all([run(start), run(start)])).sort((a, b) => a - b),
+      [0, 10],
+    );
+    const continuation = JSON.parse(
+      await readFile(
+        path.join(continuationDirectory(root), 'continuation.json'),
+      ),
+    );
+    await assert.rejects(bindAuthorization(root, reservation, binding));
+    const bound = await bindAuthorization(
+      root,
+      reservation,
+      binding,
+      continuation,
+    );
+    const consume = `const root=process.argv[1]; const r=JSON.parse(await readFile(b.authorizationDirectory(root)+'/reservation.json')); const c=JSON.parse(await readFile(b.continuationDirectory(root)+'/continuation.json')); const j=JSON.parse(await readFile(b.authorizationDirectory(root)+'/job-binding.json')); await b.consumeAuthorization(root,r,j,c);`;
+    assert.deepEqual(
+      (await Promise.all([run(consume), run(consume)])).sort((a, b) => a - b),
+      [0, 10],
+    );
+    await assert.rejects(
+      consumeAuthorization(root, reservation, bound, continuation),
+    );
+    assert.deepEqual(
+      await Promise.all(
+        names.map((n) => readFile(path.join(directory, n), 'utf8')),
+      ),
+      before,
+    );
+    const consumed = JSON.parse(
+      await readFile(path.join(directory, 'provider-start.json')),
+    );
+    assert.equal(consumed.headSha, continuation.headSha);
+    assert.equal(consumed.maximumCalls, 1);
+    assert.equal(consumed.runId, continuation.runId);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+void test('continuation rejects consumed, damaged, mismatched or uncertain preflight history without new budget', async () => {
+  for (const scenario of [
+    'consumed',
+    'binding',
+    'invocation',
+    'damaged',
+    'head',
+    'stage',
+    'payload',
+    'model',
+    'input',
+  ]) {
+    const root = await consumedFixture();
+    try {
+      await preflightFailure(root);
+      const dir = authorizationDirectory(root);
+      if (['consumed', 'binding', 'invocation'].includes(scenario))
+        await writeSmokeEvidence(
+          dir,
+          {
+            consumed: 'provider-start.json',
+            binding: 'job-binding.json',
+            invocation: 'invocation-unknown.json',
+          }[scenario],
+          {},
+        );
+      if (scenario === 'damaged')
+        await writeFile(path.join(root, 'real-codex-attempt.json'), '{}');
+      if (['head', 'stage', 'payload'].includes(scenario)) {
+        const f = JSON.parse(await readFile(path.join(dir, 'failure.json')));
+        if (scenario === 'head') f.headSha = '9'.repeat(40);
+        if (scenario === 'stage') f.stage = 'registration';
+        if (scenario === 'payload') f.projectId = binding.projectId;
+        await writeFile(path.join(dir, 'failure.json'), JSON.stringify(f));
+      }
+      if (scenario === 'model') {
+        const f = JSON.parse(await readFile(path.join(dir, 'preflight.json')));
+        f.modelInvocations = 1;
+        await writeFile(path.join(dir, 'preflight.json'), JSON.stringify(f));
+      }
+      await assert.rejects(
+        continueUnusedAuthorization(root, SMOKE_AUTHORIZATION.id, {
+          ...context,
+          ...(scenario === 'input' ? { inputSha256: '9'.repeat(64) } : {}),
+        }),
+        { code: 'SMOKE_HISTORY_UNCERTAIN' },
+      );
+      await assert.rejects(
+        readFile(path.join(continuationDirectory(root), 'continuation.json')),
+        { code: 'ENOENT' },
+      );
+    } finally {
+      await rm(root, { recursive: true });
+    }
   }
 });
 

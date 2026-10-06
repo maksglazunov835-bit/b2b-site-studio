@@ -24,18 +24,34 @@ import {
   SMOKE_AUTHORIZATION,
   authorizationDirectory,
   reserveAuthorization,
+  continueUnusedAuthorization,
+  continuationDirectory,
   bindAuthorization,
   consumeAuthorization,
   writeSmokeEvidence,
 } from './smoke-budget.mjs';
 import { safeStartupCode } from '../../agent/startup-receipt.mjs';
+import { holdPreparedLab } from './session.mjs';
+const safeSmokeCode = (error, stage) =>
+  [
+    'LAB_SESSION_UNCONFIRMED',
+    'LAB_SESSION_LOST',
+    'LAB_SESSION_STOP_UNCONFIRMED',
+    'LAB_SETUP_REQUIRED',
+  ].includes(error?.message)
+    ? error.message
+    : safeStartupCode(error, stage);
 async function main() {
   const database = assertSafeTestDatabaseUrl();
   if (
     process.argv[2] !== '--confirm-one-real-call' ||
     process.argv[3] !== '--authorization' ||
     process.argv[4] !== SMOKE_AUTHORIZATION.id ||
-    process.argv.length !== 5 ||
+    !(
+      process.argv.length === 5 ||
+      (process.argv.length === 6 &&
+        process.argv[5] === '--resume-preflight-only')
+    ) ||
     database.database !== 'b2b_site_studio_live_smoke_02_test' ||
     process.platform !== 'win32' ||
     process.env.CI ||
@@ -70,18 +86,29 @@ async function main() {
     windowsHide: true,
     stdio: 'pipe',
   });
-  const reservation = await reserveAuthorization(
-    '.test-results',
-    process.argv[4],
-    {
-      headSha,
-      manifestSha256: ADAPTER.sha256,
-      inputSha256: sha256Json(draft),
-    },
-  );
-  const directory = authorizationDirectory('.test-results');
+  const context = {
+    headSha,
+    manifestSha256: ADAPTER.sha256,
+    inputSha256: sha256Json(draft),
+  };
+  const continued =
+    process.argv[5] === '--resume-preflight-only'
+      ? await continueUnusedAuthorization(
+          '.test-results',
+          process.argv[4],
+          context,
+        )
+      : null;
+  const continuation = continued?.continuation;
+  const reservation =
+    continued?.reservation ??
+    (await reserveAuthorization('.test-results', process.argv[4], context));
+  const directory = continuation
+    ? continuationDirectory('.test-results')
+    : authorizationDirectory('.test-results');
   const evidence = (name, value) => writeSmokeEvidence(directory, name, value);
-  let runner,
+  let held,
+    runner,
     browser,
     agentId,
     server,
@@ -90,6 +117,8 @@ async function main() {
     consumed = false;
   let stage = 'preflight';
   try {
+    held = await holdPreparedLab();
+    await evidence('lab-session.json', held.receipt);
     const preflight = await officialAdapter(null, { transport: 'wsl' });
     await evidence('preflight.json', {
       runtime: preflight.runtime,
@@ -128,12 +157,17 @@ async function main() {
     jobId = job.id;
     assert.equal(job.siteSpec.sha256, saved.siteSpec.sha256);
     assert.equal(job.siteSpec.revision, 1);
-    const binding = await bindAuthorization('.test-results', reservation, {
-      projectId,
-      jobId,
-      revision: job.siteSpec.revision,
-      siteSpecSha256: job.siteSpec.sha256,
-    });
+    const binding = await bindAuthorization(
+      '.test-results',
+      reservation,
+      {
+        projectId,
+        jobId,
+        revision: job.siteSpec.revision,
+        siteSpecSha256: job.siteSpec.sha256,
+      },
+      continuation,
+    );
     await evidence('project.json', {
       projectId,
       jobId,
@@ -156,7 +190,13 @@ async function main() {
       (a) => a.projectId === project.id,
     ).agentId;
     stage = 'dispatch';
-    await consumeAuthorization('.test-results', reservation, binding);
+    held.assertActive();
+    await consumeAuthorization(
+      '.test-results',
+      reservation,
+      binding,
+      continuation,
+    );
     consumed = true;
     await ok(
       server.origin,
@@ -295,7 +335,7 @@ async function main() {
       authorizationId: SMOKE_AUTHORIZATION.id,
       headSha,
       stage,
-      errorCode: safeStartupCode(error, 'preflight'),
+      errorCode: safeSmokeCode(error, 'preflight'),
       consumed,
       projectId: projectId ?? null,
       jobId: jobId ?? null,
@@ -326,11 +366,15 @@ async function main() {
         }
       }
     } finally {
-      if (server) await stopServer(server);
+      try {
+        if (server) await stopServer(server);
+      } finally {
+        if (held) await held.stop();
+      }
     }
   }
 }
 main().catch((error) => {
-  console.error('LIVE_SMOKE_FAILED', safeStartupCode(error, 'registration'));
+  console.error('LIVE_SMOKE_FAILED', safeSmokeCode(error, 'registration'));
   process.exitCode = 1;
 });

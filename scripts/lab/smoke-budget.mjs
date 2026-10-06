@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { sha256Json } from '../../server/persistence/canonical-json.mjs';
@@ -224,7 +224,129 @@ export async function reserveAuthorization(root, authorizationId, context) {
   await writeSmokeEvidence(directory, 'reservation.json', value);
   return value;
 }
-export async function bindAuthorization(root, reservation, binding) {
+export function continuationDirectory(root) {
+  return path.join(
+    authorizationDirectory(root),
+    'continuation-after-cold-start',
+  );
+}
+async function unusedAuthorizationProof(root) {
+  const directory = authorizationDirectory(root);
+  const names = await readdir(directory);
+  if (
+    names.some(
+      (n) =>
+        ![
+          'reservation.json',
+          'preflight.json',
+          'failure.json',
+          'report.md',
+        ].includes(n),
+    )
+  )
+    refuse();
+  const reservation = await readReceipt(directory, 'reservation.json');
+  const preflight = await readReceipt(directory, 'preflight.json');
+  const failure = await readReceipt(directory, 'failure.json');
+  const history = await preservedConsumedHistory(root);
+  if (
+    reservation.version !== 1 ||
+    Object.entries(SMOKE_AUTHORIZATION).some(
+      ([k, v]) => reservation[k] !== v,
+    ) ||
+    Object.entries(history).some(([k, v]) => reservation[k] !== v) ||
+    !/^[a-f0-9]{40}$/.test(reservation.headSha) ||
+    !/^[a-f0-9]{64}$/.test(reservation.inputSha256) ||
+    !/^[a-f0-9]{64}$/.test(reservation.manifestSha256) ||
+    !/^[a-f0-9-]{36}$/.test(reservation.runId) ||
+    !Number.isFinite(Date.parse(reservation.reservedAt)) ||
+    failure.authorizationId !== SMOKE_AUTHORIZATION.id ||
+    failure.headSha !== reservation.headSha ||
+    failure.stage !== 'preflight' ||
+    failure.errorCode !== 'LAB_HOST_MOUNTS_PRESENT' ||
+    failure.consumed !== false ||
+    failure.projectId !== null ||
+    failure.jobId !== null ||
+    !Number.isFinite(Date.parse(failure.at)) ||
+    Date.parse(failure.at) < Date.parse(reservation.reservedAt) ||
+    preflight.modelInvocations !== 0 ||
+    preflight.diagnostics?.modelInvocations !== 0 ||
+    preflight.diagnostics.status !== 'LAB_HOST_MOUNTS_PRESENT' ||
+    preflight.runtime?.status !== 'CODEX_ISOLATION_UNVERIFIED' ||
+    preflight.runtime.provider !== 'codex' ||
+    preflight.runtime.model !== SMOKE_AUTHORIZATION.model ||
+    preflight.runtime.effort !== SMOKE_AUTHORIZATION.effort ||
+    preflight.runtime.policySha256 !== reservation.manifestSha256
+  )
+    refuse();
+  const evidenceHashes = {};
+  for (const name of ['reservation.json', 'preflight.json', 'failure.json'])
+    evidenceHashes[name] = digest(await readFile(path.join(directory, name)));
+  return { reservation, evidenceHashes };
+}
+export async function continueUnusedAuthorization(
+  root,
+  authorizationId,
+  context,
+) {
+  if (
+    authorizationId !== SMOKE_AUTHORIZATION.id ||
+    !context ||
+    Object.keys(context).sort().join() !==
+      'headSha,inputSha256,manifestSha256' ||
+    !/^[a-f0-9]{40}$/.test(context.headSha) ||
+    !/^[a-f0-9]{64}$/.test(context.manifestSha256)
+  )
+    refuse();
+  const { reservation, evidenceHashes } = await unusedAuthorizationProof(root);
+  if (context.inputSha256 !== reservation.inputSha256) refuse();
+  // One exclusive continuation, not a new budget. Keep the original receipts
+  // and the one common job-binding/provider-start locations for all paths.
+  const directory = continuationDirectory(root);
+  await mkdir(directory);
+  const value = {
+    version: 1,
+    authorizationId,
+    reservationSha256: sha256Json(reservation),
+    evidenceHashes,
+    ...context,
+    runId: randomUUID(),
+    maximumCalls: 1,
+    continuedAt: new Date().toISOString(),
+  };
+  await writeSmokeEvidence(directory, 'continuation.json', value);
+  return { reservation, continuation: value };
+}
+async function checkContinuation(root, reservation, continuation) {
+  const present = (await readdir(authorizationDirectory(root))).includes(
+    'continuation-after-cold-start',
+  );
+  if (!present && !continuation) return;
+  if (!present || !continuation) refuse();
+  const saved = await readReceipt(
+    continuationDirectory(root),
+    'continuation.json',
+  );
+  if (
+    sha256Json(saved) !== sha256Json(continuation) ||
+    saved.reservationSha256 !== sha256Json(reservation) ||
+    saved.inputSha256 !== reservation.inputSha256 ||
+    saved.maximumCalls !== 1
+  )
+    refuse();
+  for (const [name, expected] of Object.entries(saved.evidenceHashes))
+    if (
+      digest(await readFile(path.join(authorizationDirectory(root), name))) !==
+      expected
+    )
+      refuse();
+}
+export async function bindAuthorization(
+  root,
+  reservation,
+  binding,
+  continuation,
+) {
   const directory = authorizationDirectory(root);
   if (
     !validBinding(binding) ||
@@ -232,18 +354,24 @@ export async function bindAuthorization(root, reservation, binding) {
       sha256Json(reservation)
   )
     refuse();
+  await checkContinuation(root, reservation, continuation);
   await preservedConsumedHistory(root);
   const value = {
     ...binding,
     authorizationId: SMOKE_AUTHORIZATION.id,
-    runId: reservation.runId,
+    runId: continuation?.runId ?? reservation.runId,
     inputSha256: reservation.inputSha256,
     reservationSha256: sha256Json(reservation),
   };
   await writeSmokeEvidence(directory, 'job-binding.json', value);
   return value;
 }
-export async function consumeAuthorization(root, reservation, binding) {
+export async function consumeAuthorization(
+  root,
+  reservation,
+  binding,
+  continuation,
+) {
   const directory = authorizationDirectory(root);
   if (
     sha256Json(await readReceipt(directory, 'reservation.json')) !==
@@ -253,17 +381,18 @@ export async function consumeAuthorization(root, reservation, binding) {
     binding.reservationSha256 !== sha256Json(reservation)
   )
     refuse();
+  await checkContinuation(root, reservation, continuation);
   await preservedConsumedHistory(root);
   const value = {
     authorizationId: SMOKE_AUTHORIZATION.id,
-    runId: reservation.runId,
+    runId: continuation?.runId ?? reservation.runId,
     jobId: binding.jobId,
     projectId: binding.projectId,
     inputSha256: reservation.inputSha256,
-    headSha: reservation.headSha,
+    headSha: continuation?.headSha ?? reservation.headSha,
     siteSpecSha256: binding.siteSpecSha256,
     revision: binding.revision,
-    manifestSha256: reservation.manifestSha256,
+    manifestSha256: continuation?.manifestSha256 ?? reservation.manifestSha256,
     phase: 'before_dispatch',
     state: 'consumed',
     maximumCalls: 1,
