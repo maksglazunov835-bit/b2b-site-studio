@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "51f1693b1be54583242773dad3395a05bb84c5ba2b9b1b7b5ae87e165b105e77",
+  "sha256": "46dd714f7c3cd5c62baacc666647c9d96fbf1dc14c3f90e89e3c2d7428ba4837",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -93,11 +93,11 @@
     },
     {
       "path": "agent/codex/jsonl.mjs",
-      "sha256": "e5ae0accdaf69c145d63369801d94a069ac1f5c2987448feddc8eb5a1d1e4615"
+      "sha256": "398fb9a77a68e6ef50be5e005df6379bf152224e9c4b862c664f2c47c3fe8471"
     },
     {
       "path": "agent/codex/invocation-receipt.mjs",
-      "sha256": "84ba49c8433e506df7c503ff8da21264bd43d149065dd282ac169d2260a6797b"
+      "sha256": "9730c60bcb727755341c7e4da3948cfb7e2ad94e079746848f32ef7dc86f3118"
     },
     {
       "path": "agent/design-connect.mjs",

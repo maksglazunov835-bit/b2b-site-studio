@@ -7,6 +7,10 @@ import { boundedProcess } from '../../agent/codex/adapter.mjs';
 import { diagnostic } from '../../agent/codex/invocation-receipt.mjs';
 const scenario = process.argv[2],
   controller = new AbortController();
+const lostConfirmation = [
+  'stop-unconfirmed',
+  'notice-stop-unconfirmed',
+].includes(scenario);
 const emit = (value) => process.stdout.write(JSON.stringify(value) + '\n');
 const lines = createInterface({ input: process.stdin });
 lines.on('line', (line) => {
@@ -20,7 +24,9 @@ try {
       ? 'success'
       : scenario === 'stop-unconfirmed'
         ? 'auth'
-        : scenario,
+        : scenario === 'notice-stop-unconfirmed'
+          ? 'notice-pre-line'
+          : scenario,
   ];
   const options = {
     cwd: process.cwd(),
@@ -42,7 +48,8 @@ try {
       },
     );
   } else {
-    if (scenario === 'timeout') await boundedProcess(process.execPath,['-e',''],{timeoutMs:15000});
+    if (scenario === 'timeout')
+      await boundedProcess(process.execPath, ['-e', ''], { timeoutMs: 15000 });
     result = await boundedProcess(process.execPath, args, {
       ...options,
       capture: false,
@@ -59,7 +66,7 @@ try {
     ...(reason ? { reason } : {}),
     started: true,
   };
-  if (scenario === 'stop-unconfirmed') {
+  if (lostConfirmation) {
     // Actual child is reaped; simulate loss of its confirmation, never leak a process.
     emit({
       type: 'error',
@@ -71,7 +78,7 @@ try {
     emit({ type: 'result', value: facts });
   }
 } catch (error) {
-  if (scenario === 'stop-unconfirmed')
+  if (lostConfirmation)
     emit({
       type: 'error',
       code: 'STOP_UNCONFIRMED',

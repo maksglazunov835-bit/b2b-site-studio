@@ -10,12 +10,28 @@ import {
 
 void test('unexpected parser callback exception retains only an unclassified fingerprint', () => {
   let details;
-  const parser = outputParser(brief, {event:()=>{throw Error('SYNTHETIC_SECRET_PARSER');},failure:error=>{details=error.diagnostic;}});
-  assert.throws(()=>parser.stdout(Buffer.from(JSON.stringify(successEvents()[0])+'\n')),{code:'CODEX_PROCESS_FAILED'});
-  assert.equal(details.source,'parser'); assert.equal(details.category,'unclassified');
-  assert.equal(details.byteLength,Buffer.byteLength('SYNTHETIC_SECRET_PARSER'));
-  assert.equal(details.fingerprint.length,64);
-  assert.doesNotMatch(JSON.stringify(details),/SYNTHETIC_SECRET/);
+  const parser = outputParser(brief, {
+    event: () => {
+      throw Error('SYNTHETIC_SECRET_PARSER');
+    },
+    failure: (error) => {
+      details = error.diagnostic;
+    },
+  });
+  assert.throws(
+    () => parser.stdout(Buffer.from(JSON.stringify(successEvents()[0]) + '\n')),
+    { code: 'CODEX_PROCESS_FAILED' },
+  );
+  assert.equal(details.source, 'parser');
+  assert.equal(details.category, 'unclassified');
+  assert.equal(
+    details.byteLength,
+    Buffer.byteLength(JSON.stringify(successEvents()[0])),
+  );
+  assert.equal(details.parser.reasonId, 'INTERNAL_PARSER_FAILURE');
+  assert.equal(details.parser.state, 'initial');
+  assert.equal(details.fingerprint.length, 64);
+  assert.doesNotMatch(JSON.stringify(details), /SYNTHETIC_SECRET/);
 });
 
 void test('Codex rust-v0.153.4 complete official usage accepts the validated success stream', () => {

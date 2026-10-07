@@ -65,6 +65,49 @@ const eventTypes = new Set([
   'turn.failed',
   'turn.completed',
 ]);
+const itemTypes = new Set([
+  'agent_message',
+  'reasoning',
+  'command_execution',
+  'file_change',
+  'mcp_tool_call',
+  'collab_tool_call',
+  'web_search',
+  'todo_list',
+  'error',
+]);
+export const knownEventType = (v) => (eventTypes.has(v) ? v : 'unknown');
+export const knownItemType = (v) => (itemTypes.has(v) ? v : 'unknown');
+const parserReasons = new Set([
+  'INVALID_UTF8',
+  'LINE_LIMIT',
+  'STREAM_LIMIT',
+  'LINE_COUNT_LIMIT',
+  'UNTERMINATED_LINE',
+  'MALFORMED_JSON',
+  'INVALID_EVENT_SHAPE',
+  'UNKNOWN_EVENT_TYPE',
+  'UNKNOWN_ITEM_TYPE',
+  'UNEXPECTED_FIELDS',
+  'INVALID_EVENT_ORDER',
+  'INVALID_ITEM_SHAPE',
+  'FORBIDDEN_ACTION',
+  'DUPLICATE_ITEM',
+  'MULTIPLE_ANSWERS',
+  'INVALID_PROPOSAL',
+  'INVALID_USAGE',
+  'INCOMPLETE_STREAM',
+  'INTERNAL_PARSER_FAILURE',
+  'NOTICE_CONFIG',
+  'NOTICE_AUTH',
+  'NOTICE_QUOTA',
+  'MODEL_REROUTED',
+  'EVENTS_LOST',
+  'NOTICE_UNKNOWN',
+  'PROVIDER_ERROR',
+  'STDERR_UNKNOWN',
+  'OUTPUT_SCHEMA',
+]);
 export const USAGE_KEYS = [
   'input_tokens',
   'cached_input_tokens',
@@ -174,6 +217,57 @@ const signal = (v) =>
 export const validUsage = (v) =>
   exact(v, USAGE_KEYS) && USAGE_KEYS.every((k) => integer(v[k]));
 
+export function validParserDiagnostic(v) {
+  return (
+    exact(v, [
+      'stream',
+      'state',
+      'lineNumber',
+      'reasonId',
+      'eventType',
+      'itemType',
+      'unknownFieldCount',
+      'byteScope',
+    ]) &&
+    ['stdout', 'stderr'].includes(v.stream) &&
+    ['initial', 'thread', 'turn', 'done'].includes(v.state) &&
+    integer(v.lineNumber) &&
+    v.lineNumber >= 1 &&
+    v.lineNumber <= 101 &&
+    parserReasons.has(v.reasonId) &&
+    (v.eventType === null ||
+      v.eventType === 'unknown' ||
+      eventTypes.has(v.eventType)) &&
+    (v.itemType === null ||
+      v.itemType === 'unknown' ||
+      itemTypes.has(v.itemType)) &&
+    integer(v.unknownFieldCount) &&
+    v.unknownFieldCount <= 10000 &&
+    ['complete_line', 'partial_line', 'stream_end'].includes(v.byteScope)
+  );
+}
+
+// JSONL fingerprints are bytes of one normalized line (or an explicitly partial
+// prefix), never a transport chunk or an exception message. Legacy receipts stay valid.
+export function parserDiagnostic(code, bytes, parser, options = {}) {
+  const sample = bytes.subarray(0, 4096);
+  const value = {
+    ...diagnostic(
+      { code },
+      { source: 'parser', stage: 'parser', category: 'protocol', ...options },
+    ),
+    byteLength: bytes.length,
+    fingerprintBytes: sample.length,
+    fingerprint: bytes.length
+      ? createHash('sha256').update(sample).digest('hex')
+      : null,
+    parser,
+  };
+  if (!validDiagnostic(value))
+    throw Error('Invalid internal parser diagnostic');
+  return value;
+}
+
 export function diagnostic(
   error,
   {
@@ -217,8 +311,10 @@ export function validDiagnostic(v) {
       'fingerprintBytes',
       'fingerprint',
       ...(Object.hasOwn(v ?? {}, 'config') ? ['config'] : []),
+      ...(Object.hasOwn(v ?? {}, 'parser') ? ['parser'] : []),
     ]) &&
     (!Object.hasOwn(v, 'config') || validConfigDiagnostic(v.config)) &&
+    (!Object.hasOwn(v, 'parser') || validParserDiagnostic(v.parser)) &&
     sources.has(v.source) &&
     stages.has(v.stage) &&
     codes.has(v.primaryCode) &&

@@ -9,10 +9,11 @@ import { assertSafeTestDatabaseUrl } from '../../scripts/db/test-config.mjs';
 assertSafeTestDatabaseUrl();
 void test(
   'fixed synthetic process -> supervisor/relay -> bridge/parser -> Runner IPC -> bounded report',
-  { timeout: 60000 },
+  { timeout: 120000 },
   async () => {
     const cases = [];
-    for (const [scenario, code, source, category] of [
+    let warningDiagnostic;
+    for (const [scenario, code, source, category, reason] of [
       ['success', null, null, null],
       ['exit2', 'CODEX_PROCESS_FAILED', 'cli_exit', 'unclassified'],
       [
@@ -29,6 +30,90 @@ void test(
       ['malformed', 'CODEX_INVALID_OUTPUT', 'parser', 'protocol'],
       ['timeout', 'CODEX_TIMEOUT', 'transport', 'timeout'],
       ['stop-unconfirmed', 'STOP_UNCONFIRMED', 'stderr', 'auth'],
+      ...['line', 'coalesced', 'split', 'bytewise', 'crlf'].map((mode) => [
+        'notice-pre-' + mode,
+        'CODEX_SAFE_PROFILE_UNVERIFIED',
+        'provider_event',
+        'config',
+        'NOTICE_CONFIG',
+      ]),
+      [
+        'notice-turn',
+        'CODEX_SAFE_PROFILE_UNVERIFIED',
+        'provider_event',
+        'config',
+        'NOTICE_CONFIG',
+      ],
+      [
+        'notice-reroute',
+        'CODEX_MODEL_CAPABILITY_MISMATCH',
+        'provider_event',
+        'config',
+        'MODEL_REROUTED',
+      ],
+      [
+        'notice-auth',
+        'CODEX_LOGIN_REQUIRED',
+        'provider_event',
+        'auth',
+        'NOTICE_AUTH',
+      ],
+      [
+        'notice-quota',
+        'CODEX_QUOTA',
+        'provider_event',
+        'quota',
+        'NOTICE_QUOTA',
+      ],
+      [
+        'notice-lost',
+        'CODEX_PROCESS_FAILED',
+        'provider_event',
+        'protocol',
+        'EVENTS_LOST',
+      ],
+      [
+        'notice-unknown',
+        'CODEX_PROCESS_FAILED',
+        'provider_event',
+        'unclassified',
+        'NOTICE_UNKNOWN',
+      ],
+      [
+        'unknown-event',
+        'CODEX_INVALID_OUTPUT',
+        'parser',
+        'protocol',
+        'UNKNOWN_EVENT_TYPE',
+      ],
+      [
+        'forbidden-action',
+        'CODEX_INVALID_OUTPUT',
+        'parser',
+        'protocol',
+        'FORBIDDEN_ACTION',
+      ],
+      [
+        'invalid-utf8',
+        'CODEX_INVALID_OUTPUT',
+        'parser',
+        'protocol',
+        'INVALID_UTF8',
+      ],
+      [
+        'truncated',
+        'CODEX_INVALID_OUTPUT',
+        'parser',
+        'protocol',
+        'UNTERMINATED_LINE',
+      ],
+      [
+        'notice-stop-unconfirmed',
+        'STOP_UNCONFIRMED',
+        'provider_event',
+        'config',
+        'NOTICE_CONFIG',
+      ],
     ]) {
       const child = spawn(
         process.execPath,
@@ -42,9 +127,14 @@ void test(
       );
       const monitor = observeStartup(child);
       child.stdin.end();
-      if (scenario === 'stop-unconfirmed') await assert.rejects(monitor.finish(12000), {code:'STOP_UNCONFIRMED'});
+      const lostConfirmation = scenario.endsWith('stop-unconfirmed');
+      if (lostConfirmation)
+        await assert.rejects(monitor.finish(12000), {
+          code: 'STOP_UNCONFIRMED',
+        });
       else await monitor.finish(12000);
-      const startup = monitor.snapshot(), receipts = monitor.invocations();
+      const startup = monitor.snapshot(),
+        receipts = monitor.invocations();
       assert.equal(receipts.length, 1, scenario + ':' + startup.errorCode);
       const receipt = receipts[0];
       assert.equal(validInvocation(receipt), true);
@@ -52,17 +142,19 @@ void test(
       assert.equal(receipt.errorCode, code, scenario);
       assert.equal(receipt.primary?.source ?? null, source, scenario);
       assert.equal(receipt.primary?.category ?? null, category, scenario);
-      assert.equal(
-        receipt.confirmedStop,
-        scenario !== 'stop-unconfirmed',
-        scenario,
-      );
+      if (reason)
+        assert.equal(receipt.primary.parser.reasonId, reason, scenario);
+      if (scenario.startsWith('notice-pre-')) {
+        warningDiagnostic ??= receipt.primary;
+        assert.deepEqual(receipt.primary, warningDiagnostic, scenario);
+      }
+      assert.equal(receipt.confirmedStop, !lostConfirmation, scenario);
       assert.equal(
         receipt.cleanupCode,
-        scenario === 'stop-unconfirmed' ? 'STOP_UNCONFIRMED' : null,
+        lostConfirmation ? 'STOP_UNCONFIRMED' : null,
         scenario,
       );
-      if (scenario !== 'stop-unconfirmed')
+      if (!lostConfirmation)
         assert.ok(
           receipt.exitCode !== null || receipt.signalCode !== null,
           scenario,
