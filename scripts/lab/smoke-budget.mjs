@@ -114,6 +114,18 @@ export const SMOKE_AUTHORIZATION = Object.freeze({
   effort: 'ultra',
   maximumCalls: 1,
 });
+export const SMOKE_AUTHORIZATION_03 = Object.freeze({
+  id: 'pr15-live-smoke-03',
+  reviewedHead: '34b4ea0be3f45a75b031104e33097197b7083016',
+  model: 'gpt-6-astra',
+  effort: 'ultra',
+  maximumCalls: 1,
+});
+export function smokeAuthorization(id) {
+  if (id === SMOKE_AUTHORIZATION.id) return SMOKE_AUTHORIZATION;
+  if (id === SMOKE_AUTHORIZATION_03.id) return SMOKE_AUTHORIZATION_03;
+  refuse();
+}
 const historicalFiles = [
   'real-codex-attempt.json',
   'real-codex-prior-proof.json',
@@ -172,8 +184,65 @@ export async function preservedConsumedHistory(root) {
     refuse();
   }
 }
-export function authorizationDirectory(root) {
-  return path.join(root, SMOKE_AUTHORIZATION.id);
+export function authorizationDirectory(root, id = SMOKE_AUTHORIZATION.id) {
+  return path.join(root, smokeAuthorization(id).id);
+}
+async function authorizationHistory(root, authorization) {
+  const original = await preservedConsumedHistory(root);
+  if (authorization.id === SMOKE_AUTHORIZATION.id) return original;
+  const directory = authorizationDirectory(root);
+  const consumed = await readReceipt(directory, 'provider-start.json');
+  const binding = await readReceipt(directory, 'job-binding.json');
+  const failure = await readReceipt(
+    path.join(directory, 'continuation-after-cold-start'),
+    'terminal-failure.json',
+  );
+  if (
+    consumed.authorizationId !== SMOKE_AUTHORIZATION.id ||
+    consumed.state !== 'consumed' ||
+    consumed.maximumCalls !== 1 ||
+    consumed.jobId !== binding.jobId ||
+    failure.jobId !== consumed.jobId ||
+    failure.state !== 'failed'
+  )
+    refuse();
+  const files = [];
+  async function scan(folder, prefix = '') {
+    for (const entry of await readdir(folder, { withFileTypes: true })) {
+      if (
+        entry.isDirectory() &&
+        !prefix &&
+        entry.name === 'continuation-after-cold-start'
+      ) {
+        await scan(path.join(folder, entry.name), entry.name + '/');
+      } else {
+        if (
+          !entry.isFile() ||
+          !/^[a-z0-9-]{1,120}\.(json|md|png)$/.test(entry.name) ||
+          files.length >= 32
+        )
+          refuse();
+        const bytes = await readFile(path.join(folder, entry.name));
+        if (bytes.length > 2000000) refuse();
+        files.push({
+          file: prefix + entry.name,
+          bytes: bytes.length,
+          sha256: digest(bytes),
+        });
+      }
+    }
+  }
+  await scan(directory);
+  if (files.length !== 15) refuse();
+  files.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
+  return { ...original, previousAuthorizationSha256: sha256Json(files) };
+}
+async function checkAuthorizationHistory(root, reservation) {
+  const authorization = smokeAuthorization(reservation.id);
+  if (Object.entries(authorization).some(([k, v]) => reservation[k] !== v))
+    refuse();
+  const history = await authorizationHistory(root, authorization);
+  if (Object.entries(history).some(([k, v]) => reservation[k] !== v)) refuse();
 }
 function validBinding(value) {
   return (
@@ -198,8 +267,8 @@ export async function writeSmokeEvidence(directory, name, value) {
   await writeFile(path.join(directory, name), data, { flag: 'wx' });
 }
 export async function reserveAuthorization(root, authorizationId, context) {
+  const authorization = smokeAuthorization(authorizationId);
   if (
-    authorizationId !== SMOKE_AUTHORIZATION.id ||
     !context ||
     Object.keys(context).sort().join() !==
       'headSha,inputSha256,manifestSha256' ||
@@ -208,14 +277,14 @@ export async function reserveAuthorization(root, authorizationId, context) {
     !/^[a-f0-9]{64}$/.test(context.manifestSha256)
   )
     refuse();
-  const history = await preservedConsumedHistory(root);
-  const directory = authorizationDirectory(root);
+  const history = await authorizationHistory(root, authorization);
+  const directory = authorizationDirectory(root, authorizationId);
   // Exclusive mkdir also locks preparatory work and evidence names. Never remove
   // this directory on failure; partial creation is fail-closed, not a refund.
   await mkdir(directory);
   const value = {
     version: 1,
-    ...SMOKE_AUTHORIZATION,
+    ...authorization,
     ...context,
     ...history,
     runId: randomUUID(),
@@ -318,6 +387,16 @@ export async function continueUnusedAuthorization(
   return { reservation, continuation: value };
 }
 async function checkContinuation(root, reservation, continuation) {
+  if (reservation.id === SMOKE_AUTHORIZATION_03.id) {
+    if (
+      continuation ||
+      (await readdir(authorizationDirectory(root, reservation.id))).includes(
+        'continuation-after-cold-start',
+      )
+    )
+      refuse();
+    return;
+  }
   const present = (await readdir(authorizationDirectory(root))).includes(
     'continuation-after-cold-start',
   );
@@ -347,7 +426,7 @@ export async function bindAuthorization(
   binding,
   continuation,
 ) {
-  const directory = authorizationDirectory(root);
+  const directory = authorizationDirectory(root, reservation.id);
   if (
     !validBinding(binding) ||
     sha256Json(await readReceipt(directory, 'reservation.json')) !==
@@ -355,10 +434,10 @@ export async function bindAuthorization(
   )
     refuse();
   await checkContinuation(root, reservation, continuation);
-  await preservedConsumedHistory(root);
+  await checkAuthorizationHistory(root, reservation);
   const value = {
     ...binding,
-    authorizationId: SMOKE_AUTHORIZATION.id,
+    authorizationId: reservation.id,
     runId: continuation?.runId ?? reservation.runId,
     inputSha256: reservation.inputSha256,
     reservationSha256: sha256Json(reservation),
@@ -372,7 +451,7 @@ export async function consumeAuthorization(
   binding,
   continuation,
 ) {
-  const directory = authorizationDirectory(root);
+  const directory = authorizationDirectory(root, reservation.id);
   if (
     sha256Json(await readReceipt(directory, 'reservation.json')) !==
       sha256Json(reservation) ||
@@ -382,9 +461,9 @@ export async function consumeAuthorization(
   )
     refuse();
   await checkContinuation(root, reservation, continuation);
-  await preservedConsumedHistory(root);
+  await checkAuthorizationHistory(root, reservation);
   const value = {
-    authorizationId: SMOKE_AUTHORIZATION.id,
+    authorizationId: reservation.id,
     runId: continuation?.runId ?? reservation.runId,
     jobId: binding.jobId,
     projectId: binding.projectId,

@@ -10,6 +10,7 @@ import {
   consumeProviderStart,
   unusedReservation,
   SMOKE_AUTHORIZATION,
+  SMOKE_AUTHORIZATION_03,
   authorizationDirectory,
   reserveAuthorization,
   bindAuthorization,
@@ -387,7 +388,7 @@ void test('unknown authorization, changed binding and missing/changed historical
   const root = await consumedFixture();
   try {
     await assert.rejects(
-      reserveAuthorization(root, 'pr15-live-smoke-03', context),
+      reserveAuthorization(root, 'pr15-live-smoke-04', context),
       { code: 'SMOKE_HISTORY_UNCERTAIN' },
     );
     await assert.rejects(
@@ -422,6 +423,170 @@ void test('unknown authorization, changed binding and missing/changed historical
     await assert.rejects(
       readFile(path.join(authorizationDirectory(root), 'provider-start.json')),
       { code: 'ENOENT' },
+    );
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+async function consumedSecondFixture() {
+  const root = await consumedFixture();
+  const reservation = await reserveAuthorization(
+    root,
+    SMOKE_AUTHORIZATION.id,
+    context,
+  );
+  const bound = await bindAuthorization(root, reservation, binding);
+  await consumeAuthorization(root, reservation, bound);
+  const directory = authorizationDirectory(root);
+  for (const name of ['preflight.json', 'failure.json'])
+    await writeSmokeEvidence(directory, name, { historical: true });
+  await writeFile(
+    path.join(directory, 'report.md'),
+    'Historical failed smoke, no refund.',
+  );
+  const continuation = continuationDirectory(root);
+  await mkdir(continuation);
+  for (const name of [
+    'continuation.json',
+    'lab-session.json',
+    'preflight.json',
+    'project.json',
+    'failure.json',
+    'startup.json',
+    'database.json',
+    'invocation-fixture.json',
+  ])
+    await writeSmokeEvidence(continuation, name, { historical: true });
+  await writeSmokeEvidence(continuation, 'terminal-failure.json', {
+    jobId: binding.jobId,
+    state: 'failed',
+  });
+  return root;
+}
+
+void test('smoke-03 has its own exclusive reservation/start across processes, preserving both consumed histories', async () => {
+  const root = await consumedSecondFixture();
+  try {
+    const original = await preservedConsumedHistory(root);
+    const oldDirectory = authorizationDirectory(root);
+    const oldStart = await readFile(
+      path.join(oldDirectory, 'provider-start.json'),
+      'utf8',
+    );
+    const moduleUrl = new URL(
+      '../../scripts/lab/smoke-budget.mjs',
+      import.meta.url,
+    ).href;
+    const run = (body) =>
+      new Promise((resolve, reject) => {
+        const source = `import * as b from ${JSON.stringify(moduleUrl)}; import {readFile} from 'node:fs/promises'; try { ${body} } catch(e) { process.exitCode=e.code==='EEXIST'?10:11; }`;
+        const child = spawn(
+          process.execPath,
+          ['--input-type=module', '-e', source, root, JSON.stringify(context)],
+          { stdio: 'ignore', windowsHide: true },
+        );
+        child.once('error', reject);
+        child.once('exit', (code, signal) =>
+          signal ? reject(Error('signal')) : resolve(code),
+        );
+      });
+    const reserve = `await b.reserveAuthorization(process.argv[1], 'pr15-live-smoke-03', JSON.parse(process.argv[2]));`;
+    assert.deepEqual(
+      (await Promise.all([run(reserve), run(reserve)])).sort((a, b) => a - b),
+      [0, 10],
+    );
+    const directory = authorizationDirectory(root, SMOKE_AUTHORIZATION_03.id);
+    const reservation = JSON.parse(
+      await readFile(path.join(directory, 'reservation.json')),
+    );
+    assert.equal(reservation.id, SMOKE_AUTHORIZATION_03.id);
+    assert.equal(reservation.reviewedHead, SMOKE_AUTHORIZATION_03.reviewedHead);
+    assert.match(reservation.previousAuthorizationSha256, /^[a-f0-9]{64}$/);
+    const newBinding = { ...binding, jobId: 'job_' + '1'.repeat(32) };
+    const bound = await bindAuthorization(root, reservation, newBinding);
+    const consume = `const d=b.authorizationDirectory(process.argv[1],'pr15-live-smoke-03');await b.consumeAuthorization(process.argv[1],JSON.parse(await readFile(d+'/reservation.json')),JSON.parse(await readFile(d+'/job-binding.json')));`;
+    assert.deepEqual(
+      (await Promise.all([run(consume), run(consume)])).sort((a, b) => a - b),
+      [0, 10],
+    );
+    const started = await readFile(
+      path.join(directory, 'provider-start.json'),
+      'utf8',
+    );
+    const marker = JSON.parse(started);
+    assert.equal(marker.state, 'consumed');
+    assert.equal(marker.maximumCalls, 1);
+    assert.equal(marker.headSha, context.headSha);
+    assert.equal(marker.manifestSha256, context.manifestSha256);
+    assert.equal(marker.inputSha256, context.inputSha256);
+    assert.equal(marker.jobId, newBinding.jobId);
+    await writeSmokeEvidence(directory, 'failure.json', {
+      errorCode: 'CODEX_TIMEOUT',
+    });
+    await assert.rejects(
+      reserveAuthorization(root, SMOKE_AUTHORIZATION_03.id, context),
+      { code: 'EEXIST' },
+    );
+    await assert.rejects(consumeAuthorization(root, reservation, bound), {
+      code: 'EEXIST',
+    });
+    await assert.rejects(
+      continueUnusedAuthorization(root, SMOKE_AUTHORIZATION_03.id, context),
+    );
+    assert.equal(
+      await readFile(path.join(directory, 'provider-start.json'), 'utf8'),
+      started,
+    );
+    assert.equal(
+      await readFile(path.join(oldDirectory, 'provider-start.json'), 'utf8'),
+      oldStart,
+    );
+    assert.deepEqual(await preservedConsumedHistory(root), original);
+  } finally {
+    await rm(root, { recursive: true });
+  }
+});
+
+void test('smoke-03 refuses missing/tampered second history and never creates a new provider marker', async () => {
+  const missing = await consumedFixture();
+  try {
+    await assert.rejects(
+      reserveAuthorization(missing, SMOKE_AUTHORIZATION_03.id, context),
+    );
+  } finally {
+    await rm(missing, { recursive: true });
+  }
+  const root = await consumedSecondFixture();
+  try {
+    const reservation = await reserveAuthorization(
+      root,
+      SMOKE_AUTHORIZATION_03.id,
+      context,
+    );
+    const bound = await bindAuthorization(root, reservation, binding);
+    await writeFile(
+      path.join(authorizationDirectory(root), 'report.md'),
+      'Changed history',
+    );
+    await assert.rejects(consumeAuthorization(root, reservation, bound), {
+      code: 'SMOKE_HISTORY_UNCERTAIN',
+    });
+    await assert.rejects(
+      readFile(
+        path.join(
+          authorizationDirectory(root, SMOKE_AUTHORIZATION_03.id),
+          'provider-start.json',
+        ),
+      ),
+      { code: 'ENOENT' },
+    );
+    await assert.rejects(
+      bindAuthorization(
+        root,
+        { ...reservation, id: 'pr15-live-smoke-04' },
+        binding,
+      ),
     );
   } finally {
     await rm(root, { recursive: true });

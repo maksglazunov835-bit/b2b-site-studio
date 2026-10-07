@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { officialAdapter } from '../../agent/codex/adapter.mjs';
+import { callLab } from '../../agent/codex/wsl-bridge.mjs';
+import { validDiagnostic } from '../../agent/codex/invocation-receipt.mjs';
 import { assertSafeTestDatabaseUrl } from '../db/test-config.mjs';
 import {
   startProductionServer,
@@ -22,6 +24,8 @@ import {
 import { startOfficialRunner } from './runner-process.mjs';
 import {
   SMOKE_AUTHORIZATION,
+  SMOKE_AUTHORIZATION_03,
+  smokeAuthorization,
   authorizationDirectory,
   reserveAuthorization,
   continueUnusedAuthorization,
@@ -43,16 +47,20 @@ const safeSmokeCode = (error, stage) =>
     : safeStartupCode(error, stage);
 async function main() {
   const database = assertSafeTestDatabaseUrl();
+  const authorization = smokeAuthorization(process.argv[4]);
   if (
     process.argv[2] !== '--confirm-one-real-call' ||
     process.argv[3] !== '--authorization' ||
-    process.argv[4] !== SMOKE_AUTHORIZATION.id ||
     !(
       process.argv.length === 5 ||
       (process.argv.length === 6 &&
-        process.argv[5] === '--resume-preflight-only')
+        process.argv[5] === '--resume-preflight-only' &&
+        authorization.id === SMOKE_AUTHORIZATION.id)
     ) ||
-    database.database !== 'b2b_site_studio_live_smoke_02_test' ||
+    database.database !==
+      (authorization.id === SMOKE_AUTHORIZATION_03.id
+        ? 'b2b_site_studio_live_smoke_03_test'
+        : 'b2b_site_studio_live_smoke_02_test') ||
     process.platform !== 'win32' ||
     process.env.CI ||
     process.env.B2B_DESIGN_TEST_STUB
@@ -72,6 +80,7 @@ async function main() {
   const git = (...args) =>
     execFileSync('git', args, { encoding: 'utf8', windowsHide: true }).trim();
   const headSha = git('rev-parse', 'HEAD');
+  git('merge-base', '--is-ancestor', authorization.reviewedHead, headSha);
   assert.equal(
     git('branch', '--show-current'),
     'codex/mvp-04a-codex-design-proposals',
@@ -105,7 +114,7 @@ async function main() {
     (await reserveAuthorization('.test-results', process.argv[4], context));
   const directory = continuation
     ? continuationDirectory('.test-results')
-    : authorizationDirectory('.test-results');
+    : authorizationDirectory('.test-results', authorization.id);
   const evidence = (name, value) => writeSmokeEvidence(directory, name, value);
   let held,
     runner,
@@ -119,6 +128,16 @@ async function main() {
   try {
     held = await holdPreparedLab();
     await evidence('lab-session.json', held.receipt);
+    const prepared = await callLab(
+      { operation: 'prepare-only' },
+      { timeoutMs: 60000 },
+    );
+    held.assertActive();
+    await evidence('preparation.json', prepared);
+    assert.equal(prepared.status, 'ready');
+    assert.equal(prepared.preparation.phase, 'final_compare');
+    assert.equal(prepared.preparation.providerStarted, false);
+    assert.equal(prepared.modelInvocations, 0);
     const preflight = await officialAdapter(null, { transport: 'wsl' });
     await evidence('preflight.json', {
       runtime: preflight.runtime,
@@ -324,7 +343,7 @@ async function main() {
       reloadUnchanged: true,
       projectId: project.id,
       jobId: job.id,
-      authorizationId: SMOKE_AUTHORIZATION.id,
+      authorizationId: authorization.id,
       headSha,
       manifestSha256: ADAPTER.sha256,
     };
@@ -332,10 +351,11 @@ async function main() {
     console.log('REAL_CODEX_SMOKE_SAVED_ONE_INVOCATION');
   } catch (error) {
     await evidence('failure.json', {
-      authorizationId: SMOKE_AUTHORIZATION.id,
+      authorizationId: authorization.id,
       headSha,
       stage,
       errorCode: safeSmokeCode(error, 'preflight'),
+      diagnostic: validDiagnostic(error.diagnostic) ? error.diagnostic : null,
       consumed,
       projectId: projectId ?? null,
       jobId: jobId ?? null,
