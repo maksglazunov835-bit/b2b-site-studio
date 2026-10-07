@@ -86,7 +86,11 @@ dispatch. Both survive failure. Concurrent or repeated starts fail closed. Befor
 these markers, registration-only and preparatory failures consume no model call.
 After dispatch/start uncertainty, no automatic recovery authorizes a new call.
 
-## Commands
+## Historical Commands
+
+These are historical admission commands, not a current inference authorization.
+The two smoke reservations are consumed. Review 5438670044 is model-free only;
+see [current configuration preparation evidence](wsl-config-preparation.md).
 
 Use the protected separate TEST_DATABASE_URL and existing dev read-only
 fingerprint. No Docker, production, global WSL or other distro changes:

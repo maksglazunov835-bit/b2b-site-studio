@@ -37,7 +37,44 @@ export async function labBundle() {
   )
     .replaceAll('\r\n', '\n')
     .replace("'../runner-error.mjs'", JSON.stringify(dataUri(errors)));
+  const moduleText = async (name) =>
+    (await readFile(new URL(name, import.meta.url), 'utf8')).replaceAll(
+      '\r\n',
+      '\n',
+    );
+  const canonical = dataUri(
+    await moduleText('../../server/persistence/canonical-json.mjs'),
+  );
+  const comparison = dataUri(
+    (await moduleText('./wsl-config.mjs'))
+      .replace(
+        "'../../server/persistence/canonical-json.mjs'",
+        JSON.stringify(canonical),
+      )
+      .replace("'./invocation-receipt.mjs'", JSON.stringify(dataUri(receipts)))
+      .replace("'./wsl-policy.mjs'", JSON.stringify(uri)),
+  );
+  const input = dataUri(
+    (await moduleText('./wsl-preparation-input.mjs'))
+      .replace(
+        "'./design-input.mjs'",
+        JSON.stringify(dataUri(await moduleText('./design-input.mjs'))),
+      )
+      .replace(
+        "'../../docs/contracts/design-proposal.wire.schema.json'",
+        JSON.stringify(
+          'data:application/json;base64,' +
+            Buffer.from(
+              await moduleText(
+                '../../docs/contracts/design-proposal.wire.schema.json',
+              ),
+            ).toString('base64'),
+        ),
+      ),
+  );
   const source = runtime
+    .replace("'./wsl-config.mjs'", JSON.stringify(comparison))
+    .replace("'./wsl-preparation-input.mjs'", JSON.stringify(input))
     .replace("'./wsl-policy.mjs'", JSON.stringify(uri))
     .replace("'./invocation-receipt.mjs'", JSON.stringify(dataUri(receipts)));
   return { source, supervisor, sha256: digest(source + supervisor) };
@@ -92,9 +129,16 @@ export async function callLab(
 ) {
   if (signal?.aborted) throw new RunnerError('RUNNER_STOPPED');
   if (
-    !['preflight', 'invoke', 'lifecycle', 'receipt'].includes(request.operation)
+    !['preflight', 'prepare-only', 'invoke', 'lifecycle', 'receipt'].includes(
+      request.operation,
+    )
   )
     throw new RunnerError('LAB_SETUP_REQUIRED');
+  if (
+    request.operation === 'prepare-only' &&
+    Object.keys(request).some((k) => k !== 'operation')
+  )
+    throw new RunnerError('LAB_INPUT_REJECTED');
   if (diagnosticFault && request.operation !== 'lifecycle')
     throw new RunnerError('LAB_SETUP_REQUIRED');
   const bundle = await labBundle(),
@@ -105,7 +149,7 @@ export async function callLab(
     .flatMap(([, rows]) => rows)
     .find((row) => row.family === 'IPv4')?.address;
   let listener;
-  if (['preflight', 'invoke'].includes(request.operation)) {
+  if (['preflight', 'prepare-only', 'invoke'].includes(request.operation)) {
     if (!host) throw new RunnerError('LAB_SETUP_REQUIRED');
     listener = net.createServer((socket) => {
       socket.on('error', () => {});
@@ -197,7 +241,7 @@ export function relayProcess(
         );
       // Publish the earlier local/parser cause before a later supervisor STOP
       // fact can become the recorder's first diagnostic.
-      const facts = error ? {...value, diagnostic: diagnostic(error)} : value;
+      const facts = error ? { ...value, diagnostic: diagnostic(error) } : value;
       processResult = { ...processResult, ...facts };
       onProcess?.(facts);
     };

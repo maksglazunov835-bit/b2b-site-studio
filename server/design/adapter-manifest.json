@@ -1,7 +1,7 @@
 {
   "id": "codex_design_exec",
   "version": "1.1.0",
-  "sha256": "c20565135153991ff52f98ca661f62bba0b82e2a530c06f61353b119385ed11e",
+  "sha256": "51f1693b1be54583242773dad3395a05bb84c5ba2b9b1b7b5ae87e165b105e77",
   "files": [
     {
       "path": "docs/contracts/design-job.schema.json",
@@ -41,7 +41,23 @@
     },
     {
       "path": "agent/codex/adapter.mjs",
-      "sha256": "5523996ebbdb771cd42df338ff45e9076cf0b797fd9967510fa2320cd6ace83e"
+      "sha256": "1e449bcd174786ccb86d68cb5528573fef6c3521e0fa46fc176eb54195011a1e"
+    },
+    {
+      "path": "agent/codex/design-input.mjs",
+      "sha256": "d67f6de87bacac79bbb2dc3e29f005a482af057550fc1d11b83241d215a52e01"
+    },
+    {
+      "path": "agent/codex/wsl-preparation-input.mjs",
+      "sha256": "765babf0fca8ae0b13d1d41703b11209ea0c659812ad5e14765512e3bc5c3086"
+    },
+    {
+      "path": "agent/codex/wsl-config.mjs",
+      "sha256": "f4a5b37a14c4ce48790470251c336992bd86baf30d2679bae2322eae7fe8fd11"
+    },
+    {
+      "path": "server/persistence/canonical-json.mjs",
+      "sha256": "98c8f44e933d4b4bddedb0fd67ec9e3f328dbf1b9fd0cf2c0e3a5b6f2bdbadf6"
     },
     {
       "path": "agent/codex/wsl-policy.mjs",
@@ -49,11 +65,11 @@
     },
     {
       "path": "agent/codex/wsl-runtime.mjs",
-      "sha256": "9e353fc569dd79e917cf6dce3843dd6a930dca0d01daace95145fd8aa42b9033"
+      "sha256": "9b6fc1e68e413906681002a5b8dea207f5630247844fb723127947ef41f5cb3d"
     },
     {
       "path": "agent/codex/wsl-bridge.mjs",
-      "sha256": "7ed1c0d89d8d011fdf0ea3a3f2002dd21fc507cdea37d127a52c6ef076975595"
+      "sha256": "568701c09b2adfb4679fd1ddcf758ed1c3f895cf95f32c45aa21ead0f753d1cb"
     },
     {
       "path": "agent/codex/wsl-supervisor.py",
@@ -81,7 +97,7 @@
     },
     {
       "path": "agent/codex/invocation-receipt.mjs",
-      "sha256": "39c0c2ea264473a98b539dcef9115541914cb019d5e78ab3cf4f31d68b058a2f"
+      "sha256": "84ba49c8433e506df7c503ff8da21264bd43d149065dd282ac169d2260a6797b"
     },
     {
       "path": "agent/design-connect.mjs",

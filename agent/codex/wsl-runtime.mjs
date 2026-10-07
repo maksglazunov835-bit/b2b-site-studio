@@ -5,6 +5,13 @@ import { createInterface } from 'node:readline';
 import net from 'node:net';
 import os from 'node:os';
 import {
+  assertConfiguration,
+  configFingerprint,
+  configFailure,
+  prepareInvocation,
+} from './wsl-config.mjs';
+import { preparationInput } from './wsl-preparation-input.mjs';
+import {
   diagnostic,
   diagnosticError,
   validDiagnostic,
@@ -12,7 +19,6 @@ import {
 } from './invocation-receipt.mjs';
 import {
   LAB,
-  LAB_DISABLED,
   labEnvironment,
   labConfig,
   labExecArgs,
@@ -36,7 +42,7 @@ const exists = async (name) =>
   );
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function inspectLab() {
+export async function inspectLab(phase = 'first_config') {
   if (
     process.platform !== 'linux' ||
     os.release() !== LAB.kernel ||
@@ -122,7 +128,7 @@ export async function inspectLab() {
     '/home/.codex/config.toml',
     '/.codex/config.toml',
   ])
-    if (await exists(file)) fail('LAB_CONFIG_CHANGED');
+    if (await exists(file)) throw configFailure('INHERITED_CONFIG', phase);
   await fs.mkdir(LAB.codexHome, { recursive: true, mode: 0o700 });
   await fs.mkdir(LAB.root, { recursive: true, mode: 0o700 });
   for (const directory of [LAB.home, LAB.codexHome, LAB.root]) {
@@ -301,7 +307,14 @@ export async function supervise(
   });
 }
 
-async function configProbe(task, signal, supervisor, filesystem = null) {
+export async function configProbe(
+  task,
+  signal,
+  supervisor,
+  filesystem = null,
+  phase = 'first_config',
+  run = supervise,
+) {
   let id = 0,
     buffer = '',
     send,
@@ -309,13 +322,13 @@ async function configProbe(task, signal, supervisor, filesystem = null) {
     failure,
     work = Promise.resolve();
   const pending = new Map();
-  const rejectAll = () => {
-    for (const p of pending.values()) p.reject(Error('LAB_CONFIG_CHANGED'));
+  const rejectAll = (error = configFailure('DIAGNOSTIC_EMPTY', phase)) => {
+    for (const p of pending.values()) p.reject(error);
     pending.clear();
   };
   const call = (method, params = {}) =>
     new Promise((resolve, reject) => {
-      pending.set(++id, { resolve, reject });
+      pending.set(++id, { resolve, reject, method });
       send(JSON.stringify({ id, method, params }) + '\n');
     });
   const query = async () => {
@@ -334,57 +347,14 @@ async function configProbe(task, signal, supervisor, filesystem = null) {
       cwd: task,
       includeLayers: true,
     });
-    const config = configRead.config;
+    const config = configRead?.config;
     const requirements = await call('configRequirements/read');
     const account = await call('account/read', { refreshToken: false });
     const models = await call('model/list', {
       limit: 100,
       includeHidden: false,
     });
-    const flagLayer = configRead.layers?.find(
-      (l) => l.name?.type === 'sessionFlags',
-    )?.config;
-    if (
-      configRead.layers?.some(
-        (l) =>
-          l.name?.type !== 'sessionFlags' && Object.keys(l.config ?? {}).length,
-      )
-    )
-      fail('LAB_CONFIG_CHANGED');
-    const effectiveFs = config.permissions?.[LAB.profile]?.filesystem;
-    if (
-      effectiveFs?.glob_scan_max_depth !== null ||
-      Object.keys(effectiveFs ?? {}).length !==
-        Object.keys(labFilesystem(task)).length + 1 ||
-      Object.entries(labFilesystem(task)).some(
-        ([key, value]) =>
-          config.permissions?.[LAB.profile]?.filesystem?.[key] !== value,
-      )
-    )
-      fail('LAB_FILESYSTEM_CONFIG_CHANGED');
-    if (config.approval_policy !== 'never') fail('LAB_APPROVAL_CONFIG_CHANGED');
-    if (config.web_search !== 'disabled') fail('LAB_WEB_CONFIG_CHANGED');
-    // The typed config/read response omits these tools; verify the actual CLI
-    // layer and refuse any inherited nonempty layer instead of guessing defaults.
-    if (
-      flagLayer?.tools?.update_plan?.enabled !== false ||
-      flagLayer?.tools?.experimental_request_user_input?.enabled !== false
-    )
-      fail('LAB_TOOLS_CONFIG_CHANGED');
-    if (
-      config.sandbox_mode ||
-      config.default_permissions !== LAB.profile ||
-      config.permissions?.[LAB.profile]?.network?.enabled !== false ||
-      Object.keys(config.mcp_servers ?? {}).length ||
-      LAB_DISABLED.some(
-        (flag) =>
-          config.features?.[flag] !== false &&
-          config.features?.[flag]?.enabled !== false,
-      ) ||
-      (requirements.requirements !== null &&
-        Object.keys(requirements.requirements ?? {}).length)
-    )
-      fail('LAB_CONFIG_CHANGED');
+    assertConfiguration(configRead, requirements, task, phase);
     const rows = models.data?.filter(
       (row) => row.model === LAB.model && !row.hidden,
     );
@@ -392,25 +362,28 @@ async function configProbe(task, signal, supervisor, filesystem = null) {
       (e) => e.reasoningEffort,
     );
     return {
-      configSha256: hash(JSON.stringify({ config, requirements })),
-      managedRequirements: 'included',
-      userConfig: 'absent',
-      accountType: account.account?.type ?? null,
-      modelSelection:
-        rows?.length === 1 &&
-        efforts?.includes(LAB.effort) &&
-        !models.nextCursor
-          ? {
-              source: 'official_model_list',
-              resolvedModel: LAB.model,
-              effort: LAB.effort,
-              supportedReasoningEfforts: efforts,
-            }
-          : null,
+      snapshot: { config, requirements },
+      receipt: {
+        configSha256: configFingerprint(config, requirements),
+        managedRequirements: 'included',
+        userConfig: 'absent',
+        accountType: account.account?.type ?? null,
+        modelSelection:
+          rows?.length === 1 &&
+          efforts?.includes(LAB.effort) &&
+          !models.nextCursor
+            ? {
+                source: 'official_model_list',
+                resolvedModel: LAB.model,
+                effort: LAB.effort,
+                supportedReasoningEfforts: efforts,
+              }
+            : null,
+      },
     };
   };
   try {
-    const outcome = await supervise(
+    const outcome = await run(
       supervisor,
       [
         LAB.binary,
@@ -445,29 +418,63 @@ async function configProbe(task, signal, supervisor, filesystem = null) {
           while ((i = buffer.indexOf('\n')) >= 0) {
             const line = buffer.slice(0, i);
             buffer = buffer.slice(i + 1);
-            const v = JSON.parse(line),
-              p = pending.get(v.id);
+            let v;
+            try {
+              v = JSON.parse(line);
+            } catch {
+              throw configFailure('RPC_INVALID_RESPONSE', phase);
+            }
+            const p = pending.get(v.id);
             if (p) {
               pending.delete(v.id);
-              if (v.error)
-                p.reject(
-                  Object.assign(Error('LAB_CONFIG_CHANGED'), {
-                    code: 'LAB_CONFIG_CHANGED',
-                    rpc: v.error,
-                  }),
-                );
+              if (v.error) {
+                const error = configFailure('RPC_ERROR', phase, {
+                  method: [
+                    'initialize',
+                    'config/read',
+                    'configRequirements/read',
+                    'account/read',
+                    'model/list',
+                  ].includes(p.method)
+                    ? p.method
+                    : null,
+                  rpcCode:
+                    Number.isSafeInteger(v.error.code) &&
+                    Math.abs(v.error.code) <= 2147483648
+                      ? v.error.code
+                      : null,
+                });
+                // Transient only: the fixed filesystem canary must distinguish
+                // an actual OS denial from invalid RPC parameters. Never relayed.
+                if (filesystem) error.rpc = v.error;
+                p.reject(error);
+              } else if (
+                !Object.hasOwn(v, 'result') ||
+                v.result === null ||
+                typeof v.result !== 'object'
+              )
+                p.reject(configFailure('RPC_INVALID_RESPONSE', phase));
               else p.resolve(v.result);
             }
           }
         },
       },
     );
-    rejectAll();
+    const processError = configFailure(
+      outcome.code !== 0 || outcome.reason
+        ? 'DIAGNOSTIC_PROCESS_FAILED'
+        : 'DIAGNOSTIC_EMPTY',
+      phase,
+      { processExitCode: outcome.code ?? null },
+    );
+    rejectAll(processError);
     await work;
     if (failure) throw failure;
-    if (outcome.code !== 0 || outcome.reason || !result)
-      fail('LAB_CONFIG_CHANGED');
+    if (outcome.code !== 0 || outcome.reason || !result) throw processError;
     return result;
+  } catch (error) {
+    if (validDiagnostic(error.diagnostic)) throw error;
+    throw configFailure('DIAGNOSTIC_PROCESS_FAILED', phase);
   } finally {
     rejectAll();
   }
@@ -834,10 +841,19 @@ export async function runLab(request, { supervisor, signal, emit }) {
     };
   }
   if (
-    !['preflight', 'invoke', 'lifecycle'].includes(request.operation) ||
+    !['preflight', 'prepare-only', 'invoke', 'lifecycle'].includes(
+      request.operation,
+    ) ||
     !/^[a-f0-9]{32}$/.test(request.runId)
   )
     fail('LAB_SETUP_REQUIRED');
+  if (
+    request.operation === 'prepare-only' &&
+    Object.keys(request).some(
+      (k) => !['operation', 'runId', 'windowsControl'].includes(k),
+    )
+  )
+    fail('LAB_INPUT_REJECTED');
   const id = request.runId,
     directory = `${LAB.root}/${id}`,
     task = `${directory}/task`;
@@ -875,7 +891,8 @@ export async function runLab(request, { supervisor, signal, emit }) {
       signal,
       request.windowsControl,
     );
-    const config = await configProbe(task, signal, supervisor);
+    const first = await configProbe(task, signal, supervisor);
+    const config = first.receipt;
     const receipt = {
       ...inventory,
       ...config,
@@ -902,14 +919,20 @@ export async function runLab(request, { supervisor, signal, emit }) {
     }
     if (receipt.status !== 'ready') fail(receipt.status);
     if (!config.modelSelection) fail('CODEX_MODEL_NOT_AVAILABLE');
-    await prepareInput(task, request.prompt, request.schema);
-    await inspectLab();
-    const current = await configProbe(task, signal, supervisor);
-    if (
-      current.configSha256 !== config.configSha256 ||
-      current.accountType !== 'chatgpt'
-    )
-      fail('LAB_CONFIG_CHANGED');
+    const input =
+      request.operation === 'prepare-only' ? preparationInput() : request;
+    const preparation = await prepareInvocation({
+      task,
+      prompt: input.prompt,
+      schema: input.schema,
+      first,
+      probe: (phase) => configProbe(task, signal, supervisor, null, phase),
+      prepare: prepareInput,
+      inspect: inspectLab,
+    });
+    if (request.operation === 'prepare-only')
+      return { ...receipt, preparation, modelInvocations: 0 };
+    if (request.operation !== 'invoke') fail('LAB_INPUT_REJECTED');
     let result;
     try {
       result = await supervise(supervisor, [LAB.binary, ...labExecArgs(task)], {

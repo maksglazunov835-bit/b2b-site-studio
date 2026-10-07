@@ -73,15 +73,102 @@ export const USAGE_KEYS = [
   'reasoning_output_tokens',
 ];
 const object = (v) => v && typeof v === 'object' && !Array.isArray(v);
-const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const exact = (v, keys) =>
-  object(v) && Object.keys(v).sort(compare).join() === [...keys].sort(compare).join();
+  object(v) &&
+  Object.keys(v).sort(compare).join() === [...keys].sort(compare).join();
 const integer = (v) => Number.isSafeInteger(v) && v >= 0;
 const hash = (v) => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
 const iso = (v) =>
   typeof v === 'string' &&
   Number.isFinite(Date.parse(v)) &&
   new Date(v).toISOString() === v;
+const configReasons = new Set([
+  'INHERITED_CONFIG',
+  'LEGACY_SANDBOX',
+  'WRONG_PROFILE',
+  'FILESYSTEM_POLICY',
+  'APPROVAL_POLICY',
+  'WEB_POLICY',
+  'TOOLS_POLICY',
+  'NETWORK_POLICY',
+  'MCP_POLICY',
+  'FEATURE_POLICY',
+  'MANAGED_REQUIREMENTS',
+  'RPC_ERROR',
+  'RPC_INVALID_RESPONSE',
+  'DIAGNOSTIC_EMPTY',
+  'DIAGNOSTIC_PROCESS_FAILED',
+  'ACCOUNT_CHANGED',
+  'CONFIG_MISMATCH',
+]);
+const configFields = new Set([
+  'approval_policy',
+  'web_search',
+  'sandbox_mode',
+  'default_permissions',
+  'permissions',
+  'features',
+  'mcp_servers',
+  'tools',
+  'requirements',
+]);
+export function validConfigDiagnostic(v) {
+  return (
+    exact(v, [
+      'reasonId',
+      'phase',
+      'method',
+      'rpcCode',
+      'processExitCode',
+      'comparison',
+    ]) &&
+    configReasons.has(v.reasonId) &&
+    ['first_config', 'after_input', 'final_compare'].includes(v.phase) &&
+    [
+      null,
+      'initialize',
+      'config/read',
+      'configRequirements/read',
+      'account/read',
+      'model/list',
+    ].includes(v.method) &&
+    (v.rpcCode === null ||
+      (Number.isSafeInteger(v.rpcCode) && Math.abs(v.rpcCode) <= 2147483648)) &&
+    (v.processExitCode === null ||
+      (Number.isInteger(v.processExitCode) &&
+        Math.abs(v.processExitCode) <= 4294967295)) &&
+    (v.comparison === null || validConfigComparison(v.comparison))
+  );
+}
+export function validConfigComparison(v) {
+  return (
+    exact(v, [
+      'category',
+      'beforeSha256',
+      'afterSha256',
+      'beforeRawSha256',
+      'afterRawSha256',
+      'fields',
+      'unknownCount',
+      'counts',
+    ]) &&
+    [null, 'key_order_only', 'value_changed', 'missing', 'unexpected'].includes(
+      v.category,
+    ) &&
+    [v.beforeSha256, v.afterSha256, v.beforeRawSha256, v.afterRawSha256].every(
+      hash,
+    ) &&
+    Array.isArray(v.fields) &&
+    v.fields.length <= configFields.size &&
+    new Set(v.fields).size === v.fields.length &&
+    v.fields.every((f) => configFields.has(f)) &&
+    integer(v.unknownCount) &&
+    v.unknownCount <= 10000 &&
+    exact(v.counts, ['value_changed', 'missing', 'unexpected']) &&
+    Object.values(v.counts).every((n) => integer(n) && n <= 10000)
+  );
+}
 const signal = (v) =>
   v === null || (typeof v === 'string' && /^SIG[A-Z0-9]{1,16}$/.test(v));
 export const validUsage = (v) =>
@@ -129,7 +216,9 @@ export function validDiagnostic(v) {
       'byteLength',
       'fingerprintBytes',
       'fingerprint',
+      ...(Object.hasOwn(v ?? {}, 'config') ? ['config'] : []),
     ]) &&
+    (!Object.hasOwn(v, 'config') || validConfigDiagnostic(v.config)) &&
     sources.has(v.source) &&
     stages.has(v.stage) &&
     codes.has(v.primaryCode) &&
