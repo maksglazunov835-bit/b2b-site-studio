@@ -1,0 +1,108 @@
+{
+  "kind": "actual-local-windows-wsl-integration",
+  "reviewId": 5167005370,
+  "finalBuildAdapterSha256": "7450494032fdadf96b678a24812f04a6479415eea0f345c23e8c6779e5179538",
+  "finalBuildRegistration": {
+    "kind": "actual-windows-wsl-registration-only",
+    "receipt": {
+      "type": "B2B_RUNNER_STARTUP",
+      "runId": "89a37ba4-0a9c-4625-aa09-c2fe52699028",
+      "sequence": 16,
+      "startedAt": "2026-09-10T15:07:02.235Z",
+      "updatedAt": "2026-09-10T15:07:12.687Z",
+      "currentStage": "first_heartbeat",
+      "lastCompletedStage": "first_heartbeat",
+      "errorCode": "AGENT_REVOKED",
+      "httpStatus": 401,
+      "httpErrorCode": "AGENT_REVOKED",
+      "stopConfirmed": true,
+      "exitCode": 1,
+      "signalCode": null,
+      "exited": true,
+      "closed": true,
+      "observedAt": "2026-09-10T15:07:12.699Z"
+    },
+    "counts": {
+      "registrations": 1,
+      "dispatches": 0,
+      "attempts": 0,
+      "invocations": 0,
+      "results": 0
+    },
+    "heartbeatReceived": true,
+    "modelInvocations": 0
+  },
+  "modelInvocations": 0,
+  "independentAcceptance": null,
+  "before": {
+    "type": "B2B_RUNNER_STARTUP",
+    "runId": "118b8c61-e9e2-4e63-8fc5-7d2a9993dc4c",
+    "sequence": 13,
+    "startedAt": "2026-09-10T14:50:40.750Z",
+    "updatedAt": "2026-09-10T14:50:50.208Z",
+    "currentStage": "registration",
+    "lastCompletedStage": "manifest_validation",
+    "errorCode": "VALIDATION_FAILED",
+    "httpStatus": 422,
+    "httpErrorCode": "VALIDATION_FAILED",
+    "stopConfirmed": true,
+    "exitCode": 1,
+    "signalCode": null,
+    "exited": true,
+    "closed": true,
+    "observedAt": "2026-09-10T14:50:50.235Z"
+  },
+  "after": {
+    "kind": "actual-windows-wsl-registration-only",
+    "receipt": {
+      "type": "B2B_RUNNER_STARTUP",
+      "runId": "48329ca3-8368-46f5-84e1-0ed287ae9539",
+      "sequence": 16,
+      "startedAt": "2026-09-10T14:52:16.278Z",
+      "updatedAt": "2026-09-10T14:52:26.904Z",
+      "currentStage": "first_heartbeat",
+      "lastCompletedStage": "first_heartbeat",
+      "errorCode": "AGENT_REVOKED",
+      "httpStatus": 401,
+      "httpErrorCode": "AGENT_REVOKED",
+      "stopConfirmed": true,
+      "exitCode": 1,
+      "signalCode": null,
+      "exited": true,
+      "closed": true,
+      "observedAt": "2026-09-10T14:52:26.916Z"
+    },
+    "counts": {
+      "registrations": 1,
+      "dispatches": 0,
+      "attempts": 0,
+      "invocations": 0,
+      "results": 0
+    },
+    "heartbeatReceived": true,
+    "modelInvocations": 0
+  },
+  "priorProof": {
+    "version": 1,
+    "capturedAt": "2026-09-10T14:43:56.819Z",
+    "beforeTestReset": true,
+    "reservationSha256": "a3abaa775da4806075383edd2acd62d9870f2ba722698c8bea8edcd95195c0b8",
+    "previousReportSha256": "80132349a318237804b036ebf191315cafc71a8997e39f58eec88849198a9453",
+    "previousHead": "8cb6bd25ee29e845aa8e84dade4a9b2bbe94efdb",
+    "modelInvocations": 0,
+    "row": {
+      "job_id": "job_814df3844cf344a7939a45a8735113de",
+      "project_id": "52b88e5e-0950-4fcb-a30f-ec46064b492d",
+      "state": "queued",
+      "version": 1,
+      "registered_agents": 0,
+      "dispatches": 0,
+      "attempts": 0,
+      "invocation_permits": 0,
+      "results": 0,
+      "events": [
+        "job_queued"
+      ]
+    }
+  }
+}

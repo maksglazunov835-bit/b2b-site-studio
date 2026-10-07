@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2b-site-studio.local/contracts/design-proposal-1.json",
+  "title": "DesignProposal 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "placeholderPolicy",
+    "concepts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "placeholderPolicy": {
+      "const": "labelled-neutral-no-facts"
+    },
+    "concepts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "rationale",
+          "layoutVariant",
+          "palette",
+          "fontPreset",
+          "density",
+          "radius",
+          "pages",
+          "mobile"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "concept-1",
+              "concept-2",
+              "concept-3"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "^[^<>`\\\\\\u0000-\\u001f]+$"
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "pattern": "^[^<>`\\\\\\u0000-\\u001f]+$"
+          },
+          "layoutVariant": {
+            "enum": [
+              "catalog-grid",
+              "editorial",
+              "compact"
+            ]
+          },
+          "palette": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "background",
+              "surface",
+              "text",
+              "accent",
+              "accentText",
+              "border"
+            ],
+            "properties": {
+              "background": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "surface": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "text": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "accent": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "accentText": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "border": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              }
+            }
+          },
+          "fontPreset": {
+            "enum": [
+              "sans",
+              "serif",
+              "mono"
+            ]
+          },
+          "density": {
+            "enum": [
+              "compact",
+              "balanced",
+              "spacious"
+            ]
+          },
+          "radius": {
+            "enum": [
+              "square",
+              "subtle",
+              "soft"
+            ]
+          },
+          "pages": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "blocks"
+              ],
+              "properties": {
+                "id": {
+                  "enum": [
+                    "home",
+                    "catalog",
+                    "product",
+                    "about",
+                    "contact"
+                  ]
+                },
+                "blocks": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 5,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "hero",
+                      "categories",
+                      "products",
+                      "specifications",
+                      "about",
+                      "enquiry"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "mobile": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "navigation",
+              "columns",
+              "textSize"
+            ],
+            "properties": {
+              "navigation": {
+                "const": "stacked"
+              },
+              "columns": {
+                "const": 1
+              },
+              "textSize": {
+                "const": "readable"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

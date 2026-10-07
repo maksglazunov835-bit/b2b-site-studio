@@ -631,6 +631,7 @@ export default function Home() {
 
               <RunnerPanel key={projectId ?? 'unsaved'} projectId={projectId ?? undefined} />
               {projectId && <JobsPanel key={projectId} projectId={projectId} revision={revision} canCreate={!pending && saveState === 'saved'} />}
+              {projectId && <JobsPanel key={`design-${projectId}`} design projectId={projectId} revision={revision} canCreate={!pending && saveState === 'saved'} />}
 
               <section className="rounded-lg border border-white/10 bg-[#0b1118]/90 p-4">
                 <p className="text-sm font-semibold">Следующие блоки брифа</p>

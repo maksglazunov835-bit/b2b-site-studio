@@ -18,7 +18,7 @@ export function jobError(code, message, status = 422) {
 
 export function createRequest(input) {
   if (!createValidator(input)) jobError("VALIDATION_FAILED", "Expected only type and positive expectedRevision.");
-  if (input.type !== "site_spec_validation") jobError("UNSUPPORTED_JOB_TYPE", "This job type is not supported.");
+  if (!['site_spec_validation','design_proposal'].includes(input.type)) jobError("UNSUPPORTED_JOB_TYPE", "This job type is not supported.");
   return { type: input.type, expectedRevision: input.expectedRevision };
 }
 

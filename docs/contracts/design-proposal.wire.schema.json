@@ -1,0 +1,188 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "placeholderPolicy",
+    "concepts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": [
+        "1.0.0"
+      ]
+    },
+    "placeholderPolicy": {
+      "type": "string",
+      "enum": [
+        "labelled-neutral-no-facts"
+      ]
+    },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "rationale",
+          "layoutVariant",
+          "palette",
+          "fontPreset",
+          "density",
+          "radius",
+          "pages",
+          "mobile"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "concept-1",
+              "concept-2",
+              "concept-3"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "layoutVariant": {
+            "type": "string",
+            "enum": [
+              "catalog-grid",
+              "editorial",
+              "compact"
+            ]
+          },
+          "palette": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "background",
+              "surface",
+              "text",
+              "accent",
+              "accentText",
+              "border"
+            ],
+            "properties": {
+              "background": {
+                "type": "string"
+              },
+              "surface": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "accent": {
+                "type": "string"
+              },
+              "accentText": {
+                "type": "string"
+              },
+              "border": {
+                "type": "string"
+              }
+            }
+          },
+          "fontPreset": {
+            "type": "string",
+            "enum": [
+              "sans",
+              "serif",
+              "mono"
+            ]
+          },
+          "density": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "balanced",
+              "spacious"
+            ]
+          },
+          "radius": {
+            "type": "string",
+            "enum": [
+              "square",
+              "subtle",
+              "soft"
+            ]
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "blocks"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "home",
+                    "catalog",
+                    "product",
+                    "about",
+                    "contact"
+                  ]
+                },
+                "blocks": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "hero",
+                      "categories",
+                      "products",
+                      "specifications",
+                      "about",
+                      "enquiry"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "mobile": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "navigation",
+              "columns",
+              "textSize"
+            ],
+            "properties": {
+              "navigation": {
+                "type": "string",
+                "enum": [
+                  "stacked"
+                ]
+              },
+              "columns": {
+                "type": "integer",
+                "enum": [
+                  1
+                ]
+              },
+              "textSize": {
+                "type": "string",
+                "enum": [
+                  "readable"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

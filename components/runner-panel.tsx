@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Eye, EyeOff, Link2, Monitor, RefreshCw, ShieldX, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type Agent = { agentId: string; agentName: string; agentVersion: string; selectedApiVersion: string; os: string; status: 'online' | 'offline' | 'revoked'; lastSeenAt: string | null; mode: string; projectId?: string };
+import { designMessages } from './design-status';
+type Agent = { agentId: string; agentName: string; agentVersion: string; selectedApiVersion: string; os: string; status: 'online' | 'offline' | 'revoked'; lastSeenAt: string | null; mode: string; projectId?: string; runtime?: { provider: string; cliVersion: string; status: string } };
 type Pairing = { pairingId: string; expiresAt: string; status: string; pairingSecret?: string };
 
 async function api<T>(path: string, signal: AbortSignal, write = false, body: object = {}): Promise<T> {
@@ -73,8 +74,8 @@ function Connections({ projectId }: { projectId?: string }) {
   }, [pairing]);
 
   const issue = () => void run(async (signal) => {
-    if (mode === 'data_validation' && !projectId) return;
-    const result = await api<Pairing>('/pairings', signal, true, mode === 'data_validation' ? { mode, projectId } : {});
+    if (mode !== 'presence_only' && !projectId) return;
+    const result = await api<Pairing>('/pairings', signal, true, mode !== 'presence_only' ? { mode, projectId } : {});
     if (signal.aborted) return;
     pairId.current = result.pairingId; setPairing(result); setShowSecret(false); setMessage(''); cursor.current = null;
   }, true);
@@ -98,6 +99,7 @@ function Connections({ projectId }: { projectId?: string }) {
       <select aria-label="Режим нового подключения" className="mt-1 w-full min-w-0 rounded border border-white/10 bg-[#121820] p-2 text-xs text-slate-100" value={mode} disabled={pending || !!pairing} onChange={(event) => setMode(event.target.value)}>
         <option value="presence_only">Только связь</option>
         <option value="data_validation" disabled={!projectId}>Проверка SiteSpec этого проекта</option>
+        <option value="codex_design" disabled={!projectId}>Codex: дизайн этого проекта</option>
       </select>
     </label>
     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -118,7 +120,8 @@ function Connections({ projectId }: { projectId?: string }) {
       {agents.map((agent) => <li key={agent.agentId} data-agent-id={agent.agentId} className="min-w-0 py-3">
         <p className="break-words text-sm font-medium">{agent.agentName}</p>
         <p className="mt-1 text-xs text-slate-400">{agent.os} · Runner {agent.agentVersion} · API {agent.selectedApiVersion}</p>
-        <p className="mt-1 text-xs text-slate-400">{agent.mode === 'data_validation' ? `Проверка SiteSpec: ${agent.projectId === projectId ? 'этот проект' : 'другой проект'}` : 'Подключён только для проверки связи'}</p>
+        <p className="mt-1 text-xs text-slate-400">{agent.mode !== 'presence_only' ? `${agent.mode === 'codex_design' ? 'Codex: дизайн' : 'Проверка SiteSpec'}: ${agent.projectId === projectId ? 'этот проект' : 'другой проект'}` : 'Подключён только для проверки связи'}</p>
+        {agent.runtime && <p className="mt-1 break-words text-xs text-amber-300">{agent.runtime.provider === 'test_stub' ? 'Тестовый CLI, не Codex' : `Codex ${agent.runtime.cliVersion}`} · {agent.runtime.status === 'ready' ? 'Профиль доступен' : designMessages[agent.runtime.status] ?? 'Профиль недоступен'}</p>}
         <p className={`mt-2 text-xs ${agent.status === 'online' ? 'text-emerald-300' : 'text-slate-400'}`}>{agent.status === 'online' ? 'На связи' : agent.status === 'revoked' ? 'Доступ отозван' : 'Не в сети'}</p>
         <p className="mt-1 text-xs text-slate-400">Последний сигнал: {agent.lastSeenAt ? new Date(agent.lastSeenAt).toLocaleString('ru-RU') : 'ещё не получен'}</p>
         {agent.status !== 'revoked' && <Button variant="ghost" size="sm" className="mt-2" disabled={pending} onClick={() => revoke(agent.agentId)}><ShieldX className="size-4" />Отозвать доступ</Button>}
